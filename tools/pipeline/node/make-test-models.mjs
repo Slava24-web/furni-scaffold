@@ -86,6 +86,10 @@ async function main() {
       widthMm: bounds.widthMm,
       heightMm: bounds.heightMm,
       depthMm: bounds.depthMm,
+      /** Высота установки низа модели: верхние шкафы висят на стене */
+      mountHeightMm: product.mountHeightMm,
+      /** Участвует ли объект в привязке к стенам */
+      snapToWall: product.snapToWall,
       materials: groups.map((g) => g.material),
       /** Шаблон под AssetRef.urlTemplate из packages/viewer */
       urlTemplate: `/assets/test/${product.sku}/lod{lod}.glb`,

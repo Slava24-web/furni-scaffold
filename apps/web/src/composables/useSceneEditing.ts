@@ -1,5 +1,5 @@
-import { markRaw, ref, shallowRef, type ShallowRef } from 'vue';
-import { Vector2 } from 'three';
+import { markRaw, ref, shallowRef, type Ref, type ShallowRef } from 'vue';
+import { Vector2, Vector3 } from 'three';
 import {
   CameraController,
   DEFAULT_SNAP,
@@ -9,7 +9,9 @@ import {
   type SnapTarget,
   type Viewer,
 } from '@furni/viewer';
-import type { Placement } from '@furni/shared';
+import { innerNormal, type Placement } from '@furni/shared';
+import { useCatalogStore } from '../stores/catalog';
+import { useSceneStore } from '../stores/scene';
 
 /**
  * Связка жестов, камеры, выделения и снаппинга.
@@ -17,9 +19,26 @@ import type { Placement } from '@furni/shared';
  * ПРАВИЛО 3 из CLAUDE.md: во время перетаскивания позиция в Pinia НЕ пишется.
  * Объект двигается напрямую в Three.js, стор обновляется один раз на dragEnd.
  */
+/** Режим работы планировщика: что делает тап по сцене. */
+export type PlannerMode = 'select' | 'draw-wall' | 'add-door' | 'add-window';
+
+export interface FloorPoint {
+  x: number;
+  z: number;
+}
+
 export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
   onCommit: (instanceId: string, placement: Partial<Placement>) => void;
+  /** Текущий режим. По умолчанию выделение объектов. */
+  mode?: Ref<PlannerMode>;
+  /** Тап по полу в режиме, отличном от выделения. Координаты в мм. */
+  onFloorTap?: (point: FloorPoint) => void;
+  /** Двойной тап в режиме планировки: завершение контура. */
+  onFloorDoubleTap?: () => void;
 }) {
+  const scene = useSceneStore();
+  const catalog = useCatalogStore();
+
   const selectedId = ref<string | null>(null);
   const isSnapping = ref(false);
   const snapEngine = shallowRef(markRaw(new SnapEngine()));
@@ -94,15 +113,37 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     v.invalidate();
   }
 
+  /** Размещение выделенного объекта из документа сцены. */
+  function selectedPlacement(): Placement | undefined {
+    return scene.doc.placements.find((p) => p.instanceId === selectedId.value);
+  }
+
   /**
-   * Цели привязки: центры остальных объектов сцены. Стены появятся
-   * в фазе 2 — до тех пор SnapEngine падает на сетку.
+   * Цели привязки: стены помещения и центры остальных объектов.
+   * Собираются один раз на начало жеста — во время перетаскивания
+   * они не меняются, а пересчёт на каждое движение стоил бы обхода
+   * всей сцены в горячем пути.
    */
   function refreshSnapTargets(): void {
     const v = viewer.value;
     if (!v) return;
 
     const targets: SnapTarget[] = [];
+
+    for (const room of scene.doc.rooms) {
+      for (const wall of room.walls) {
+        const normal = innerNormal(room, wall);
+        targets.push({
+          kind: 'wall',
+          a: new Vector2(wall.start.x, wall.start.y),
+          b: new Vector2(wall.end.x, wall.end.y),
+          normal: new Vector2(normal.x, normal.y),
+          halfThicknessMm: wall.thickness / 2,
+          sourceId: wall.id,
+        });
+      }
+    }
+
     for (const instance of v.registry.all()) {
       if (instance.instanceId === selectedId.value) continue;
       targets.push({
@@ -112,6 +153,7 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
         sourceId: instance.instanceId,
       });
     }
+
     snapEngine.value.setTargets(targets);
   }
 
@@ -120,9 +162,24 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     if (!v || !camera) return;
 
     switch (e.type) {
-      case 'tap':
+      case 'doubleTap':
+        // Двойным тапом заканчивают ломаную во всех планировщиках.
+        // Он же приходит вместо второго 'tap', если тапнули быстро,
+        // поэтому в режиме планировки его нельзя игнорировать
+        if ((options.mode?.value ?? 'select') !== 'select') options.onFloorDoubleTap?.();
+        break;
+
+      case 'tap': {
+        // В режимах планировки тап адресован полу, а не объектам:
+        // иначе рисование стены выделяло бы мебель под курсором
+        if ((options.mode?.value ?? 'select') !== 'select') {
+          const point = floorPointAt(e.point);
+          if (point) options.onFloorTap?.(point);
+          break;
+        }
         select(v.pick(toNdc(e.point))?.instanceId ?? null);
         break;
+      }
 
       case 'dragStart':
         if (e.onSelection) refreshSnapTargets();
@@ -167,9 +224,14 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
 
     desiredMm.set(floor.x * 1000, floor.z * 1000);
 
+    const product = catalog.bySku.get(selectedPlacement()?.sku ?? '');
     const result = snapEngine.value.snap(desiredMm, {
       ...DEFAULT_SNAP,
       mmPerPixel: camera.mmPerPixel,
+      // Глубина нужна, чтобы объект встал вплотную к стене, а не центром
+      // на её грань. Мелкая фурнитура к стенам не липнет.
+      objectHalfDepthMm: (product?.depthMm ?? 0) / 2,
+      enableWalls: product?.snapToWall ?? true,
     });
 
     if (result.snapped && !isSnapping.value) {
@@ -178,7 +240,12 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     isSnapping.value = result.snapped;
 
     // Прямая мутация Three.js. В Pinia НЕ пишем — это горячий путь.
-    instance.root.position.set(result.position.x / 1000, 0, result.position.y / 1000);
+    // Высота сохраняется: верхний шкаф не должен падать на пол при сдвиге.
+    instance.root.position.set(
+      result.position.x / 1000,
+      instance.root.position.y,
+      result.position.y / 1000,
+    );
     if (result.rotation !== null) {
       instance.root.rotation.y = (result.rotation * Math.PI) / 180;
     }
@@ -202,6 +269,28 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     });
   }
 
+  /** Точка пола под координатой окна, в мм. null — луч ушёл выше горизонта. */
+  function floorPointAt(clientPoint: Vector2): FloorPoint | null {
+    if (!camera) return null;
+    const floor = camera.projectToFloor(toNdc(clientPoint));
+    return floor ? { x: floor.x * 1000, z: floor.z * 1000 } : null;
+  }
+
+  /** Показать помещение целиком: вызывается после создания планировки. */
+  function focusArea(centreMm: FloorPoint, radiusMm: number): void {
+    if (!camera) return;
+    camera.focus(
+      new Vector3(centreMm.x / 1000, 0.4, centreMm.z / 1000),
+      Math.max(1, radiusMm / 1000),
+    );
+    viewer.value?.invalidate();
+  }
+
+  /** Для сброса объекта из каталога: координаты окна -> точка пола. */
+  function screenToFloorMm(clientX: number, clientY: number): FloorPoint | null {
+    return floorPointAt(new Vector2(clientX, clientY));
+  }
+
   function detach(): void {
     element?.removeEventListener('wheel', onWheel);
     resizeObserver?.disconnect();
@@ -213,5 +302,5 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     rect = null;
   }
 
-  return { selectedId, isSnapping, attach, detach };
+  return { selectedId, isSnapping, attach, detach, select, screenToFloorMm, focusArea };
 }

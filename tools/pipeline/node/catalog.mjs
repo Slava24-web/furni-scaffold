@@ -11,6 +11,7 @@
  * Origin каждой модели — низ-центр габарита.
  */
 import { cylinder, mergeGeometries, roundedBox, segmentedBox, translate } from './geometry.mjs';
+import { KITCHEN_PRODUCTS } from './kitchen.mjs';
 
 export const TEST_TENANT = {
   slug: 'test',
@@ -67,6 +68,15 @@ export const MATERIALS = {
     metallic: 0.9,
     texture: null,
     priceModifierCents: 0,
+  },
+  stone: {
+    code: 'stone',
+    name: 'Камень серый',
+    baseColorFactor: [0.42, 0.43, 0.45, 1],
+    roughness: 0.28,
+    metallic: 0.05,
+    texture: null,
+    priceModifierCents: 320000,
   },
 };
 
@@ -219,8 +229,12 @@ function sofa() {
  * Изделия тенанта. `build()` возвращает карту «материал -> список деталей»:
  * детали одного материала сливаются в один примитив, иначе каждая ножка
  * стоила бы отдельного draw call.
+ *
+ * `mountHeightMm` — высота установки низа модели: верхние шкафы висят,
+ * а не стоят на полу. `snapToWall` — участвует ли объект в привязке
+ * к стенам.
  */
-export const PRODUCTS = [
+const FURNITURE = [
   {
     sku: 'TEST-WRD-1200',
     name: 'Шкаф «Орион» 1200',
@@ -262,6 +276,18 @@ export const PRODUCTS = [
     build: sofa,
   },
 ];
+
+/**
+ * Полный каталог: корпусная мебель плюс кухонные модули и детали.
+ * Значения по умолчанию проставляются здесь, чтобы описания изделий
+ * не повторяли одно и то же.
+ */
+export const PRODUCTS = [...FURNITURE, ...KITCHEN_PRODUCTS].map((product) => ({
+  type: 'static',
+  mountHeightMm: 0,
+  snapToWall: true,
+  ...product,
+}));
 
 /** Слияние деталей одного материала в одну геометрию. */
 export function buildProductGeometry(product) {

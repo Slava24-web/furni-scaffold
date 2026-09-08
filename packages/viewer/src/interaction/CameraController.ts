@@ -138,6 +138,20 @@ export class CameraController {
     this.apply();
   }
 
+  /**
+   * Показать помещение целиком с обзором сверху.
+   *
+   * Угол задаётся явно: после создания комнаты камера может стоять как
+   * угодно, и без сброса наклона пользователь смотрит в стену изнутри
+   * или на глухую коробку снаружи.
+   */
+  focus(centre: Vector3, radiusM: number, polar = Math.PI / 3.2): void {
+    this.target.copy(centre);
+    this.clampTarget();
+    this.spherical.phi = polar;
+    this.frame(radiusM);
+  }
+
   private clampSpherical(): void {
     this.spherical.radius = MathUtils.clamp(
       this.spherical.radius,

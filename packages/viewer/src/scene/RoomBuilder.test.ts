@@ -9,22 +9,24 @@ const meshes = (builder: RoomBuilder): Mesh[] =>
   builder.root.children.filter((child): child is Mesh => (child as Mesh).isMesh);
 
 describe('RoomBuilder', () => {
-  it('строит ровно два меша: стены и пол', () => {
+  it('строит по мешу на стену плюс пол', () => {
     const builder = new RoomBuilder(new Scene());
     builder.build([room()]);
 
-    // Один draw call на все стены и один на пол: панелей у комнаты
-    // с проёмами два десятка, по вызову на каждую бюджет не выдержит
-    expect(meshes(builder)).toHaveLength(2);
-    expect(meshes(builder).map((m) => m.name).sort()).toEqual(['floor', 'walls']);
+    // Панели одной стены слиты в один меш: у комнаты с проёмами их два
+    // десятка, по draw call на каждую бюджет не выдержит
+    expect(meshes(builder)).toHaveLength(5);
+    expect(meshes(builder).filter((m) => m.name.startsWith('wall:'))).toHaveLength(4);
+    expect(meshes(builder).filter((m) => m.name === 'floor')).toHaveLength(1);
   });
 
   it('стены стоят на полу и не выше заданной высоты', () => {
     const builder = new RoomBuilder(new Scene());
     builder.build([room()]);
 
-    const walls = meshes(builder).find((m) => m.name === 'walls')!;
-    const box = new Box3().setFromObject(walls);
+    const walls = meshes(builder).filter((m) => m.name.startsWith('wall:'));
+    const box = new Box3();
+    for (const wall of walls) box.union(new Box3().setFromObject(wall));
     expect(box.min.y).toBeCloseTo(0, 5);
     expect(box.max.y).toBeCloseTo(2.7, 5);
   });
@@ -63,8 +65,9 @@ describe('RoomBuilder', () => {
     const countVertices = (r: Room): number => {
       const builder = new RoomBuilder(new Scene());
       builder.build([r]);
-      const walls = meshes(builder).find((m) => m.name === 'walls')!;
-      return walls.geometry.getAttribute('position').count;
+      return meshes(builder)
+        .filter((m) => m.name.startsWith('wall:'))
+        .reduce((sum, mesh) => sum + mesh.geometry.getAttribute('position').count, 0);
     };
 
     // Дверь режет стену на простенок, перемычку и остаток: панелей
@@ -78,7 +81,7 @@ describe('RoomBuilder', () => {
     builder.build([room()]);
     builder.build([createRectangularRoom({ widthMm: 6000, depthMm: 6000 })]);
 
-    expect(meshes(builder)).toHaveLength(2);
+    expect(meshes(builder)).toHaveLength(5);
   });
 
   it('пустой список комнат не оставляет геометрии', () => {
@@ -95,7 +98,8 @@ describe('RoomBuilder', () => {
     const builder = new RoomBuilder(new Scene());
     builder.build([partial]);
 
-    expect(meshes(builder).map((m) => m.name)).toEqual(['walls']);
+    expect(meshes(builder)).toHaveLength(2);
+    expect(meshes(builder).every((m) => m.name.startsWith('wall:'))).toBe(true);
   });
 
   it('освобождает ресурсы и снимает себя со сцены', () => {
@@ -103,9 +107,9 @@ describe('RoomBuilder', () => {
     const builder = new RoomBuilder(scene);
     builder.build([room()]);
 
-    const walls = meshes(builder).find((m) => m.name === 'walls')!;
+    const wall = meshes(builder).find((m) => m.name.startsWith('wall:'))!;
     let disposed = false;
-    walls.geometry.addEventListener('dispose', () => {
+    wall.geometry.addEventListener('dispose', () => {
       disposed = true;
     });
 
@@ -113,5 +117,46 @@ describe('RoomBuilder', () => {
 
     expect(disposed).toBe(true);
     expect(scene.children).not.toContain(builder.root);
+  });
+
+  describe('отсечение стен по стороне камеры', () => {
+    const visibleWalls = (builder: RoomBuilder): number =>
+      meshes(builder).filter((m) => m.name.startsWith('wall:') && m.visible).length;
+
+    it('из центра комнаты видны все стены', () => {
+      const builder = new RoomBuilder(new Scene());
+      builder.build([room()]);
+      builder.updateCulling(new Vector3(0, 1.6, 0));
+
+      expect(visibleWalls(builder)).toBe(4);
+    });
+
+    it('снаружи ближняя стена скрывается', () => {
+      const builder = new RoomBuilder(new Scene());
+      builder.build([room()]);
+      // Камера далеко по +Z: стена с этой стороны загораживает помещение
+      builder.updateCulling(new Vector3(0, 3, 20));
+
+      expect(visibleWalls(builder)).toBeLessThan(4);
+      expect(visibleWalls(builder)).toBeGreaterThan(0);
+    });
+
+    it('из угла скрываются две стены', () => {
+      const builder = new RoomBuilder(new Scene());
+      builder.build([room()]);
+      builder.updateCulling(new Vector3(20, 8, 20));
+
+      expect(visibleWalls(builder)).toBe(2);
+    });
+
+    it('сообщает об изменении видимости только когда она изменилась', () => {
+      const builder = new RoomBuilder(new Scene());
+      builder.build([room()]);
+
+      expect(builder.updateCulling(new Vector3(0, 3, 20))).toBe(true);
+      // Повторный вызов из той же точки не должен просить новый кадр
+      expect(builder.updateCulling(new Vector3(0, 3, 20))).toBe(false);
+      expect(builder.updateCulling(new Vector3(0, 3, -20))).toBe(true);
+    });
   });
 });

@@ -1,6 +1,11 @@
 :root {
-  color-scheme: light dark;
+  /* Светлая схема задана явно: интерфейс планировщика нарисован светлым,
+     и при системной тёмной теме браузер красил бы текст белым по белому.
+     Тёмная тема — отдельная задача, а не побочный эффект настроек ОС. */
+  color-scheme: light;
   font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color: #111418;
+  background: #fff;
 }
 
 html,
@@ -11,6 +16,8 @@ body,
 }
 
 body {
+  color: inherit;
+  background: inherit;
   /* Резинка прокрутки поверх канваса ломает жесты на мобильных */
   overscroll-behavior: none;
 }

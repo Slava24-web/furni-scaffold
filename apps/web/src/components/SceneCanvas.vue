@@ -3,11 +3,18 @@ import { computed, onMounted, ref } from 'vue';
 import { useViewer } from '../composables/useViewer';
 import { useSceneEditing } from '../composables/useSceneEditing';
 import { useSceneStore } from '../stores/scene';
+import { useSceneSync } from '../composables/useSceneSync';
+import type { PlannerMode, FloorPoint } from '../composables/useSceneEditing';
 import type { DeviceTier } from '@furni/shared';
 
 // `| undefined` обязателен при exactOptionalPropertyTypes: родитель
 // передаёт вычисляемое значение, которого может не быть
-const props = defineProps<{ forceTier?: DeviceTier | undefined }>();
+const props = defineProps<{
+  forceTier?: DeviceTier | undefined;
+  mode?: PlannerMode;
+}>();
+
+const emit = defineEmits<{ floorTap: [FloorPoint]; floorDoubleTap: [] }>();
 
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 const containerRef = ref<HTMLElement | null>(null);
@@ -24,16 +31,27 @@ const showPerf = computed(
     import.meta.env.VITE_SHOW_PERF === '1' ||
     new URLSearchParams(window.location.search).get('perf') === '1',
 );
-const { selectedId, isSnapping, attach, detach } = useSceneEditing(viewer, {
-  onCommit: (id, patch) => store.updatePlacement(id, patch),
-});
+const mode = computed<PlannerMode>(() => props.mode ?? 'select');
+
+const { selectedId, isSnapping, attach, detach, select, screenToFloorMm, focusArea } = useSceneEditing(
+  viewer,
+  {
+    onCommit: (id, patch) => store.updatePlacement(id, patch),
+    mode,
+    onFloorTap: (point) => emit('floorTap', point),
+    onFloorDoubleTap: () => emit('floorDoubleTap'),
+  },
+);
+
+// Сцена — проекция документа: комната и объекты собираются отсюда
+useSceneSync(viewer);
 
 onMounted(() => {
   mount();
   if (containerRef.value) attach(containerRef.value);
 });
 
-defineExpose({ viewer, detach });
+defineExpose({ viewer, detach, select, selectedId, screenToFloorMm, focusArea, containerRef });
 </script>
 
 <template>

@@ -12,7 +12,6 @@ export default defineConfig({
       // иначе правка в shared требовала бы пересборки перед каждым HMR.
       // На сборку это не влияет — Vite всё равно компилирует их сам.
       '@furni/shared': fromRoot('../../packages/shared/src/index.ts'),
-      '@furni/viewer/testing': fromRoot('../../packages/viewer/src/testing/seedScene.ts'),
       '@furni/viewer': fromRoot('../../packages/viewer/src/index.ts'),
     },
   },

@@ -7,17 +7,29 @@ import {
   MeshStandardMaterial,
   Shape,
   ShapeGeometry,
+  Vector3,
   type Scene,
 } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { computeWallPanels, wallAngleDeg, type Room } from '@furni/shared';
+import {
+  computeWallPanels,
+  innerNormal,
+  pointAlongWall,
+  wallAngleDeg,
+  wallLengthMm,
+  type Room,
+  type Wall,
+} from '@furni/shared';
 
 /**
  * Построение геометрии помещения из документа сцены.
  *
- * Все панели стен сливаются в ОДИН меш, а пол — во второй. Панелей у
- * комнаты с проёмами набирается два десятка, и по draw call на каждую
+ * Панели одной стены сливаются в один меш, пол — в отдельный. Панелей
+ * у комнаты с проёмами набирается два десятка, и по draw call на каждую
  * съело бы четверть бюджета (RENDER_BUDGETS.maxDrawCalls) ещё до мебели.
+ * Дробление именно по стенам, а не в один меш на всё, нужно для отсечения:
+ * стены между камерой и помещением скрываются, иначе планировщик показывает
+ * коробку снаружи и работать в нём невозможно.
  *
  * Комната не регистрируется в SceneRegistry: это не объект каталога,
  * её нельзя выделить и перетащить, а ресурсами владеет сам билдер.
@@ -32,6 +44,14 @@ const MM = 1000;
  */
 function wallRotationY(angleDeg: number): number {
   return (-angleDeg * Math.PI) / 180;
+}
+
+interface WallMesh {
+  mesh: Mesh;
+  /** Середина стены в мировых метрах */
+  centre: Vector3;
+  /** Внутренняя нормаль в мировых координатах */
+  normal: Vector3;
 }
 
 export class RoomBuilder {
@@ -51,7 +71,7 @@ export class RoomBuilder {
     side: DoubleSide,
   });
 
-  private wallMesh: Mesh | null = null;
+  private walls: WallMesh[] = [];
   private floorMesh: Mesh | null = null;
 
   constructor(private readonly scene: Scene) {
@@ -63,21 +83,29 @@ export class RoomBuilder {
   build(rooms: readonly Room[]): void {
     this.clear();
 
-    const wallGeometries: BufferGeometry[] = [];
     const floorGeometries: BufferGeometry[] = [];
 
     for (const room of rooms) {
       for (const wall of room.walls) {
-        for (const panel of computeWallPanels(wall, room.openings)) {
-          wallGeometries.push(panelGeometry(wall, panel));
-        }
+        const panels = computeWallPanels(wall, room.openings).map((panel) =>
+          panelGeometry(wall, panel),
+        );
+        const mesh = mergeIntoMesh(panels, this.wallMaterial, `wall:${wall.id}`);
+        if (!mesh) continue;
+
+        const normal = innerNormal(room, wall);
+        const middle = pointAlongWall(wall, wallLengthMm(wall) / 2);
+        this.walls.push({
+          mesh,
+          centre: new Vector3(middle.x / MM, 0, middle.y / MM),
+          normal: new Vector3(normal.x, 0, normal.y),
+        });
+        this.root.add(mesh);
       }
+
       const floor = floorGeometry(room);
       if (floor) floorGeometries.push(floor);
     }
-
-    this.wallMesh = mergeIntoMesh(wallGeometries, this.wallMaterial, 'walls');
-    if (this.wallMesh) this.root.add(this.wallMesh);
 
     this.floorMesh = mergeIntoMesh(floorGeometries, this.floorMaterial, 'floor');
     if (this.floorMesh) {
@@ -88,18 +116,40 @@ export class RoomBuilder {
     }
   }
 
+  /**
+   * Скрывает стены, стоящие между камерой и помещением.
+   *
+   * Стена видима, когда камера находится с внутренней стороны её
+   * плоскости. Возвращает true, если видимость изменилась — вызывающий
+   * код по этому признаку решает, нужен ли новый кадр: рендер по
+   * требованию иначе не узнает об изменении.
+   */
+  updateCulling(cameraPosition: Vector3): boolean {
+    let changed = false;
+    for (const wall of this.walls) {
+      const toCamera = cameraPosition.clone().sub(wall.centre);
+      const visible = toCamera.dot(wall.normal) >= 0;
+      if (wall.mesh.visible !== visible) {
+        wall.mesh.visible = visible;
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
   /** Есть ли построенное помещение — по нему решается, показывать ли сетку. */
   get isEmpty(): boolean {
-    return this.wallMesh === null && this.floorMesh === null;
+    return this.walls.length === 0 && this.floorMesh === null;
   }
 
   private clear(): void {
-    for (const mesh of [this.wallMesh, this.floorMesh]) {
+    const meshes = [...this.walls.map((wall) => wall.mesh), this.floorMesh];
+    for (const mesh of meshes) {
       if (!mesh) continue;
       this.root.remove(mesh);
       mesh.geometry.dispose();
     }
-    this.wallMesh = null;
+    this.walls = [];
     this.floorMesh = null;
   }
 
@@ -113,7 +163,7 @@ export class RoomBuilder {
 
 /** Панель стены как прямоугольный блок, повёрнутый вдоль стены. */
 function panelGeometry(
-  wall: Room['walls'][number],
+  wall: Wall,
   panel: ReturnType<typeof computeWallPanels>[number],
 ): BufferGeometry {
   const height = panel.topMm - panel.bottomMm;
