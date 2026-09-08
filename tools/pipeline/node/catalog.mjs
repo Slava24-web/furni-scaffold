@@ -1,0 +1,272 @@
+/**
+ * Каталог демо-тенанта `test`.
+ *
+ * Заменяет модели реального клиента, пока их нет: даёт пайплайну,
+ * загрузчику и перф-гейту настоящие GLB с настоящей геометрией вместо
+ * примитивов, собираемых в браузере. Это единственный источник правды
+ * и для файлов моделей, и для сидов БД — расхождение между тем, что
+ * лежит в хранилище, и тем, что записано в products, ловится сразу.
+ *
+ * Все размеры — миллиметры целыми (CLAUDE.md, конвенции).
+ * Origin каждой модели — низ-центр габарита.
+ */
+import { cylinder, mergeGeometries, roundedBox, segmentedBox, translate } from './geometry.mjs';
+
+export const TEST_TENANT = {
+  slug: 'test',
+  name: 'Мебельный магазин «Тест»',
+  allowedOrigins: ['http://localhost:5173', 'http://localhost:4173'],
+};
+
+/**
+ * Материалы тенанта. `texture` ссылается на процедурную карту из
+ * textures.mjs; без неё материал одноцветный.
+ */
+export const MATERIALS = {
+  oak: {
+    code: 'oak',
+    name: 'Дуб натуральный',
+    baseColorFactor: [0.72, 0.56, 0.36, 1],
+    roughness: 0.68,
+    metallic: 0,
+    texture: 'wood',
+    priceModifierCents: 0,
+  },
+  white: {
+    code: 'white',
+    name: 'Белый ЛДСП',
+    baseColorFactor: [0.92, 0.91, 0.89, 1],
+    roughness: 0.55,
+    metallic: 0,
+    texture: null,
+    priceModifierCents: 0,
+  },
+  graphite: {
+    code: 'graphite',
+    name: 'Графит',
+    baseColorFactor: [0.19, 0.2, 0.22, 1],
+    roughness: 0.5,
+    metallic: 0,
+    texture: null,
+    priceModifierCents: 150000,
+  },
+  fabric: {
+    code: 'fabric',
+    name: 'Рогожка серая',
+    baseColorFactor: [0.55, 0.57, 0.56, 1],
+    roughness: 0.95,
+    metallic: 0,
+    texture: 'fabric',
+    priceModifierCents: 0,
+  },
+  steel: {
+    code: 'steel',
+    name: 'Сталь матовая',
+    baseColorFactor: [0.62, 0.64, 0.66, 1],
+    roughness: 0.35,
+    metallic: 0.9,
+    texture: null,
+    priceModifierCents: 0,
+  },
+};
+
+/** Вертикальная ручка-рейлинг. */
+function verticalHandle(xMm, yMm, zMm, lengthMm) {
+  return translate(cylinder(9, lengthMm, 10), xMm, yMm, zMm);
+}
+
+/** Горизонтальная ручка: цилиндр строится по оси Y, поэтому берём брусок. */
+function horizontalHandle(xMm, yMm, zMm, lengthMm) {
+  return translate(segmentedBox(lengthMm, 18, 18, 2), xMm, yMm, zMm);
+}
+
+function wardrobe() {
+  const width = 1200;
+  const height = 2200;
+  const depth = 600;
+  const plinth = 90;
+  const corpusHeight = height - plinth;
+
+  const doorWidth = width / 2 - 12;
+  const doorHeight = corpusHeight - 40;
+  const doorY = plinth + corpusHeight / 2;
+  const doorZ = depth / 2 + 9;
+
+  return {
+    white: [translate(segmentedBox(width, corpusHeight, depth, 4), 0, plinth + corpusHeight / 2, 0)],
+    graphite: [translate(segmentedBox(width - 60, plinth, depth - 40, 2), 0, plinth / 2, 0)],
+    oak: [
+      translate(roundedBox(doorWidth, doorHeight, 18, 5, 6), -(doorWidth / 2 + 6), doorY, doorZ),
+      translate(roundedBox(doorWidth, doorHeight, 18, 5, 6), doorWidth / 2 + 6, doorY, doorZ),
+    ],
+    steel: [
+      verticalHandle(-30, doorY, doorZ + 20, 900),
+      verticalHandle(30, doorY, doorZ + 20, 900),
+    ],
+  };
+}
+
+function sideboard() {
+  const width = 1200;
+  const height = 780;
+  const depth = 450;
+  const plinth = 80;
+  const corpusHeight = height - plinth;
+  const drawerHeight = corpusHeight / 3 - 14;
+
+  const drawers = [];
+  const handles = [];
+  for (let i = 0; i < 3; i++) {
+    const centerY = plinth + drawerHeight / 2 + 10 + i * (drawerHeight + 14);
+    drawers.push(translate(roundedBox(width - 40, drawerHeight, 18, 5, 5), 0, centerY, depth / 2 + 9));
+    handles.push(horizontalHandle(0, centerY + drawerHeight / 2 - 40, depth / 2 + 26, 320));
+  }
+
+  return {
+    white: [translate(segmentedBox(width, corpusHeight, depth, 4), 0, plinth + corpusHeight / 2, 0)],
+    graphite: [translate(segmentedBox(width - 60, plinth, depth - 40, 2), 0, plinth / 2, 0)],
+    oak: drawers,
+    steel: handles,
+  };
+}
+
+function table() {
+  const width = 1400;
+  const depth = 800;
+  const topThickness = 40;
+  const legHeight = 720 - topThickness;
+  const inset = 90;
+
+  const legs = [];
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      legs.push(
+        translate(
+          cylinder(32, legHeight, 14),
+          sx * (width / 2 - inset),
+          legHeight / 2,
+          sz * (depth / 2 - inset),
+        ),
+      );
+    }
+  }
+
+  return {
+    oak: [translate(roundedBox(width, topThickness, depth, 12, 8), 0, legHeight + topThickness / 2, 0)],
+    steel: legs,
+  };
+}
+
+function chair() {
+  const seatHeight = 450;
+  const seatThickness = 90;
+  const legHeight = seatHeight - seatThickness;
+
+  const legs = [];
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      legs.push(translate(cylinder(18, legHeight, 12), sx * 180, legHeight / 2, sz * 180));
+    }
+  }
+
+  return {
+    fabric: [
+      translate(roundedBox(460, seatThickness, 460, 24, 8), 0, legHeight + seatThickness / 2, 0),
+      translate(roundedBox(420, 480, 70, 24, 8), 0, seatHeight + 240, -195),
+    ],
+    steel: legs,
+  };
+}
+
+function sofa() {
+  const width = 2040;
+  const depth = 900;
+  const baseHeight = 320;
+  const legHeight = 120;
+  const armWidth = 200;
+
+  const seatWidth = (width - armWidth * 2) / 3 - 20;
+  const cushions = [];
+  const backs = [];
+  for (let i = 0; i < 3; i++) {
+    const centerX = -(width - armWidth * 2) / 2 + seatWidth / 2 + 10 + i * (seatWidth + 20);
+    // Сегментов больше, чем у корпусов: подушки — самая тяжёлая часть модели,
+    // на них и проверяется, что LOD-упрощение действительно режет геометрию
+    cushions.push(translate(roundedBox(seatWidth, 170, 720, 55, 10), centerX, legHeight + baseHeight + 85, 40));
+    backs.push(translate(roundedBox(seatWidth, 430, 190, 55, 10), centerX, legHeight + baseHeight + 300, -330));
+  }
+
+  const legs = [];
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      legs.push(translate(cylinder(22, legHeight, 10), sx * (width / 2 - 140), legHeight / 2, sz * (depth / 2 - 140)));
+    }
+  }
+
+  return {
+    fabric: [
+      translate(segmentedBox(width, baseHeight, depth, 4), 0, legHeight + baseHeight / 2, 0),
+      translate(roundedBox(armWidth, 550, depth, 60, 10), -(width / 2 - armWidth / 2), legHeight + 275, 0),
+      translate(roundedBox(armWidth, 550, depth, 60, 10), width / 2 - armWidth / 2, legHeight + 275, 0),
+      ...cushions,
+      ...backs,
+    ],
+    steel: legs,
+  };
+}
+
+/**
+ * Изделия тенанта. `build()` возвращает карту «материал -> список деталей»:
+ * детали одного материала сливаются в один примитив, иначе каждая ножка
+ * стоила бы отдельного draw call.
+ */
+export const PRODUCTS = [
+  {
+    sku: 'TEST-WRD-1200',
+    name: 'Шкаф «Орион» 1200',
+    category: 'Шкафы',
+    type: 'static',
+    basePriceCents: 5490000,
+    build: wardrobe,
+  },
+  {
+    sku: 'TEST-SBD-1200',
+    name: 'Комод «Орион» 1200',
+    category: 'Комоды',
+    type: 'static',
+    basePriceCents: 2790000,
+    build: sideboard,
+  },
+  {
+    sku: 'TEST-TBL-1400',
+    name: 'Стол «Норд» 1400',
+    category: 'Столы',
+    type: 'static',
+    basePriceCents: 3190000,
+    build: table,
+  },
+  {
+    sku: 'TEST-CHR-460',
+    name: 'Стул «Норд»',
+    category: 'Стулья',
+    type: 'static',
+    basePriceCents: 890000,
+    build: chair,
+  },
+  {
+    sku: 'TEST-SFA-2040',
+    name: 'Диван «Ленокс» 2040',
+    category: 'Диваны',
+    type: 'static',
+    basePriceCents: 8990000,
+    build: sofa,
+  },
+];
+
+/** Слияние деталей одного материала в одну геометрию. */
+export function buildProductGeometry(product) {
+  const parts = product.build();
+  return Object.entries(parts)
+    .filter(([, pieces]) => pieces.length > 0)
+    .map(([material, pieces]) => ({ material, geometry: mergeGeometries(pieces) }));
+}

@@ -44,6 +44,10 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
+      - name: Демо-модели тенанта test
+        # Модели генерируются, а не лежат в репозитории: так пайплайн
+        # проверяется на каждом прогоне, а бинарники не пухнут в истории
+        run: pnpm models:test
       - run: pnpm build
       - name: Бюджет размера бандлов
         run: pnpm size-limit

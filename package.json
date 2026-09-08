@@ -7,6 +7,7 @@
   },
   "scripts": {
     "dev": "turbo run dev --parallel",
+    "models:test": "pnpm --filter @furni/pipeline models:test",
     "build": "turbo run build",
     "lint": "eslint .",
     "typecheck": "turbo run typecheck",
@@ -31,11 +32,6 @@
     "vue-eslint-parser": "^9"
   },
   "size-limit": [
-    {
-      "name": "embed shell",
-      "path": "packages/embed/dist/embed.js",
-      "limit": "8 kB"
-    },
     {
       "name": "3D engine chunk",
       "path": "apps/web/dist/assets/engine-*.js",

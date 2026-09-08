@@ -1,0 +1,23 @@
+{
+  "name": "@furni/pipeline",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "echo \"пайплайн на JS, проверка типов не применяется\"",
+    "test": "vitest run",
+    "models:test": "node node/make-test-models.mjs",
+    "optimize": "node node/optimize.mjs"
+  },
+  "dependencies": {
+    "@furni/shared": "workspace:*",
+    "@gltf-transform/core": "^4.1.0",
+    "@gltf-transform/extensions": "^4.1.0",
+    "@gltf-transform/functions": "^4.1.0",
+    "meshoptimizer": "^0.22.0",
+    "sharp": "^0.33.5"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.0"
+  }
+}

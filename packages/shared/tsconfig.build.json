@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // CommonJS осознанно: пакет потребляют и NestJS (CJS после nest build),
+    // и скрипты пайплайна (ESM). CJS читается обоими без прослоек, а
+    // расширения в относительных импортах при этом не требуются.
+    "module": "commonjs",
+    "moduleResolution": "node10",
+    "lib": ["ES2022"],
+    "outDir": "dist",
+    "rootDir": "src",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts"]
+}

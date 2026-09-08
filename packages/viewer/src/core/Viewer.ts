@@ -7,6 +7,7 @@ import {
   WebGLRenderer,
 } from 'three';
 import { Environment } from './Environment';
+import { AssetLoader } from '../loading/AssetLoader';
 import { QualityManager } from '../perf/QualityManager';
 import { Telemetry } from '../perf/Telemetry';
 import { SceneRegistry } from './SceneRegistry';
@@ -17,6 +18,8 @@ export interface ViewerOptions {
   /** Принудительный tier для тестов и перф-гейта */
   forceTier?: DeviceTier;
   onTelemetry?: (snapshot: ReturnType<Telemetry['snapshot']>) => void;
+  /** Путь к транскодеру basis для KTX2. По умолчанию /basis/ */
+  transcoderPath?: string;
 }
 
 /**
@@ -31,6 +34,7 @@ export class Viewer {
   readonly camera: PerspectiveCamera;
   readonly registry: SceneRegistry;
   readonly environment: Environment;
+  readonly assets: AssetLoader;
   readonly quality: QualityManager;
   readonly telemetry: Telemetry;
 
@@ -38,6 +42,8 @@ export class Viewer {
   private rafId: number | null = null;
   private disposed = false;
   private firstFrameTime: number | null = null;
+  /** Был ли отрисован предыдущий кадр — см. Telemetry.record */
+  private previousFrameRendered = false;
   private needsRender = true;
   private readonly updateCallbacks = new Set<(dt: number) => void>();
   private readonly resizeObserver: ResizeObserver;
@@ -69,6 +75,12 @@ export class Viewer {
     this.environment = new Environment(this.scene);
     this.telemetry = new Telemetry();
     this.quality = new QualityManager(this.renderer, this.telemetry, options.forceTier);
+    // Загрузчик держит кэш моделей и зависит от бюджета видеопамяти
+    // текущего класса устройства, поэтому создаётся после QualityManager
+    this.assets = new AssetLoader(this.renderer, {
+      transcoderPath: options.transcoderPath ?? '/basis/',
+      maxTextureBytes: this.quality.budget.maxTextureBytes,
+    });
 
     this.resizeObserver = new ResizeObserver(() => this.handleResize());
     this.resizeObserver.observe(canvas);
@@ -117,14 +129,17 @@ export class Viewer {
 
     for (const fn of this.updateCallbacks) fn(dt);
 
-    if (this.needsRender) {
+    const rendered = this.needsRender;
+    if (rendered) {
       this.renderer.render(this.scene, this.camera);
       this.needsRender = false;
       this.firstFrameTime ??= performance.now();
     }
 
     const cpuMs = performance.now() - frameStart;
-    this.telemetry.record(dt, cpuMs, this.renderer.info);
+    // Интервал между кадрами осмыслен только если оба были отрисованы
+    this.telemetry.record(dt, cpuMs, this.renderer.info, rendered && this.previousFrameRendered);
+    this.previousFrameRendered = rendered;
     this.quality.tick();
 
     const snapshot = this.telemetry.maybeEmit();
@@ -148,6 +163,7 @@ export class Viewer {
     this.resizeObserver.disconnect();
     this.updateCallbacks.clear();
     this.registry.disposeAll();
+    this.assets.dispose();
     this.environment.dispose();
     this.renderer.dispose();
     this.renderer.forceContextLoss();

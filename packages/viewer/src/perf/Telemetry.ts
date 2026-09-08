@@ -28,9 +28,16 @@ export class Telemetry {
   private lastEmit = 0;
   private info: WebGLRenderer['info'] | null = null;
 
-  record(dt: number, cpuMs: number, info: WebGLRenderer['info']): void {
+  /**
+   * @param sample учитывать ли кадр в статистике. Кадр считается только
+   * когда и он, и предыдущий были реально отрисованы: при рендере по
+   * требованию простой между отрисовками — это не «медленный кадр»,
+   * и включать его в перцентили значит мерить не стоимость рендера,
+   * а частоту вызовов requestAnimationFrame.
+   */
+  record(dt: number, cpuMs: number, info: WebGLRenderer['info'], sample = true): void {
     // Игнорируем аномальные кадры после возврата из фона
-    if (dt > 0 && dt < 1) {
+    if (sample && dt > 0 && dt < 1) {
       this.frameTimes[this.cursor] = dt * 1000;
       this.cpuTimes[this.cursor] = cpuMs;
       this.cursor = (this.cursor + 1) % WINDOW_SIZE;

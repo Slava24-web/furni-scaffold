@@ -7,12 +7,17 @@
  *   node optimize.mjs --in model.glb --out ./dist --tier mobile
  */
 import { NodeIO } from '@gltf-transform/core';
-import { KHRDracoMeshCompression, KHRMeshQuantization } from '@gltf-transform/extensions';
 import {
-  dedup, draco, flatten, join, palette, prune, quantize,
+  EXTMeshoptCompression,
+  EXTTextureWebP,
+  KHRMeshQuantization,
+  KHRTextureBasisu,
+} from '@gltf-transform/extensions';
+import {
+  dedup, flatten, join, meshopt, prune,
   simplify, textureCompress, weld,
 } from '@gltf-transform/functions';
-import { MeshoptSimplifier } from 'meshoptimizer';
+import { MeshoptDecoder, MeshoptEncoder, MeshoptSimplifier } from 'meshoptimizer';
 import { ASSET_BUDGETS } from '@furni/shared';
 import sharp from 'sharp';
 import { writeFile } from 'node:fs/promises';
@@ -20,8 +25,26 @@ import { basename, join as joinPath } from 'node:path';
 
 const LOD_RATIOS = { 0: 1.0, 1: ASSET_BUDGETS.lod1Ratio, 2: ASSET_BUDGETS.lod2Ratio };
 
-export async function optimizeAsset({ inputPath, outputDir, maxTextureSize }) {
-  const io = new NodeIO().registerExtensions([KHRDracoMeshCompression, KHRMeshQuantization]);
+export async function optimizeAsset({ inputPath, outputDir, maxTextureSize = ASSET_BUDGETS.maxTextureSize }) {
+  // Meshopt, а не Draco. Загрузчик в packages/viewer подключает только
+  // MeshoptDecoder: модель, сжатая Draco, в приложении просто не откроется.
+  // Meshopt к тому же быстрее декодируется на слабом CPU (CLAUDE.md).
+  await MeshoptEncoder.ready;
+  await MeshoptSimplifier.ready;
+
+  const io = new NodeIO()
+    .registerExtensions([
+      EXTMeshoptCompression,
+      EXTTextureWebP,
+      KHRMeshQuantization,
+      KHRTextureBasisu,
+    ])
+    // Без явной регистрации кодека расширение падает на записи буфера:
+    // сама библиотека meshoptimizer в зависимости не подтягивается
+    .registerDependencies({
+      'meshopt.encoder': MeshoptEncoder,
+      'meshopt.decoder': MeshoptDecoder,
+    });
   const report = { input: basename(inputPath), lods: [], warnings: [] };
 
   for (const [lod, ratio] of Object.entries(LOD_RATIOS)) {
@@ -37,15 +60,14 @@ export async function optimizeAsset({ inputPath, outputDir, maxTextureSize }) {
       ratio < 1
         ? simplify({ simplifier: MeshoptSimplifier, ratio, error: 0.001 })
         : (d) => d,
-      // Атласирование мелких однотонных материалов — режет draw calls
-      palette({ min: 3 }),
       textureCompress({
         encoder: sharp,
         targetFormat: 'webp',
         resize: [maxTextureSize, maxTextureSize],
       }),
-      quantize({ pattern: /^(POSITION|TEXCOORD|NORMAL)$/ }),
-      draco(),
+      // meshopt сам квантует атрибуты, отдельный quantize() перед ним
+      // приводит к двойному округлению позиций и щелям на стыках
+      meshopt({ encoder: MeshoptEncoder, level: 'medium' }),
     );
 
     const glb = await io.writeBinary(doc);
@@ -87,6 +109,8 @@ function collectStats(doc) {
   };
 }
 
-// TODO: KTX2/Basis вместо WebP — textureCompress пока даёт WebP,
-// для GPU-памяти нужен toktx. Добавить вызов бинаря toktx после сжатия.
-// Это блокирующая задача: без KTX2 бюджет видеопамяти на мобильных не держится.
+// ОСТАЁТСЯ БЛОКЕРОМ: KTX2/Basis вместо WebP. textureCompress даёт WebP —
+// он экономит трафик, но в видеопамяти распаковывается в RGBA и занимает
+// столько же, сколько PNG. Нужен вызов бинаря toktx после сжатия
+// (KHRTextureBasisu уже зарегистрирован в io). Без этого бюджет
+// RENDER_BUDGETS.maxTextureBytes на мобильных не держится.
