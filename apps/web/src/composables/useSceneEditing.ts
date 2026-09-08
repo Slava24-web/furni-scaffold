@@ -1,16 +1,18 @@
 import { markRaw, ref, shallowRef, type ShallowRef } from 'vue';
 import { Vector2 } from 'three';
 import {
+  CameraController,
   DEFAULT_SNAP,
   GestureController,
   SnapEngine,
   type GestureEvent,
+  type SnapTarget,
   type Viewer,
 } from '@furni/viewer';
 import type { Placement } from '@furni/shared';
 
 /**
- * Связка жестов, снаппинга и состояния редактирования.
+ * Связка жестов, камеры, выделения и снаппинга.
  *
  * ПРАВИЛО 3 из CLAUDE.md: во время перетаскивания позиция в Pinia НЕ пишется.
  * Объект двигается напрямую в Three.js, стор обновляется один раз на dragEnd.
@@ -21,40 +23,116 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
   const selectedId = ref<string | null>(null);
   const isSnapping = ref(false);
   const snapEngine = shallowRef(markRaw(new SnapEngine()));
-  let gestures: GestureController | null = null;
 
-  function attach(element: HTMLElement): void {
+  let gestures: GestureController | null = null;
+  let camera: CameraController | null = null;
+  let element: HTMLElement | null = null;
+  /** Прямоугольник канваса кэшируется: getBoundingClientRect на каждое
+   *  движение указателя — это принудительный reflow в горячем пути. */
+  let rect: DOMRect | null = null;
+  let resizeObserver: ResizeObserver | null = null;
+
+  const ndc = new Vector2();
+  const desiredMm = new Vector2();
+
+  function attach(target: HTMLElement): void {
+    element = target;
+    const v = viewer.value;
+    if (!v) return;
+
+    camera = markRaw(new CameraController(v.camera));
+    refreshRect();
+
+    resizeObserver = new ResizeObserver(refreshRect);
+    resizeObserver.observe(target);
+
     gestures = markRaw(
-      new GestureController(element, {
+      new GestureController(target, {
         onGesture: handleGesture,
         isOnSelection: (point) => hitTestSelection(point),
         haptic: (pattern) => navigator.vibrate?.(pattern),
       }),
     );
+
+    // Колесо мыши: на десктопе это основной способ зума
+    target.addEventListener('wheel', onWheel, { passive: false });
+  }
+
+  function refreshRect(): void {
+    if (!element) return;
+    rect = element.getBoundingClientRect();
+    camera?.setViewport(rect.width, rect.height);
+    viewer.value?.invalidate();
+  }
+
+  function onWheel(event: WheelEvent): void {
+    event.preventDefault();
+    camera?.dolly(event.deltaY);
+    viewer.value?.invalidate();
+  }
+
+  /** Клиентские координаты указателя -> NDC канваса. */
+  function toNdc(point: Vector2): Vector2 {
+    if (!rect || !camera) return ndc.set(0, 0);
+    return camera.toNdc(point.x - rect.left, point.y - rect.top, ndc);
   }
 
   function hitTestSelection(point: Vector2): boolean {
-    if (!selectedId.value || !viewer.value) return false;
-    // TODO: raycast по габариту выделенного объекта.
-    // Порог попадания расширить до 56px — требование ТЗ 8.2 для 3D-хэндлов.
-    void point;
-    return false;
+    const v = viewer.value;
+    if (!selectedId.value || !v) return false;
+    return v.pick(toNdc(point))?.instanceId === selectedId.value;
+  }
+
+  function select(instanceId: string | null): void {
+    const v = viewer.value;
+    selectedId.value = instanceId;
+    if (!v) return;
+
+    const instance = instanceId ? v.registry.get(instanceId) : undefined;
+    if (instance) v.selection.show(instance.root);
+    else v.selection.hide();
+    v.invalidate();
+  }
+
+  /**
+   * Цели привязки: центры остальных объектов сцены. Стены появятся
+   * в фазе 2 — до тех пор SnapEngine падает на сетку.
+   */
+  function refreshSnapTargets(): void {
+    const v = viewer.value;
+    if (!v) return;
+
+    const targets: SnapTarget[] = [];
+    for (const instance of v.registry.all()) {
+      if (instance.instanceId === selectedId.value) continue;
+      targets.push({
+        kind: 'object',
+        position: new Vector2(instance.root.position.x * 1000, instance.root.position.z * 1000),
+        rotation: (instance.root.rotation.y * 180) / Math.PI,
+        sourceId: instance.instanceId,
+      });
+    }
+    snapEngine.value.setTargets(targets);
   }
 
   function handleGesture(e: GestureEvent): void {
     const v = viewer.value;
-    if (!v) return;
+    if (!v || !camera) return;
 
     switch (e.type) {
       case 'tap':
-        // TODO: raycast -> registry.resolve -> selectedId
+        select(v.pick(toNdc(e.point))?.instanceId ?? null);
+        break;
+
+      case 'dragStart':
+        if (e.onSelection) refreshSnapTargets();
         break;
 
       case 'dragMove':
         if (e.onSelection && selectedId.value) {
           moveSelected(e.point);
         } else {
-          orbitCamera(e.delta);
+          camera.orbit(e.delta.x, e.delta.y);
         }
         v.invalidate();
         break;
@@ -67,12 +145,12 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
         break;
 
       case 'pinch':
-        zoomCamera(e.scale);
+        camera.zoom(e.scale);
         v.invalidate();
         break;
 
       case 'twoFingerPan':
-        panCamera(e.delta);
+        camera.pan(e.delta.x, e.delta.y);
         v.invalidate();
         break;
     }
@@ -80,16 +158,18 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
 
   function moveSelected(screenPoint: Vector2): void {
     const v = viewer.value;
-    if (!v || !selectedId.value) return;
+    if (!v || !camera || !selectedId.value) return;
     const instance = v.registry.get(selectedId.value);
     if (!instance || instance.locked) return;
 
-    // TODO: проекция экранной точки на пол через raycast
-    const desired = new Vector2(screenPoint.x, screenPoint.y);
+    const floor = camera.projectToFloor(toNdc(screenPoint));
+    if (!floor) return; // луч ушёл выше горизонта — движения нет
 
-    const result = snapEngine.value.snap(desired, {
+    desiredMm.set(floor.x * 1000, floor.z * 1000);
+
+    const result = snapEngine.value.snap(desiredMm, {
       ...DEFAULT_SNAP,
-      mmPerPixel: currentMmPerPixel(),
+      mmPerPixel: camera.mmPerPixel,
     });
 
     if (result.snapped && !isSnapping.value) {
@@ -102,6 +182,7 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     if (result.rotation !== null) {
       instance.root.rotation.y = (result.rotation * Math.PI) / 180;
     }
+    v.selection.refresh(instance.root);
   }
 
   function commitSelectedPosition(): void {
@@ -121,18 +202,15 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     });
   }
 
-  function currentMmPerPixel(): number {
-    // TODO: вычислять из ортокамеры для 2D и из перспективы для 3D
-    return 10;
-  }
-
-  function orbitCamera(_delta: Vector2): void { /* TODO */ }
-  function panCamera(_delta: Vector2): void { /* TODO */ }
-  function zoomCamera(_scale: number): void { /* TODO */ }
-
   function detach(): void {
+    element?.removeEventListener('wheel', onWheel);
+    resizeObserver?.disconnect();
+    resizeObserver = null;
     gestures?.dispose();
     gestures = null;
+    camera = null;
+    element = null;
+    rect = null;
   }
 
   return { selectedId, isSnapping, attach, detach };

@@ -52,5 +52,11 @@ export function useViewer(
 async function reportTelemetry(snapshot: TelemetrySnapshot): Promise<void> {
   // sendBeacon не блокирует выгрузку страницы и не мешает кадру
   if (typeof navigator.sendBeacon !== 'function') return;
-  navigator.sendBeacon('/v1/telemetry', JSON.stringify(snapshot));
+
+  // Адрес API берётся из окружения: относительный путь уходил на
+  // dev-сервер Vite и на каждом снимке сыпал ERR_CONNECTION_REFUSED
+  // в консоль. Без настроенного адреса телеметрию не шлём.
+  const base = import.meta.env.VITE_API_BASE;
+  if (!base) return;
+  navigator.sendBeacon(`${base}/v1/telemetry`, JSON.stringify(snapshot));
 }

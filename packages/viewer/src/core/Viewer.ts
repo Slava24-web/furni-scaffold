@@ -2,11 +2,15 @@ import {
   ACESFilmicToneMapping,
   Clock,
   PerspectiveCamera,
+  Raycaster,
   Scene,
   SRGBColorSpace,
+  Vector2,
   WebGLRenderer,
 } from 'three';
 import { Environment } from './Environment';
+import { SelectionIndicator } from './SelectionIndicator';
+import type { RegisteredInstance } from './SceneRegistry';
 import { AssetLoader } from '../loading/AssetLoader';
 import { QualityManager } from '../perf/QualityManager';
 import { Telemetry } from '../perf/Telemetry';
@@ -35,10 +39,12 @@ export class Viewer {
   readonly registry: SceneRegistry;
   readonly environment: Environment;
   readonly assets: AssetLoader;
+  readonly selection: SelectionIndicator;
   readonly quality: QualityManager;
   readonly telemetry: Telemetry;
 
   private readonly clock = new Clock();
+  private readonly raycaster = new Raycaster();
   private rafId: number | null = null;
   private disposed = false;
   private firstFrameTime: number | null = null;
@@ -73,6 +79,7 @@ export class Viewer {
 
     this.registry = new SceneRegistry(this.scene);
     this.environment = new Environment(this.scene);
+    this.selection = new SelectionIndicator(this.scene);
     this.telemetry = new Telemetry();
     this.quality = new QualityManager(this.renderer, this.telemetry, options.forceTier);
     // Загрузчик держит кэш моделей и зависит от бюджета видеопамяти
@@ -85,6 +92,25 @@ export class Viewer {
     this.resizeObserver = new ResizeObserver(() => this.handleResize());
     this.resizeObserver.observe(canvas);
     this.handleResize();
+  }
+
+  /**
+   * Объект под экранной точкой в нормализованных координатах устройства.
+   *
+   * Луч проверяется по всем зарегистрированным объектам, попадание в любую
+   * вложенную деталь разрешается во владельца через реестр: пользователь
+   * целится в дверцу шкафа, а выделяется шкаф целиком.
+   */
+  pick(ndc: Vector2): RegisteredInstance | null {
+    const roots = [...this.registry.all()].map((instance) => instance.root);
+    if (roots.length === 0) return null;
+
+    this.raycaster.setFromCamera(ndc, this.camera);
+    for (const hit of this.raycaster.intersectObjects(roots, true)) {
+      const owner = this.registry.resolve(hit.object);
+      if (owner) return owner;
+    }
+    return null;
   }
 
   /**
@@ -164,6 +190,7 @@ export class Viewer {
     this.updateCallbacks.clear();
     this.registry.disposeAll();
     this.assets.dispose();
+    this.selection.dispose();
     this.environment.dispose();
     this.renderer.dispose();
     this.renderer.forceContextLoss();
