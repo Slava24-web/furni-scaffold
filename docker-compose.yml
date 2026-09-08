@@ -1,0 +1,34 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: furni
+      POSTGRES_PASSWORD: furni
+      POSTGRES_DB: furni
+    ports: ['5432:5432']
+    volumes: ['pgdata:/var/lib/postgresql/data']
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U furni']
+      interval: 5s
+
+  redis:
+    image: redis:7-alpine
+    ports: ['6379:6379']
+
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: furni
+      MINIO_ROOT_PASSWORD: furni12345
+    ports: ['9000:9000', '9001:9001']
+    volumes: ['miniodata:/data']
+
+  # Воркер пайплайна. Образ собирается отдельно: тянет Blender ~1 ГБ.
+  # blender-worker:
+  #   build: ./tools/pipeline
+  #   depends_on: [redis, minio]
+
+volumes:
+  pgdata:
+  miniodata:

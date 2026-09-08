@@ -1,0 +1,17 @@
+{
+  "name": "@furni/viewer",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@furni/shared": "workspace:*",
+    "meshoptimizer": "^0.22.0",
+    "three": "^0.169.0"
+  },
+  "devDependencies": { "@types/three": "^0.169.0" }
+}

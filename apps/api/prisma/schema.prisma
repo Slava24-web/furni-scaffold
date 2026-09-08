@@ -1,0 +1,248 @@
+// Схема БД. Правило проекта: КАЖДАЯ таблица имеет tenantId и RLS-политику.
+// Политики задаются в миграции 0001_init/migration.sql — Prisma их не генерирует.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Plan {
+  trial
+  starter
+  growth
+  enterprise
+}
+
+enum ProductType {
+  static
+  parametric
+}
+
+enum AssetKind {
+  mesh
+  texture
+  usdz
+  thumb
+  sprite360
+}
+
+enum AssetStatus {
+  pending
+  processing
+  ready
+  failed
+}
+
+enum LeadStatus {
+  new
+  contacted
+  quoted
+  won
+  lost
+}
+
+model Tenant {
+  id        String   @id @default(uuid()) @db.Uuid
+  slug      String   @unique
+  name      String
+  plan      Plan     @default(trial)
+  /// Брендирование виджета: логотип, палитра, радиусы, шрифт
+  branding  Json     @default("{}")
+  /// Квоты: модели, трафик CDN, серверные рендеры
+  limits    Json     @default("{}")
+  /// Домены, где разрешено встраивать виджет. Защита от воровства.
+  allowedOrigins String[] @default([])
+  createdAt DateTime @default(now())
+
+  users     User[]
+  products  Product[]
+  materials Material[]
+  scenes    Scene[]
+  leads     Lead[]
+  assets    Asset[]
+
+  @@map("tenants")
+}
+
+model User {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  email     String
+  role      String   @default("manager") // owner | admin | manager | content
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@map("users")
+}
+
+model Product {
+  id          String      @id @default(uuid()) @db.Uuid
+  tenantId    String      @map("tenant_id") @db.Uuid
+  sku         String
+  name        String
+  category    String?
+  type        ProductType @default(static)
+  /// Базовая цена в копейках. Деньги дробным числом не хранить.
+  basePriceCents Int      @map("base_price_cents")
+  currency    String      @default("RUB") @db.Char(3)
+  /// Габарит в мм для быстрой проверки коллизий без загрузки меша
+  widthMm     Int?
+  heightMm    Int?
+  depthMm     Int?
+  published   Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assets       Asset[]
+  optionGroups OptionGroup[]
+  rules        ProductRule?
+
+  @@unique([tenantId, sku])
+  @@index([tenantId, category])
+  @@index([tenantId, published])
+  @@map("products")
+}
+
+model Asset {
+  id         String      @id @default(uuid()) @db.Uuid
+  tenantId   String      @map("tenant_id") @db.Uuid
+  productId  String?     @map("product_id") @db.Uuid
+  kind       AssetKind
+  status     AssetStatus @default(pending)
+  /// Путь в объектном хранилище
+  uri        String
+  lodLevel   Int         @default(0) @map("lod_level")
+  bytes      Int         @default(0)
+  triCount   Int         @default(0) @map("tri_count")
+  /// SHA-256 исходника — идемпотентность пайплайна
+  checksum   String
+  /// Отчёт оптимизации: до/после, предупреждения бюджета
+  report     Json        @default("{}")
+  errorText  String?     @map("error_text")
+  createdAt  DateTime    @default(now())
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, checksum, kind, lodLevel])
+  @@index([tenantId, status])
+  @@index([productId])
+  @@map("assets")
+}
+
+model Material {
+  id            String  @id @default(uuid()) @db.Uuid
+  tenantId      String  @map("tenant_id") @db.Uuid
+  code          String
+  name          String
+  /// PBR-параметры и ссылки на текстуры KTX2
+  pbr           Json    @default("{}")
+  tilingMm      Int     @default(1000) @map("tiling_mm")
+  priceModifierCents Int @default(0) @map("price_modifier_cents")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+  @@map("materials")
+}
+
+model OptionGroup {
+  id        String  @id @default(uuid()) @db.Uuid
+  tenantId  String  @map("tenant_id") @db.Uuid
+  productId String  @map("product_id") @db.Uuid
+  code      String
+  label     String
+  uiType    String  @default("swatch") @map("ui_type") // swatch | select | slider | toggle
+  required  Boolean @default(true)
+  sortOrder Int     @default(0) @map("sort_order")
+
+  product Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  options Option[]
+
+  @@unique([productId, code])
+  @@index([tenantId])
+  @@map("option_groups")
+}
+
+model Option {
+  id            String  @id @default(uuid()) @db.Uuid
+  tenantId      String  @map("tenant_id") @db.Uuid
+  groupId       String  @map("group_id") @db.Uuid
+  code          String
+  label         String
+  priceDeltaCents Int   @default(0) @map("price_delta_cents")
+  skuSuffix     String? @map("sku_suffix")
+  /// Ссылка на материал или на деталь меша
+  assetRef      String? @map("asset_ref")
+  sortOrder     Int     @default(0) @map("sort_order")
+
+  group OptionGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, code])
+  @@index([tenantId])
+  @@map("options")
+}
+
+model ProductRule {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  productId String   @unique @map("product_id") @db.Uuid
+  /// Документ ProductRules из packages/shared/src/rules/dsl.ts
+  dsl       Json
+  version   Int      @default(1)
+  updatedAt DateTime @updatedAt
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("product_rules")
+}
+
+model Scene {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  /// Анонимная сессия покупателя. ПДн тут нет — они появляются только в Lead.
+  ownerSession String   @map("owner_session")
+  /// Короткий код для шаринга по ссылке
+  shareCode    String   @unique @map("share_code")
+  /// Документ SceneDoc. Геометрии внутри нет — только ссылки на SKU.
+  doc          Json
+  docVersion   Int      @default(1) @map("doc_version")
+  previewUri   String?  @map("preview_uri")
+  editable     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  leads  Lead[]
+
+  @@index([tenantId, ownerSession])
+  @@index([tenantId, updatedAt])
+  @@map("scenes")
+}
+
+model Lead {
+  id         String     @id @default(uuid()) @db.Uuid
+  tenantId   String     @map("tenant_id") @db.Uuid
+  sceneId    String?    @map("scene_id") @db.Uuid
+  /// ПДн покупателя. Единственное место в системе. 152-ФЗ.
+  contact    Json
+  totalCents Int        @map("total_cents")
+  status     LeadStatus @default(new)
+  createdAt  DateTime   @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  scene  Scene? @relation(fields: [sceneId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status, createdAt])
+  @@map("leads")
+}

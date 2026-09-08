@@ -1,0 +1,29 @@
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
+import { PrismaService } from './prisma/prisma.service';
+import { TenantMiddleware } from './common/tenant.middleware';
+import { ScenesController } from './modules/scenes/scenes.controller';
+import { ScenesService } from './modules/scenes/scenes.service';
+import { PricingService } from './modules/pricing/pricing.service';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
+    // Защита квот от абуза: создание сцен и расчёт цены дороги (ТЗ 12)
+    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 120 }]),
+  ],
+  controllers: [ScenesController],
+  providers: [
+    PrismaService,
+    ScenesService,
+    PricingService,
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+  ],
+})
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(TenantMiddleware).forRoutes('v1/*');
+  }
+}

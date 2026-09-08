@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+.turbo/
+*.log
+tests/perf/results/
+apps/api/prisma/generated/
+
+.DS_Store
+__pycache__/
