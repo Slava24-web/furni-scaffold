@@ -33,7 +33,16 @@ const showPerf = computed(
 );
 const mode = computed<PlannerMode>(() => props.mode ?? 'select');
 
-const { selectedId, isSnapping, attach, detach, select, screenToFloorMm, focusArea } = useSceneEditing(
+const {
+  selectedId,
+  isSnapping,
+  attach,
+  detach,
+  select,
+  screenToFloorMm,
+  snapDropPoint,
+  focusArea,
+} = useSceneEditing(
   viewer,
   {
     onCommit: (id, patch) => store.updatePlacement(id, patch),
@@ -51,7 +60,16 @@ onMounted(() => {
   if (containerRef.value) attach(containerRef.value);
 });
 
-defineExpose({ viewer, detach, select, selectedId, screenToFloorMm, focusArea, containerRef });
+defineExpose({
+  viewer,
+  detach,
+  select,
+  selectedId,
+  screenToFloorMm,
+  snapDropPoint,
+  focusArea,
+  containerRef,
+});
 </script>
 
 <template>

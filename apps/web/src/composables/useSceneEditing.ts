@@ -276,6 +276,32 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     return floor ? { x: floor.x * 1000, z: floor.z * 1000 } : null;
   }
 
+  /**
+   * Точка постановки для объекта, брошенного из каталога.
+   *
+   * Бросок проходит через ту же привязку, что и перетаскивание: иначе
+   * модуль встаёт у стены боком, и пользователю приходится доворачивать
+   * каждый шкаф вручную.
+   */
+  function snapDropPoint(
+    product: { depthMm: number; snapToWall: boolean },
+    clientX: number,
+    clientY: number,
+  ): { x: number; z: number; rotationY: number } | null {
+    const point = floorPointAt(new Vector2(clientX, clientY));
+    if (!point || !camera) return null;
+
+    refreshSnapTargets();
+    const result = snapEngine.value.snap(new Vector2(point.x, point.z), {
+      ...DEFAULT_SNAP,
+      mmPerPixel: camera.mmPerPixel,
+      objectHalfDepthMm: product.depthMm / 2,
+      enableWalls: product.snapToWall,
+    });
+
+    return { x: result.position.x, z: result.position.y, rotationY: result.rotation ?? 0 };
+  }
+
   /** Показать помещение целиком: вызывается после создания планировки. */
   function focusArea(centreMm: FloorPoint, radiusMm: number): void {
     if (!camera) return;
@@ -302,5 +328,14 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     rect = null;
   }
 
-  return { selectedId, isSnapping, attach, detach, select, screenToFloorMm, focusArea };
+  return {
+    selectedId,
+    isSnapping,
+    attach,
+    detach,
+    select,
+    screenToFloorMm,
+    snapDropPoint,
+    focusArea,
+  };
 }

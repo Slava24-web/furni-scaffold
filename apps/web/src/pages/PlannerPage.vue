@@ -57,9 +57,9 @@ function isInsideScene(clientX: number, clientY: number): boolean {
 
 /** Сброс товара из каталога: точка отпускания проецируется на пол. */
 function dropProduct(product: CatalogProduct, clientX: number, clientY: number): void {
-  const point = canvas.value?.screenToFloorMm(clientX, clientY);
+  const point = canvas.value?.snapDropPoint(product, clientX, clientY);
   if (!point) return;
-  const placement = scene.addPlacement(product, point);
+  const placement = scene.addPlacement(product, point, point.rotationY);
   canvas.value?.select(placement.instanceId);
 }
 

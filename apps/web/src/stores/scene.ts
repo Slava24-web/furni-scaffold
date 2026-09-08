@@ -59,7 +59,11 @@ export const useSceneStore = defineStore('scene', () => {
    * Высота берётся из товара, а не из точки броска: верхний шкаф обязан
    * висеть на своей отметке, даже если его бросили на пол.
    */
-  function addPlacement(product: CatalogProduct, positionMm: { x: number; z: number }): Placement {
+  function addPlacement(
+    product: CatalogProduct,
+    positionMm: { x: number; z: number },
+    rotationY = 0,
+  ): Placement {
     const placement = PlacementSchema.parse({
       instanceId: randomUUID(),
       productId: deterministicUuid(product.sku),
@@ -69,7 +73,7 @@ export const useSceneStore = defineStore('scene', () => {
         y: product.mountHeightMm,
         z: Math.round(positionMm.z),
       },
-      rotationY: 0,
+      rotationY: Math.round(rotationY),
     });
 
     commit({ ...doc.value, placements: [...doc.value.placements, placement] });
