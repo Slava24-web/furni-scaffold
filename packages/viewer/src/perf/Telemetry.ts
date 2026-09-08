@@ -46,7 +46,7 @@ export class Telemetry {
     let sum = 0;
     for (let i = 0; i < n; i++) {
       const idx = (this.cursor - 1 - i + WINDOW_SIZE) % WINDOW_SIZE;
-      sum += this.frameTimes[idx];
+      sum += this.frameTimes[idx] ?? 0;
     }
     return 1000 / (sum / n);
   }
@@ -55,7 +55,7 @@ export class Telemetry {
     const times = Array.from(this.frameTimes.slice(0, this.filled)).sort((a, b) => a - b);
     const cpu = Array.from(this.cpuTimes.slice(0, this.filled)).sort((a, b) => a - b);
     const pct = (arr: number[], p: number): number =>
-      arr.length === 0 ? 0 : arr[Math.min(arr.length - 1, Math.floor(arr.length * p))];
+      arr.length === 0 ? 0 : (arr[Math.min(arr.length - 1, Math.floor(arr.length * p))] ?? 0);
 
     // Медленный кадр = низкий fps, поэтому перцентили fps инвертированы
     const toFps = (ms: number): number => (ms > 0 ? 1000 / ms : 0);

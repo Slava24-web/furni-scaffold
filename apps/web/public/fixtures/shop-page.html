@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Мебельный магазин — карточка товара</title>
+    <style>
+      body { margin: 0; font: 16px/1.5 system-ui, sans-serif; color: #1c1e21; }
+      .wrap { max-width: 960px; margin: 0 auto; padding: 24px 16px 64px; }
+      .hero { aspect-ratio: 3 / 2; border-radius: 12px; background: linear-gradient(135deg, #d9cfc1, #a8b2bd); }
+      h1 { font-size: 28px; margin: 24px 0 8px; }
+      .price { font-size: 22px; font-weight: 600; }
+      .mount { margin-top: 24px; min-height: 56px; }
+      .cta { padding: 14px 20px; border: 0; border-radius: 10px; background: #1c1e21; color: #fff; font-size: 16px; }
+    </style>
+  </head>
+  <body>
+    <!--
+      Фикстура страницы магазина для перф-гейта (ТЗ 7.3).
+      Проверяет, что подключение виджета не ухудшает LCP страницы:
+      до клика пользователя движок грузиться не должен.
+      Без ?widget=1 страница рендерится вообще без виджета — это база сравнения.
+    -->
+    <div class="wrap">
+      <div class="hero"></div>
+      <h1>Шкаф-купе «Орион», 1800 мм</h1>
+      <p class="price">54 900 ₽</p>
+      <p>
+        Корпус из ЛДСП 16 мм, направляющие с доводчиком, три секции.
+        Собирается под размеры вашей ниши.
+      </p>
+      <div class="mount" id="furni-mount"></div>
+    </div>
+
+    <script type="module">
+      const params = new URLSearchParams(location.search);
+      if (params.get('widget') === '1') {
+        // Шелл виджета: только кнопка. Движок подгружается по клику —
+        // до этого момента ни одного байта three.js на странице.
+        const button = document.createElement('button');
+        button.className = 'cta';
+        button.textContent = 'Открыть в 3D';
+        button.addEventListener('click', () => {
+          window.location.href = '/planner';
+        });
+        document.getElementById('furni-mount').append(button);
+      }
+    </script>
+  </body>
+</html>

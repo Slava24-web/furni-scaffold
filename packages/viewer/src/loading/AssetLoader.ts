@@ -69,6 +69,10 @@ export class AssetLoader {
 
     entry.refCount++;
     const original = await entry.promise;
+    // Клон переиспользует геометрию и материалы оригинала. Помечаем их
+    // общими, чтобы SceneRegistry не освободил их при удалении одного
+    // инстанса — владелец этих ресурсов кэш загрузчика.
+    markShared(original);
     return original.clone(true);
   }
 
@@ -122,4 +126,22 @@ export class AssetLoader {
     this.textureCache.clear();
     this.cache.clear();
   }
+}
+
+type SharedResource = { userData: Record<string, unknown> };
+
+function markShared(root: Group): void {
+  root.traverse((obj) => {
+    const mesh = obj as unknown as {
+      geometry?: SharedResource;
+      material?: SharedResource | SharedResource[];
+    };
+    if (mesh.geometry) mesh.geometry.userData.shared = true;
+    const materials = Array.isArray(mesh.material)
+      ? mesh.material
+      : mesh.material
+        ? [mesh.material]
+        : [];
+    for (const m of materials) m.userData.shared = true;
+  });
 }

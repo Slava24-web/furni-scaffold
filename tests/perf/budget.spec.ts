@@ -18,7 +18,9 @@ test.describe('Бюджет производительности сцены', ()
     await client.send('Emulation.setCPUThrottlingRate', { rate: 4 });
     await client.send('Network.emulateNetworkConditions', {
       offline: false,
-      latencyMs: 70,
+      // В CDP параметр называется latency, а не latencyMs:
+      // при неверном имени протокол отвечает Invalid parameters
+      latency: 70,
       downloadThroughput: (8 * 1024 * 1024) / 8,
       uploadThroughput: (2 * 1024 * 1024) / 8,
     });
@@ -60,6 +62,9 @@ test.describe('Бюджет производительности сцены', ()
 });
 
 async function seedScene(page: Page, count: number): Promise<void> {
+  // goto резолвится по load, а маршрут планировщика — ленивый чанк:
+  // мост __furni появляется уже после монтирования компонента
+  await page.waitForFunction(() => window.__furni?.viewer != null, undefined, { timeout: 10_000 });
   await page.evaluate((n) => window.__furni.testing.seedScene(n), count);
   await page.waitForFunction(
     (n) => window.__furni.viewer.registry && [...window.__furni.viewer.registry.all()].length === n,
@@ -100,7 +105,7 @@ declare global {
     __furni: {
       viewer: import('@furni/viewer').Viewer;
       firstFrameAt: number | null;
-      testing: { seedScene(count: number): void };
+      testing: { seedScene(count: number): Promise<void> };
     };
   }
 }

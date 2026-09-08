@@ -66,18 +66,33 @@ export class SceneRegistry {
   }
 }
 
-/** Освобождение геометрий и материалов. Текстуры — через общий кэш загрузчика. */
+type Disposable = { dispose(): void; userData?: Record<string, unknown> };
+
+/**
+ * Освобождение геометрий и материалов инстанса.
+ *
+ * Ресурсы, помеченные `userData.shared`, не трогаем: AssetLoader отдаёт
+ * clone(true), в котором геометрия и материалы общие с кэшированным
+ * оригиналом и остальными клонами. Освободить их при удалении одного
+ * инстанса — значит обнулить модель у всех остальных. Их жизненным циклом
+ * управляет загрузчик через refCount и evictIfNeeded.
+ */
 function disposeTree(root: Object3D): void {
   root.traverse((obj) => {
     const mesh = obj as Object3D & {
-      geometry?: { dispose(): void };
-      material?: { dispose(): void } | { dispose(): void }[];
+      geometry?: Disposable;
+      material?: Disposable | Disposable[];
     };
-    mesh.geometry?.dispose();
+    disposeIfOwned(mesh.geometry);
     if (Array.isArray(mesh.material)) {
-      for (const m of mesh.material) m.dispose();
+      for (const m of mesh.material) disposeIfOwned(m);
     } else {
-      mesh.material?.dispose();
+      disposeIfOwned(mesh.material);
     }
   });
+}
+
+function disposeIfOwned(resource: Disposable | undefined): void {
+  if (!resource || resource.userData?.shared === true) return;
+  resource.dispose();
 }

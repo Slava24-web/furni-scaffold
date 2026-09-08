@@ -1,14 +1,29 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useViewer } from '../composables/useViewer';
 import { useSceneEditing } from '../composables/useSceneEditing';
 import { useSceneStore } from '../stores/scene';
+import type { DeviceTier } from '@furni/shared';
+
+// `| undefined` обязателен при exactOptionalPropertyTypes: родитель
+// передаёт вычисляемое значение, которого может не быть
+const props = defineProps<{ forceTier?: DeviceTier | undefined }>();
 
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 const containerRef = ref<HTMLElement | null>(null);
 const store = useSceneStore();
 
-const { viewer, telemetry, mount } = useViewer(canvasRef);
+const { viewer, telemetry, mount } = useViewer(
+  canvasRef,
+  props.forceTier ? { forceTier: props.forceTier } : {},
+);
+
+// Оверлей отладки: переменная окружения или ?perf=1 в адресе
+const showPerf = computed(
+  () =>
+    import.meta.env.VITE_SHOW_PERF === '1' ||
+    new URLSearchParams(window.location.search).get('perf') === '1',
+);
 const { selectedId, isSnapping, attach, detach } = useSceneEditing(viewer, {
   onCommit: (id, patch) => store.updatePlacement(id, patch),
 });
@@ -24,8 +39,8 @@ defineExpose({ viewer, detach });
 <template>
   <div ref="containerRef" class="scene-canvas" :class="{ 'is-snapping': isSnapping }">
     <canvas ref="canvasRef" />
-    <!-- Оверлей отладки. Виден только при VITE_SHOW_PERF=1 -->
-    <div v-if="telemetry && $env.showPerf" class="perf-overlay">
+    <!-- Оверлей отладки. Виден при VITE_SHOW_PERF=1 или ?perf=1 -->
+    <div v-if="telemetry && showPerf" class="perf-overlay">
       {{ telemetry.fpsP50 }} fps · {{ telemetry.drawCalls }} dc ·
       {{ Math.round(telemetry.triangles / 1000) }}k tri
     </div>

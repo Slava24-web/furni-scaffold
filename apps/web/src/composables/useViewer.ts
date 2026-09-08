@@ -1,5 +1,6 @@
 import { markRaw, onBeforeUnmount, shallowRef, type Ref, type ShallowRef } from 'vue';
-import { Viewer, type TelemetrySnapshot } from '@furni/viewer';
+import { Viewer, type TelemetrySnapshot, type ViewerOptions } from '@furni/viewer';
+import type { DeviceTier } from '@furni/shared';
 
 /**
  * Монтирование 3D-ядра в компонент Vue.
@@ -9,7 +10,10 @@ import { Viewer, type TelemetrySnapshot } from '@furni/viewer';
  * .position.x в цикле рендера пойдёт через перехватчик — падение
  * производительности на порядок (CLAUDE.md, правило 1).
  */
-export function useViewer(canvasRef: Ref<HTMLCanvasElement | null>): {
+export function useViewer(
+  canvasRef: Ref<HTMLCanvasElement | null>,
+  options: { forceTier?: DeviceTier } = {},
+): {
   viewer: ShallowRef<Viewer | null>;
   telemetry: ShallowRef<TelemetrySnapshot | null>;
   mount: () => void;
@@ -21,16 +25,19 @@ export function useViewer(canvasRef: Ref<HTMLCanvasElement | null>): {
     const canvas = canvasRef.value;
     if (!canvas || viewer.value) return;
 
-    viewer.value = markRaw(
-      new Viewer({
-        canvas,
-        onTelemetry: (snapshot) => {
-          // Раз в 5 секунд — не на кадр. Обновление UI отсюда безопасно.
-          telemetry.value = snapshot;
-          void reportTelemetry(snapshot);
-        },
-      }),
-    );
+    const viewerOptions: ViewerOptions = {
+      canvas,
+      onTelemetry: (snapshot) => {
+        // Раз в 5 секунд — не на кадр. Обновление UI отсюда безопасно.
+        telemetry.value = snapshot;
+        void reportTelemetry(snapshot);
+      },
+    };
+    // Присваиваем только при наличии: exactOptionalPropertyTypes
+    // не разрешает передать forceTier: undefined
+    if (options.forceTier) viewerOptions.forceTier = options.forceTier;
+
+    viewer.value = markRaw(new Viewer(viewerOptions));
     viewer.value.start();
   }
 

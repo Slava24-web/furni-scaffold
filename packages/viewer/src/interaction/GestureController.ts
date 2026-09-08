@@ -62,6 +62,13 @@ export class GestureController {
     element.style.touchAction = 'none';
   }
 
+  /** Две активные точки касания. Вызывается только при pointers.size === 2. */
+  private twoPointers(): [Vector2, Vector2] {
+    const [a, b] = [...this.pointers.values()];
+    if (!a || !b) throw new Error('Ожидались два указателя');
+    return [a, b];
+  }
+
   private onPointerDown = (e: PointerEvent): void => {
     e.preventDefault();
     this.element.setPointerCapture(e.pointerId);
@@ -92,7 +99,7 @@ export class GestureController {
         });
         this.dragging = false;
       }
-      const [a, b] = [...this.pointers.values()];
+      const [a, b] = this.twoPointers();
       this.pinchStartDistance = a.distanceTo(b);
       this.pinchStartAngle = Math.atan2(b.y - a.y, b.x - a.x);
       this.twoFingerCenter.copy(a).add(b).multiplyScalar(0.5);
@@ -131,7 +138,7 @@ export class GestureController {
     }
 
     if (this.pointers.size === 2) {
-      const [a, b] = [...this.pointers.values()];
+      const [a, b] = this.twoPointers();
       const distance = a.distanceTo(b);
       const angle = Math.atan2(b.y - a.y, b.x - a.x);
       const center = a.clone().add(b).multiplyScalar(0.5);

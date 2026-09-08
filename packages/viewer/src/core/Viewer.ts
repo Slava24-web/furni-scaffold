@@ -6,6 +6,7 @@ import {
   SRGBColorSpace,
   WebGLRenderer,
 } from 'three';
+import { Environment } from './Environment';
 import { QualityManager } from '../perf/QualityManager';
 import { Telemetry } from '../perf/Telemetry';
 import { SceneRegistry } from './SceneRegistry';
@@ -29,12 +30,14 @@ export class Viewer {
   readonly scene: Scene;
   readonly camera: PerspectiveCamera;
   readonly registry: SceneRegistry;
+  readonly environment: Environment;
   readonly quality: QualityManager;
   readonly telemetry: Telemetry;
 
   private readonly clock = new Clock();
   private rafId: number | null = null;
   private disposed = false;
+  private firstFrameTime: number | null = null;
   private needsRender = true;
   private readonly updateCallbacks = new Set<(dt: number) => void>();
   private readonly resizeObserver: ResizeObserver;
@@ -59,14 +62,25 @@ export class Viewer {
     this.scene = new Scene();
     this.camera = new PerspectiveCamera(50, 1, 0.05, 200);
     this.camera.position.set(4, 3, 4);
+    // Смотрим в центр комнаты на высоте пояса, иначе сцена уезжает за кадр
+    this.camera.lookAt(0, 0.8, 0);
 
     this.registry = new SceneRegistry(this.scene);
+    this.environment = new Environment(this.scene);
     this.telemetry = new Telemetry();
     this.quality = new QualityManager(this.renderer, this.telemetry, options.forceTier);
 
     this.resizeObserver = new ResizeObserver(() => this.handleResize());
     this.resizeObserver.observe(canvas);
     this.handleResize();
+  }
+
+  /**
+   * Время первого отрисованного кадра (performance.now), null до него.
+   * Используется перф-гейтом для замера TTFF (LOAD_BUDGETS.timeToFirstFrameMs).
+   */
+  get firstFrameAt(): number | null {
+    return this.firstFrameTime;
   }
 
   /** Помечает кадр как требующий перерисовки. Рендер по требованию экономит батарею. */
@@ -106,6 +120,7 @@ export class Viewer {
     if (this.needsRender) {
       this.renderer.render(this.scene, this.camera);
       this.needsRender = false;
+      this.firstFrameTime ??= performance.now();
     }
 
     const cpuMs = performance.now() - frameStart;
@@ -133,6 +148,7 @@ export class Viewer {
     this.resizeObserver.disconnect();
     this.updateCallbacks.clear();
     this.registry.disposeAll();
+    this.environment.dispose();
     this.renderer.dispose();
     this.renderer.forceContextLoss();
   }

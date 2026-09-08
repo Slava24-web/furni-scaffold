@@ -1,5 +1,6 @@
 export { Viewer, type ViewerOptions } from './core/Viewer';
 export { SceneRegistry, type RegisteredInstance } from './core/SceneRegistry';
+export { Environment, type EnvironmentPreset } from './core/Environment';
 export { QualityManager, type QualitySettings, type QualityLevel } from './perf/QualityManager';
 export { Telemetry, type TelemetrySnapshot } from './perf/Telemetry';
 export { detectTier } from './perf/detectTier';

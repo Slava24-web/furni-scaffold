@@ -1,1 +1,17 @@
-{ "extends": "../../tsconfig.base.json", "include": ["src"] }
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // NestJS собирается через tsc в CommonJS и опирается на метаданные декораторов
+    "module": "commonjs",
+    "moduleResolution": "node10",
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "types": ["node"],
+    "outDir": "dist",
+    "lib": ["ES2022"],
+    // Nest внедряет зависимости по метаданным конструктора: без этого
+    // рефлексия отдаёт Object вместо класса провайдера
+    "strictPropertyInitialization": false
+  },
+  "include": ["src"]
+}

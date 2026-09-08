@@ -35,18 +35,29 @@ function resolve(ref: Ref, ctx: EvalContext): Primitive {
     }
     case 'calc': {
       const args = ref.args.map((a) => Number(resolve(a, ctx)));
+      // Схема гарантирует 1..4 аргумента, но арность зависит от операции:
+      // div требует два, floor/ceil — один. Проверяем явно, иначе правило
+      // с неверной арностью молча вернёт NaN и уедет в цену.
+      const at = (i: number): number => {
+        const v = args[i];
+        if (v === undefined) {
+          throw new Error(`Операция ${ref.op} требует аргумент №${i + 1}`);
+        }
+        return v;
+      };
       switch (ref.op) {
         case 'add': return args.reduce((a, b) => a + b, 0);
-        case 'sub': return args.reduce((a, b) => a - b);
+        case 'sub': return args.slice(1).reduce((a, b) => a - b, at(0));
         case 'mul': return args.reduce((a, b) => a * b, 1);
         case 'div': {
-          if (args[1] === 0) throw new Error('Деление на ноль в правиле');
-          return args[0] / args[1];
+          const divisor = at(1);
+          if (divisor === 0) throw new Error('Деление на ноль в правиле');
+          return at(0) / divisor;
         }
-        case 'floor': return Math.floor(args[0]);
-        case 'ceil': return Math.ceil(args[0]);
-        case 'min': return Math.min(...args);
-        case 'max': return Math.max(...args);
+        case 'floor': return Math.floor(at(0));
+        case 'ceil': return Math.ceil(at(0));
+        case 'min': return Math.min(at(0), ...args.slice(1));
+        case 'max': return Math.max(at(0), ...args.slice(1));
       }
     }
   }
