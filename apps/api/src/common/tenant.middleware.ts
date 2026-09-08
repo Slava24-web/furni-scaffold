@@ -2,6 +2,11 @@ import { Injectable, NestMiddleware, UnauthorizedException } from '@nestjs/commo
 import type { NextFunction, Request, Response } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 
+interface TenantLookup {
+  id: string;
+  allowed_origins: string[];
+}
+
 declare module 'express' {
   interface Request {
     tenantId?: string;
@@ -20,16 +25,19 @@ export class TenantMiddleware implements NestMiddleware {
     const slug = req.header('x-tenant-slug');
     if (!slug) throw new UnauthorizedException('Не указан тенант');
 
-    const tenant = await this.prisma.tenant.findUnique({
-      where: { slug },
-      select: { id: true, allowedOrigins: true },
-    });
+    // Через resolve_tenant, а не через обычный SELECT: политика RLS на
+    // tenants пускает только к своей строке, а tenant_id на этом шаге ещё
+    // не известен. Функция объявлена SECURITY DEFINER и отдаёт ровно два
+    // поля по одному slug — см. migrations/0001_init/rls.sql.
+    const [tenant] = await this.prisma.$queryRaw<TenantLookup[]>`
+      SELECT id, allowed_origins FROM resolve_tenant(${slug})
+    `;
     if (!tenant) throw new UnauthorizedException('Тенант не найден');
 
     // Защита виджета от встраивания на чужих доменах (ТЗ 11.2)
     const origin = req.header('origin');
-    if (origin && tenant.allowedOrigins.length > 0) {
-      const allowed = tenant.allowedOrigins.some((o) => originMatches(origin, o));
+    if (origin && tenant.allowed_origins.length > 0) {
+      const allowed = tenant.allowed_origins.some((o) => originMatches(origin, o));
       if (!allowed) throw new UnauthorizedException('Домен не разрешён для этого тенанта');
       res.setHeader('Access-Control-Allow-Origin', origin);
       res.setHeader('Vary', 'Origin');

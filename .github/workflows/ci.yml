@@ -24,17 +24,28 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
+      - name: Prisma Client
+        # Клиент не генерируется на postinstall: схема лежит не в дефолтном
+        # месте. Без него не проходит проверка типов в apps/api
+        run: pnpm --filter api prisma generate
+        env:
+          DATABASE_URL: postgresql://furni_app:furni_app@localhost:5432/furni_test
+          DATABASE_ADMIN_URL: postgresql://postgres:postgres@localhost:5432/furni_test
       - run: pnpm lint
       - run: pnpm typecheck
-      - name: Миграции и RLS
+      - name: Миграции, роль приложения и RLS
         run: |
           pnpm --filter api prisma migrate deploy
-          psql "$DATABASE_URL" -f apps/api/prisma/migrations/0001_init/rls.sql
+          pnpm db:rls
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/furni_test
+          DATABASE_URL: postgresql://furni_app:furni_app@localhost:5432/furni_test
+          DATABASE_ADMIN_URL: postgresql://postgres:postgres@localhost:5432/furni_test
       - run: pnpm test
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/furni_test
+          # Тесты ходят в БД под ролью приложения: под суперпользователем
+          # политики RLS не применяются и тест изоляции ничего не проверяет
+          DATABASE_URL: postgresql://furni_app:furni_app@localhost:5432/furni_test
+          DATABASE_ADMIN_URL: postgresql://postgres:postgres@localhost:5432/furni_test
 
   perf-gate:
     runs-on: ubuntu-latest

@@ -7,7 +7,11 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  // Рантайм приложения: роль furni_app, на неё действуют политики RLS
+  url       = env("DATABASE_URL")
+  // Миграции и интроспекция: владелец схемы. Разделение обязательно —
+  // под ролью приложения нет прав на DDL, а под владельцем не работает RLS
+  directUrl = env("DATABASE_ADMIN_URL")
 }
 
 enum Plan {

@@ -15,8 +15,9 @@
     "test:perf": "playwright test -c tests/perf",
     "size-limit": "size-limit",
     "db:up": "docker compose up -d postgres redis minio",
-    "db:migrate": "pnpm --filter api prisma migrate dev && pnpm db:rls",
-    "db:rls": "psql $DATABASE_URL -f apps/api/prisma/migrations/0001_init/rls.sql"
+    "db:migrate": "pnpm --filter api prisma migrate deploy && pnpm db:rls",
+    "db:seed": "DATABASE_URL=\"$DATABASE_ADMIN_URL\" node apps/api/prisma/seed.mjs",
+    "db:rls": "psql \"$DATABASE_ADMIN_URL\" -v ON_ERROR_STOP=1 -f apps/api/prisma/dev-app-role.sql -f apps/api/prisma/migrations/0001_init/rls.sql"
   },
   "devDependencies": {
     "@playwright/test": "^1.48.0",

@@ -4,7 +4,12 @@
     "build": { "dependsOn": ["^build"], "outputs": ["dist/**"] },
     "typecheck": { "dependsOn": ["^build"] },
     "lint": {},
-    "test": { "dependsOn": ["^build"] },
+    "test": {
+      "dependsOn": ["^build"],
+      // Turbo 2 в строгом режиме не пробрасывает необъявленные переменные:
+      // без этого интеграционный тест изоляции тенантов тихо пропускается
+      "env": ["DATABASE_URL", "DATABASE_ADMIN_URL"]
+    },
     "dev": { "cache": false, "persistent": true }
   }
 }

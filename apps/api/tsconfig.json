@@ -8,10 +8,18 @@
     "emitDecoratorMetadata": true,
     "types": ["node"],
     "outDir": "dist",
+    "rootDir": "src",
+    // paths из базового конфига перекрыты намеренно: с ними tsc затягивал
+    // исходники packages/shared в компиляцию, общий корень уезжал в корень
+    // репозитория и main.js оказывался в dist/apps/api/src. Пакет
+    // резолвится через node_modules и свой собранный dist.
+    "paths": {},
     "lib": ["ES2022"],
     // Nest внедряет зависимости по метаданным конструктора: без этого
     // рефлексия отдаёт Object вместо класса провайдера
     "strictPropertyInitialization": false
   },
-  "include": ["src"]
+  "include": ["src"],
+  // Тесты не должны попадать в dist: nest build собирает прод-артефакт
+  "exclude": ["src/**/*.test.ts"]
 }

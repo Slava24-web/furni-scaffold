@@ -22,6 +22,7 @@ BEGIN
     -- FORCE нужен, иначе владелец таблицы обходит политику
     EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
 
+    EXECUTE format('DROP POLICY IF EXISTS tenant_isolation ON %I', t);
     EXECUTE format($f$
       CREATE POLICY tenant_isolation ON %I
       USING (tenant_id = current_tenant_id())
@@ -33,6 +34,7 @@ END $$;
 -- Таблица tenants читается только сервисной ролью (провижининг, биллинг).
 ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tenants FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_self ON tenants;
 CREATE POLICY tenant_self ON tenants
   USING (id = current_tenant_id());
 
@@ -49,3 +51,41 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO furni_app
 GRANT USAGE ON SCHEMA public TO furni_app;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
   GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO furni_app;
+
+-- ---------------------------------------------------------------------------
+-- Разрешение тенанта по slug
+-- ---------------------------------------------------------------------------
+-- Задача курицы и яйца: чтобы выставить app.tenant_id, его сначала надо
+-- узнать, а политика tenant_self читать tenants до этого не даёт. Обычный
+-- SELECT по slug из приложения всегда возвращал бы пусто, и ни один запрос
+-- не проходил бы дальше middleware.
+--
+-- Дыру делаем узкой и явной: SECURITY DEFINER функция от роли с BYPASSRLS,
+-- отдаёт ровно два поля по одному slug и ничего больше. Перечислить
+-- тенантов через неё нельзя, читать их данные — тоже.
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'furni_bootstrap') THEN
+    CREATE ROLE furni_bootstrap NOLOGIN BYPASSRLS;
+  END IF;
+END $$;
+
+CREATE OR REPLACE FUNCTION resolve_tenant(p_slug text)
+RETURNS TABLE (id uuid, allowed_origins text[])
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+STABLE
+AS $$
+  SELECT t.id, COALESCE(t."allowedOrigins", ARRAY[]::text[])
+  FROM tenants t
+  WHERE t.slug = p_slug
+$$;
+
+ALTER FUNCTION resolve_tenant(text) OWNER TO furni_bootstrap;
+-- BYPASSRLS снимает политику, но не заменяет GRANT: без прав на таблицу
+-- функция падает с permission denied ещё до проверки политик
+GRANT SELECT ON tenants TO furni_bootstrap;
+REVOKE ALL ON FUNCTION resolve_tenant(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION resolve_tenant(text) TO furni_app;
