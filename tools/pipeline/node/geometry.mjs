@@ -43,12 +43,19 @@ export function translate(geometry, xMm, yMm, zMm) {
   return geometry;
 }
 
+/**
+ * Грани параллелепипеда: [нормаль, ось U, ось V].
+ *
+ * Для каждой грани обязано выполняться U x V = нормаль. Вместе с порядком
+ * индексов ниже это даёт обход вершин против часовой стрелки при взгляде
+ * снаружи — только такие треугольники Three.js считает лицевыми. Грань
+ * с обратным обходом отсекается, и сквозь мебель видно фон.
+ */
 const FACES = [
-  // [нормаль, ось U, ось V]
   [[1, 0, 0], [0, 0, -1], [0, 1, 0]],
   [[-1, 0, 0], [0, 0, 1], [0, 1, 0]],
-  [[0, 1, 0], [1, 0, 0], [0, 0, 1]],
-  [[0, -1, 0], [1, 0, 0], [0, 0, -1]],
+  [[0, 1, 0], [1, 0, 0], [0, 0, -1]],
+  [[0, -1, 0], [1, 0, 0], [0, 0, 1]],
   [[0, 0, 1], [1, 0, 0], [0, 1, 0]],
   [[0, 0, -1], [-1, 0, 0], [0, 1, 0]],
 ];
@@ -88,7 +95,8 @@ export function segmentedBox(widthMm, heightMm, depthMm, segments = 1) {
         const b = a + 1;
         const c = a + stride;
         const d = c + 1;
-        geometry.indices.push(a, c, b, b, c, d);
+        // Обход a->b->c даёт нормаль U x V, то есть наружу грани
+        geometry.indices.push(a, b, c, b, d, c);
       }
     }
   }
@@ -126,9 +134,14 @@ export function roundedBox(widthMm, heightMm, depthMm, radiusMm, segments = 6) {
     ];
 
     const delta = [point[0] - anchor[0], point[1] - anchor[1], point[2] - anchor[2]];
-    const length = Math.hypot(...delta) || 1;
-    const normal = delta.map((d) => d / length);
+    const length = Math.hypot(...delta);
 
+    // Нулевой радиус: вершина совпадает с опорной точкой, направление
+    // выноса не определено. Нормаль грани, посчитанную боксом, в этом
+    // случае оставляем — обнулить её значит погасить освещение детали
+    if (length < 1e-9) continue;
+
+    const normal = delta.map((d) => d / length);
     for (let axis = 0; axis < 3; axis++) {
       geometry.positions[i + axis] = anchor[axis] + normal[axis] * radius;
       geometry.normals[i + axis] = normal[axis];
