@@ -61,6 +61,8 @@ export function useSceneSync(viewer: ShallowRef<Viewer | null>): {
       const existing = v.registry.get(placement.instanceId);
       if (existing) {
         applyTransform(existing.root, placement);
+        // Закрепление живёт в документе, а проверяют его жесты по реестру
+        existing.locked = placement.locked;
         continue;
       }
 
@@ -75,7 +77,7 @@ export function useSceneSync(viewer: ShallowRef<Viewer | null>): {
       if (token !== generation || v.registry.get(placement.instanceId)) continue;
 
       applyTransform(group, placement);
-      v.registry.add(placement.instanceId, placement.sku, group);
+      v.registry.add(placement.instanceId, placement.sku, group).locked = placement.locked;
     }
 
     if (token === generation) v.invalidate();

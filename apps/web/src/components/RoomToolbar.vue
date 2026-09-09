@@ -7,7 +7,6 @@ const props = defineProps<{
   drawingActive: boolean;
   canUndo: boolean;
   canRedo: boolean;
-  selected: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -15,7 +14,6 @@ const emit = defineEmits<{
   setMode: [PlannerMode];
   finishDrawing: [];
   clearRooms: [];
-  deleteSelected: [];
   undo: [];
   redo: [];
 }>();
@@ -76,9 +74,6 @@ function toggleMode(mode: PlannerMode): void {
     </div>
 
     <div class="toolbar__group toolbar__group--end">
-      <button type="button" :disabled="!props.selected" @click="emit('deleteSelected')">
-        Удалить объект
-      </button>
       <button type="button" :disabled="!props.canUndo" @click="emit('undo')">Отменить</button>
       <button type="button" :disabled="!props.canRedo" @click="emit('redo')">Повторить</button>
     </div>

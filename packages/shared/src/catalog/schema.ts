@@ -40,6 +40,8 @@ export const CatalogProductSchema = z.object({
   materials: z.array(z.string()).default([]),
   /** Шаблон с плейсхолдером {lod} */
   urlTemplate: z.string().min(1),
+  /** Превью для панели каталога. Пусто — карточка рисуется без картинки */
+  thumbnailUrl: z.string().min(1).optional(),
   lods: z.array(CatalogLodSchema).min(1),
 });
 

@@ -9,20 +9,24 @@ import {
   type CatalogProduct,
   type DeviceTier,
   type Opening,
+  type Placement,
   type Wall,
 } from '@furni/shared';
 import SceneCanvas from '../components/SceneCanvas.vue';
 import CatalogPanel from '../components/CatalogPanel.vue';
 import RoomToolbar from '../components/RoomToolbar.vue';
+import ObjectInspector from '../components/ObjectInspector.vue';
 import { conflictMessage } from '../lib/conflictMessage';
 import { useCatalogDrag } from '../composables/useCatalogDrag';
 import { useWallDrawing } from '../composables/useWallDrawing';
 import { installTestingApi, uninstallTestingApi } from '../dev/testingApi';
+import { useCatalogStore } from '../stores/catalog';
 import { useSceneStore } from '../stores/scene';
 import type { FloorPoint, PlannerMode } from '../composables/useSceneEditing';
 
 const route = useRoute();
 const scene = useSceneStore();
+const catalog = useCatalogStore();
 const canvas = ref<InstanceType<typeof SceneCanvas> | null>(null);
 const mode = ref<PlannerMode>('select');
 
@@ -135,6 +139,17 @@ function insertOpening(point: FloorPoint, kind: 'door' | 'window'): void {
   mode.value = 'select';
 }
 
+/** Размещение выделенного объекта: по нему рисуется панель свойств. */
+const selected = computed(() => {
+  const id = canvas.value?.selectedId;
+  return id ? scene.doc.placements.find((p) => p.instanceId === id) : undefined;
+});
+
+function updateSelected(patch: Partial<Placement>): void {
+  const id = canvas.value?.selectedId;
+  if (id) scene.updatePlacement(id, patch);
+}
+
 function deleteSelected(): void {
   const id = canvas.value?.selectedId;
   if (!id) return;
@@ -191,12 +206,10 @@ onBeforeUnmount(() => uninstallTestingApi());
       :drawing-active="drawing.active.value"
       :can-undo="scene.undoStack.length > 0"
       :can-redo="scene.redoStack.length > 0"
-      :selected="Boolean(canvas?.selectedId)"
       @create-room="createRoom"
       @set-mode="setMode"
       @finish-drawing="finishDrawing"
       @clear-rooms="scene.clearRooms()"
-      @delete-selected="deleteSelected"
       @undo="scene.undo()"
       @redo="scene.redo()"
     />
@@ -212,6 +225,15 @@ onBeforeUnmount(() => uninstallTestingApi());
           @floor-tap="onFloorTap"
           @floor-double-tap="finishDrawing"
         />
+        <ObjectInspector
+          v-if="selected"
+          :placement="selected"
+          :product="catalog.bySku.get(selected.sku)"
+          :conflicts="canvas?.conflicts"
+          @update="updateSelected"
+          @remove="deleteSelected"
+        />
+
         <p v-if="conflict" class="planner__hint planner__hint--conflict">{{ conflict }}</p>
         <p v-else-if="previewReadout" class="planner__hint planner__hint--readout">
           {{ previewReadout }}

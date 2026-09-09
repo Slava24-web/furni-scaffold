@@ -12,10 +12,12 @@ import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import sharp from 'sharp';
 import { ASSET_BUDGETS } from '@furni/shared';
 import { MATERIALS, PRODUCTS, TEST_TENANT, buildProductGeometry } from './catalog.mjs';
 import { boundsMm, triangleCount } from './geometry.mjs';
 import { buildDocument, writeGlb } from './gltf.mjs';
+import { renderThumbnail } from './thumbnail.mjs';
 import { TEXTURE_BUILDERS } from './textures.mjs';
 import { optimizeAsset } from './optimize.mjs';
 
@@ -37,6 +39,12 @@ async function main() {
   for (const [key, build] of Object.entries(TEXTURE_BUILDERS)) {
     textures[key] = await build(ASSET_BUDGETS.maxTextureSize / 2);
   }
+
+  // Материалы для превью: растеризатор текстуры не сэмплирует, поэтому
+  // текстурные материалы подменяются их средним тоном. Считается из самой
+  // текстуры, а не задаётся руками, — иначе превью разъедется с моделью
+  // при первой же правке рисунка.
+  const previewMaterials = await materialsForPreview(textures);
 
   const manifest = {
     tenant: TEST_TENANT,
@@ -77,6 +85,10 @@ async function main() {
     await mkdir(outputDir, { recursive: true });
     const report = await optimizeAsset({ inputPath: sourcePath, outputDir });
 
+    // Превью для каталога: рисуется по той же геометрии, что и модель,
+    // поэтому не расходится с ней (AssetKind.thumb в схеме БД)
+    await writeFile(join(outputDir, 'thumb.png'), await renderThumbnail(groups, previewMaterials));
+
     manifest.products.push({
       sku: product.sku,
       name: product.name,
@@ -95,6 +107,7 @@ async function main() {
       materials: groups.map((g) => g.material),
       /** Шаблон под AssetRef.urlTemplate из packages/viewer */
       urlTemplate: `/assets/test/${product.sku}/lod{lod}.glb`,
+      thumbnailUrl: `/assets/test/${product.sku}/thumb.png`,
       checksum: createHash('sha256').update(glb).digest('hex'),
       sourceTriangles,
       lods: report.lods,
@@ -108,6 +121,35 @@ async function main() {
 
   await writeFile(join(PUBLIC_DIR, 'catalog.json'), `${JSON.stringify(manifest, null, 2)}\n`);
   console.log(`\nМанифест: ${join(PUBLIC_DIR, 'catalog.json')}`);
+}
+
+/** Средний тон текстуры в линейном пространстве. */
+async function averageColour(image) {
+  const { channels } = await sharp(image).stats();
+  return channels.slice(0, 3).map((channel) => (channel.mean / 255) ** 2.2);
+}
+
+/** Копия материалов, где текстурный цвет свёрнут в один тон. */
+async function materialsForPreview(textures) {
+  const preview = {};
+  for (const [code, material] of Object.entries(MATERIALS)) {
+    if (!material.texture || !textures[material.texture]) {
+      preview[code] = material;
+      continue;
+    }
+
+    const tint = await averageColour(textures[material.texture]);
+    preview[code] = {
+      ...material,
+      baseColorFactor: [
+        material.baseColorFactor[0] * tint[0],
+        material.baseColorFactor[1] * tint[1],
+        material.baseColorFactor[2] * tint[2],
+        1,
+      ],
+    };
+  }
+  return preview;
 }
 
 /** В документ кладём только те текстуры, что реально используются. */
