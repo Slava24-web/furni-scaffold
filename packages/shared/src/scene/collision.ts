@@ -344,3 +344,147 @@ export function normalizeAngleDeg(deg: number): number {
   const wrapped = ((deg + 180) % 360 + 360) % 360 - 180;
   return wrapped === -180 ? 180 : wrapped;
 }
+
+/** Лежит ли точка внутри габарита в плане. */
+export function boxContainsPoint(box: Box, point: Vec2, toleranceMm = 0): boolean {
+  const { right, forward } = boxAxes(box);
+  const dx = point.x - box.centre.x;
+  const dy = point.y - box.centre.y;
+
+  const alongWidth = Math.abs(dx * right.x + dy * right.y);
+  const alongDepth = Math.abs(dx * forward.x + dy * forward.y);
+
+  return (
+    alongWidth <= box.halfWidthMm + toleranceMm && alongDepth <= box.halfDepthMm + toleranceMm
+  );
+}
+
+/**
+ * Верх опоры под точкой: на какой высоте окажется объект, поставленный сюда.
+ *
+ * Ноль означает пол. Берётся максимум, а не первое попадание: над тумбой
+ * может лежать столешница, и вещь должна встать на столешницу.
+ */
+export function supportTopMm(point: Vec2, supports: readonly Box[]): number {
+  let top = 0;
+  for (const support of supports) {
+    if (!boxContainsPoint(support, point)) continue;
+    top = Math.max(top, support.topMm);
+  }
+  return top;
+}
+
+/**
+ * Высота установки объекта с учётом опоры под ним.
+ *
+ * Берётся максимум из собственной высоты установки и верха опоры: навесной
+ * шкаф остаётся на своей отметке над тумбой, а вещь с нулевой отметкой
+ * поднимается на неё.
+ */
+export function restingHeightMm(mountHeightMm: number, supportTop: number): number {
+  return Math.max(mountHeightMm, supportTop);
+}
+
+export interface BoxChain {
+  /** Идентификаторы объектов, вошедших в цепочку */
+  memberIds: string[];
+  /** Габарит цепочки целиком */
+  box: Box;
+}
+
+/**
+ * Группировка смежных модулей в цепочки.
+ *
+ * Ряд кухни это не набор отдельных тумб, а один фронт: столешницу
+ * выравнивают по краю ВСЕГО ряда, а не по краю случайной тумбы внутри
+ * него. Цепочкой считаются модули одного разворота и одной высоты,
+ * стоящие вплотную боками на одной линии по глубине.
+ *
+ * Одиночный модуль — цепочка из одного элемента, поэтому поведение
+ * для отдельно стоящей мебели не меняется.
+ */
+export function groupIntoChains(
+  items: readonly { id: string; box: Box }[],
+  toleranceMm = 12,
+): BoxChain[] {
+  const visited = new Set<number>();
+  const chains: BoxChain[] = [];
+
+  for (let start = 0; start < items.length; start++) {
+    if (visited.has(start)) continue;
+
+    const group: number[] = [];
+    const queue = [start];
+    visited.add(start);
+
+    while (queue.length > 0) {
+      const current = queue.pop()!;
+      group.push(current);
+
+      for (let other = 0; other < items.length; other++) {
+        if (visited.has(other)) continue;
+        if (!areAdjacent(items[current]!.box, items[other]!.box, toleranceMm)) continue;
+        visited.add(other);
+        queue.push(other);
+      }
+    }
+
+    const members = group.map((index) => items[index]!);
+    chains.push({
+      memberIds: members.map((member) => member.id),
+      box: mergeChainBox(members.map((member) => member.box)),
+    });
+  }
+
+  return chains;
+}
+
+/** Стоят ли два габарита вплотную боками на одной линии. */
+function areAdjacent(a: Box, b: Box, toleranceMm: number): boolean {
+  if (Math.abs(normalizeAngleDeg(a.rotationDeg - b.rotationDeg)) > 1) return false;
+  if (Math.abs(a.bottomMm - b.bottomMm) > toleranceMm) return false;
+  if (Math.abs(a.topMm - b.topMm) > toleranceMm) return false;
+
+  const { right, forward } = boxAxes(a);
+  const dx = b.centre.x - a.centre.x;
+  const dy = b.centre.y - a.centre.y;
+
+  // Смещение по глубине означает, что модули стоят не в один фронт
+  if (Math.abs(dx * forward.x + dy * forward.y) > toleranceMm) return false;
+
+  const alongWidth = Math.abs(dx * right.x + dy * right.y);
+  return Math.abs(alongWidth - (a.halfWidthMm + b.halfWidthMm)) <= toleranceMm;
+}
+
+/** Габарит цепочки: протяжённость по всем участникам вдоль общей оси. */
+function mergeChainBox(boxes: readonly Box[]): Box {
+  const reference = boxes[0]!;
+  if (boxes.length === 1) return reference;
+
+  const { right, forward } = boxAxes(reference);
+  let min = Infinity;
+  let max = -Infinity;
+  let halfDepth = 0;
+
+  for (const box of boxes) {
+    const offset =
+      (box.centre.x - reference.centre.x) * right.x +
+      (box.centre.y - reference.centre.y) * right.y;
+    min = Math.min(min, offset - box.halfWidthMm);
+    max = Math.max(max, offset + box.halfWidthMm);
+    halfDepth = Math.max(halfDepth, box.halfDepthMm);
+  }
+
+  const centreOffset = (min + max) / 2;
+  return {
+    centre: {
+      x: reference.centre.x + right.x * centreOffset,
+      y: reference.centre.y + right.y * centreOffset,
+    },
+    halfWidthMm: (max - min) / 2,
+    halfDepthMm: halfDepth,
+    rotationDeg: reference.rotationDeg,
+    bottomMm: Math.min(...boxes.map((box) => box.bottomMm)),
+    topMm: Math.max(...boxes.map((box) => box.topMm)),
+  };
+}

@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   boxAxes,
   boxCorners,
+  boxContainsPoint,
   boxesOverlap,
   dockCandidates,
+  groupIntoChains,
   findConflicts,
   hasConflicts,
   isInsideContour,
@@ -11,6 +13,8 @@ import {
   overlayCandidates,
   placementBox,
   planAngleDeg,
+  restingHeightMm,
+  supportTopMm,
   verticallyOverlapping,
   wallToBox,
   type Box,
@@ -421,5 +425,142 @@ describe('углы в плане', () => {
   it('разница углов через ноль не даёт скачка на 360', () => {
     // Поворот через границу: с 179 на -179 это два градуса, а не 358
     expect(normalizeAngleDeg(-179 - 179)).toBe(2);
+  });
+});
+
+describe('точка внутри габарита', () => {
+  it('центр внутри, дальняя точка снаружи', () => {
+    expect(boxContainsPoint(cabinet(), { x: 0, y: 0 })).toBe(true);
+    expect(boxContainsPoint(cabinet(), { x: 1000, y: 0 })).toBe(false);
+  });
+
+  it('граница считается попаданием', () => {
+    expect(boxContainsPoint(cabinet(), { x: 300, y: 300 })).toBe(true);
+  });
+
+  it('учитывает разворот габарита', () => {
+    const narrow = cabinet({ halfWidthMm: 1000, halfDepthMm: 100, rotationDeg: 90 });
+    // Длинная сторона развёрнута вдоль оси Z плана
+    expect(boxContainsPoint(narrow, { x: 0, y: 800 })).toBe(true);
+    expect(boxContainsPoint(narrow, { x: 800, y: 0 })).toBe(false);
+  });
+});
+
+describe('высота опоры', () => {
+  const worktop = cabinet({ bottomMm: 820, topMm: 858 });
+
+  it('без опоры под точкой это пол', () => {
+    expect(supportTopMm({ x: 5000, y: 0 }, [cabinet()])).toBe(0);
+  });
+
+  it('берёт верх опоры под точкой', () => {
+    expect(supportTopMm({ x: 0, y: 0 }, [cabinet()])).toBe(820);
+  });
+
+  it('берёт максимум: вещь встаёт на столешницу, а не под неё', () => {
+    expect(supportTopMm({ x: 0, y: 0 }, [cabinet(), worktop])).toBe(858);
+  });
+
+  it('высота установки не опускается ниже собственной отметки', () => {
+    // Навесной шкаф остаётся на 1450 над тумбой высотой 820
+    expect(restingHeightMm(1450, 820)).toBe(1450);
+  });
+
+  it('вещь с нулевой отметкой поднимается на опору', () => {
+    expect(restingHeightMm(0, 858)).toBe(858);
+  });
+
+  it('без опоры вещь остаётся на своей отметке', () => {
+    expect(restingHeightMm(0, 0)).toBe(0);
+    expect(restingHeightMm(1450, 0)).toBe(1450);
+  });
+});
+
+describe('цепочки смежных модулей', () => {
+  const module = (id: string, x: number, halfWidth = 300) => ({
+    id,
+    box: cabinet({ centre: { x, y: 0 }, halfWidthMm: halfWidth }),
+  });
+
+  it('одиночный модуль это цепочка из одного', () => {
+    const chains = groupIntoChains([module('a', 0)]);
+    expect(chains).toHaveLength(1);
+    expect(chains[0]?.memberIds).toEqual(['a']);
+    expect(chains[0]?.box.halfWidthMm).toBe(300);
+  });
+
+  it('модули вплотную собираются в один ряд', () => {
+    const chains = groupIntoChains([module('a', 0), module('b', 600), module('c', 1200)]);
+
+    expect(chains).toHaveLength(1);
+    expect(chains[0]?.memberIds.sort()).toEqual(['a', 'b', 'c']);
+    // Ряд из трёх шестисоток это 1800 мм
+    expect(chains[0]?.box.halfWidthMm).toBe(900);
+    expect(chains[0]?.box.centre.x).toBe(600);
+  });
+
+  it('разрыв между модулями делит ряд на две цепочки', () => {
+    const chains = groupIntoChains([module('a', 0), module('b', 600), module('c', 2000)]);
+
+    expect(chains).toHaveLength(2);
+    expect(chains.map((c) => c.memberIds.length).sort()).toEqual([1, 2]);
+  });
+
+  it('модули разной ширины считаются по своим габаритам', () => {
+    // 600 и 800 вплотную: центры разнесены на 300 + 400
+    const chains = groupIntoChains([module('a', 0), module('b', 700, 400)]);
+
+    expect(chains).toHaveLength(1);
+    expect(chains[0]?.box.halfWidthMm).toBe(700);
+  });
+
+  it('модули разного разворота в один ряд не собираются', () => {
+    const rotated = {
+      id: 'b',
+      box: cabinet({ centre: { x: 600, y: 0 }, rotationDeg: 90 }),
+    };
+    expect(groupIntoChains([module('a', 0), rotated])).toHaveLength(2);
+  });
+
+  it('модули разной высоты в один ряд не собираются', () => {
+    const upper = {
+      id: 'b',
+      box: cabinet({ centre: { x: 600, y: 0 }, bottomMm: 1450, topMm: 2170 }),
+    };
+    expect(groupIntoChains([module('a', 0), upper])).toHaveLength(2);
+  });
+
+  it('модули со смещением по глубине в один ряд не собираются', () => {
+    const offset = { id: 'b', box: cabinet({ centre: { x: 600, y: 400 } }) };
+    expect(groupIntoChains([module('a', 0), offset])).toHaveLength(2);
+  });
+
+  it('повёрнутый ряд собирается вдоль своей оси', () => {
+    const first = { id: 'a', box: cabinet({ centre: { x: 0, y: 0 }, rotationDeg: 90 }) };
+    // Локальная +X при повороте на 90° смотрит в −Z плана
+    const second = { id: 'b', box: cabinet({ centre: { x: 0, y: -600 }, rotationDeg: 90 }) };
+    const chains = groupIntoChains([first, second]);
+
+    expect(chains).toHaveLength(1);
+    expect(chains[0]?.box.halfWidthMm).toBe(600);
+    expect(chains[0]?.box.centre.y).toBeCloseTo(-300, 6);
+  });
+
+  it('пустой список даёт пустой результат', () => {
+    expect(groupIntoChains([])).toEqual([]);
+  });
+
+  it('порядок во входных данных не влияет на состав цепочки', () => {
+    const shuffled = groupIntoChains([module('c', 1200), module('a', 0), module('b', 600)]);
+    expect(shuffled).toHaveLength(1);
+    expect(shuffled[0]?.box.halfWidthMm).toBe(900);
+  });
+
+  it('края цепочки годятся для выравнивания столешницы над рядом', () => {
+    const chains = groupIntoChains([module('a', 0), module('b', 600), module('c', 1200)]);
+    const [leftFlush] = overlayCandidates(chains[0]!.box, 900, 300);
+
+    // Левый край столешницы 1800 совпадает с левым краем ряда
+    expect(leftFlush!.position.x - 900).toBeCloseTo(-300, 6);
   });
 });

@@ -62,6 +62,20 @@ export class GestureController {
     element.style.touchAction = 'none';
   }
 
+  /**
+   * Захват указателя. Ошибка захвата не должна ронять жест: браузер
+   * бросает исключение, если указатель уже неактивен, а это случается
+   * при быстрых касаниях. Без захвата жест просто не переживёт выход
+   * пальца за пределы элемента — это хуже, но не смертельно.
+   */
+  private capturePointer(pointerId: number): void {
+    try {
+      this.element.setPointerCapture(pointerId);
+    } catch {
+      // Продолжаем без захвата
+    }
+  }
+
   /** Две активные точки касания. Вызывается только при pointers.size === 2. */
   private twoPointers(): [Vector2, Vector2] {
     const [a, b] = [...this.pointers.values()];
@@ -71,7 +85,7 @@ export class GestureController {
 
   private onPointerDown = (e: PointerEvent): void => {
     e.preventDefault();
-    this.element.setPointerCapture(e.pointerId);
+    this.capturePointer(e.pointerId);
     const point = new Vector2(e.clientX, e.clientY);
     this.pointers.set(e.pointerId, point);
 

@@ -12,11 +12,14 @@ import {
 import {
   EMPTY_CONFLICTS,
   findConflicts,
+  groupIntoChains,
   hasConflicts,
   innerNormal,
   normalizeAngleDeg,
   placementBox,
   planAngleDeg,
+  restingHeightMm,
+  supportTopMm,
   type Box,
   type CatalogProduct,
   type ConflictReport,
@@ -216,32 +219,43 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
       }
     }
 
-    for (const placement of scene.doc.placements) {
-      if (placement.instanceId === exceptId) continue;
-      const product = catalog.bySku.get(placement.sku);
+    staticBoxes = otherBoxes(exceptId);
+
+    // Цели строятся по ЦЕПОЧКАМ, а не по отдельным модулям: ряд кухни
+    // это один фронт, и столешницу выравнивают по краю всего ряда,
+    // а не по краю случайной тумбы внутри него. Одиночный модуль —
+    // цепочка из одного, поэтому для отдельной мебели ничего не меняется.
+    for (const chain of groupIntoChains(staticBoxes)) {
       targets.push({
         kind: 'object',
-        position: new Vector2(placement.position.x, placement.position.z),
-        rotation: placement.rotationY,
-        sourceId: placement.instanceId,
-        ...(product
-          ? {
-              footprint: {
-                halfWidthMm: product.widthMm / 2,
-                halfDepthMm: product.depthMm / 2,
-                // Высоты решают, стыковать сбоку или выравнивать поверх:
-                // столешница и верхний шкаф ложатся НАД нижним рядом
-                bottomMm: placement.position.y,
-                topMm: placement.position.y + product.heightMm,
-              },
-            }
-          : {}),
+        position: new Vector2(chain.box.centre.x, chain.box.centre.y),
+        rotation: chain.box.rotationDeg,
+        sourceId: chain.memberIds[0] ?? '',
+        footprint: {
+          halfWidthMm: chain.box.halfWidthMm,
+          halfDepthMm: chain.box.halfDepthMm,
+          // Высоты решают, стыковать сбоку или выравнивать поверх:
+          // столешница и верхний шкаф ложатся НАД нижним рядом
+          bottomMm: chain.box.bottomMm,
+          topMm: chain.box.topMm,
+        },
       });
     }
 
     snapEngine.value.setTargets(targets);
-    staticBoxes = otherBoxes(exceptId);
     dragWalls = allWalls();
+  }
+
+  /**
+   * Высота, на которой окажется объект в этой точке.
+   *
+   * Собственная отметка товара или верх опоры под точкой — что выше.
+   * Так вещь встаёт на столешницу, а навесной шкаф над тумбой остаётся
+   * на своей высоте.
+   */
+  function restingHeightAt(point: { x: number; z: number }, mountHeightMm: number): number {
+    const supports = staticBoxes.map((entry) => entry.box);
+    return restingHeightMm(mountHeightMm, supportTopMm({ x: point.x, y: point.z }, supports));
   }
 
   /** Запоминает, за какую точку объекта взялись. */
@@ -383,6 +397,14 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
         v.invalidate();
         break;
 
+      case 'twoFingerRotate':
+        // Двупальцевый твист вращает выделенный объект. Знак прямой:
+        // жест и поворот вокруг Y при взгляде сверху идут в одну сторону
+        // при любом азимуте камеры — разница углов от азимута не зависит
+        if (selectedId.value) rotateSelectedBy((e.angle * 180) / Math.PI);
+        v.invalidate();
+        break;
+
       case 'twoFingerPan':
         camera.pan(e.delta.x, e.delta.y);
         v.invalidate();
@@ -403,7 +425,12 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     desiredMm.set(floor.x * 1000 + grabOffsetMm.x, floor.z * 1000 + grabOffsetMm.y);
 
     const product = catalog.bySku.get(selectedPlacement()?.sku ?? '');
-    const bottomMm = instance.root.position.y * 1000;
+    // Высота считается по опоре ДО привязки: от неё зависит, стыковать
+    // объект сбоку или выравнивать поверх соседа
+    const bottomMm = restingHeightAt(
+      { x: desiredMm.x, z: desiredMm.y },
+      product?.mountHeightMm ?? 0,
+    );
     const result = snapEngine.value.snap(desiredMm, {
       ...DEFAULT_SNAP,
       mmPerPixel: camera.mmPerPixel,
@@ -423,10 +450,13 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     isSnapping.value = result.snapped;
 
     // Прямая мутация Three.js. В Pinia НЕ пишем — это горячий путь.
-    // Высота сохраняется: верхний шкаф не должен падать на пол при сдвиге.
+    const restingMm = restingHeightAt(
+      { x: result.position.x, z: result.position.y },
+      product?.mountHeightMm ?? 0,
+    );
     instance.root.position.set(
       result.position.x / 1000,
-      instance.root.position.y,
+      restingMm / 1000,
       result.position.y / 1000,
     );
     if (result.rotation !== null) {
@@ -480,6 +510,36 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     updateConflicts(liveBox(selectedId.value!) ?? undefined);
   }
 
+  /** У двупальцевого жеста нет явного конца, поэтому фиксируем по паузе. */
+  let rotationCommitTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * Поворот выделенного объекта на дельту.
+   *
+   * В Pinia на каждое событие не пишем (CLAUDE.md, правило 3): запись
+   * откладывается до паузы в жесте.
+   */
+  function rotateSelectedBy(deltaDeg: number): void {
+    const v = viewer.value;
+    const id = selectedId.value;
+    const instance = id ? v?.registry.get(id) : undefined;
+    if (!v || !id || !instance || instance.locked) return;
+
+    // Первое событие серии: обновляем кэш соседей для проверки конфликтов
+    if (rotationCommitTimer === null) beginDrag(id);
+
+    instance.root.rotation.y += (deltaDeg * Math.PI) / 180;
+    v.selection.refresh(instance.root);
+    v.rotation.update(instance.root);
+    updateConflicts(liveBox(id) ?? undefined);
+
+    if (rotationCommitTimer) clearTimeout(rotationCommitTimer);
+    rotationCommitTimer = setTimeout(() => {
+      rotationCommitTimer = null;
+      commitSelectedPosition();
+    }, 220);
+  }
+
   function commitSelectedPosition(): void {
     const v = viewer.value;
     if (!v || !selectedId.value) return;
@@ -518,24 +578,33 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     >,
     clientX: number,
     clientY: number,
-  ): { x: number; z: number; rotationY: number } | null {
+  ): { x: number; z: number; y: number; rotationY: number } | null {
     const point = floorPointAt(new Vector2(clientX, clientY));
     if (!point || !camera) return null;
 
     // Исключать нечего: бросаемого объекта в документе ещё нет, а ранее
     // выделенный сосед — как раз тот, к которому надо пристыковаться
     beginDrag(null);
+    const bottomMm = restingHeightAt(point, product.mountHeightMm);
     const result = snapEngine.value.snap(new Vector2(point.x, point.z), {
       ...DEFAULT_SNAP,
       mmPerPixel: camera.mmPerPixel,
       objectHalfDepthMm: product.depthMm / 2,
       objectHalfWidthMm: product.widthMm / 2,
-      objectBottomMm: product.mountHeightMm,
-      objectTopMm: product.mountHeightMm + product.heightMm,
+      objectBottomMm: bottomMm,
+      objectTopMm: bottomMm + product.heightMm,
       enableWalls: product.snapToWall,
     });
 
-    return { x: result.position.x, z: result.position.y, rotationY: result.rotation ?? 0 };
+    return {
+      x: result.position.x,
+      z: result.position.y,
+      y: restingHeightAt(
+        { x: result.position.x, z: result.position.y },
+        product.mountHeightMm,
+      ),
+      rotationY: result.rotation ?? 0,
+    };
   }
 
   // ---------------------------------------------------------------------
@@ -584,7 +653,7 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
       v.preview.show(group);
     }
 
-    v.preview.setTransform(point.x, product.mountHeightMm, point.z, point.rotationY);
+    v.preview.setTransform(point.x, point.y, point.z, point.rotationY);
     preview.value = { xMm: Math.round(point.x), zMm: Math.round(point.z), rotationDeg: Math.round(point.rotationY) };
 
     const box: Box = {
@@ -592,8 +661,8 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
       halfWidthMm: product.widthMm / 2,
       halfDepthMm: product.depthMm / 2,
       rotationDeg: point.rotationY,
-      bottomMm: product.mountHeightMm,
-      topMm: product.mountHeightMm + product.heightMm,
+      bottomMm: point.y,
+      topMm: point.y + product.heightMm,
     };
     previewConflicts.value = findConflicts(box, otherBoxes(null), allWalls());
     v.preview.setConflict(hasConflicts(previewConflicts.value));
@@ -636,6 +705,8 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
   }
 
   function detach(): void {
+    if (rotationCommitTimer) clearTimeout(rotationCommitTimer);
+    rotationCommitTimer = null;
     element?.removeEventListener('wheel', onWheel);
     resizeObserver?.disconnect();
     resizeObserver = null;
