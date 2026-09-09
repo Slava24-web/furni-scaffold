@@ -201,6 +201,11 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     exceptId: string | null = selectedId.value,
     grabPoint?: Vector2,
   ): void {
+    // Прямоугольник канваса обновляется на старте жеста, а не на каждое
+    // движение: ResizeObserver ловит не всё — панель каталога может
+    // подгрузиться и сдвинуть сцену без изменения её размеров, и тогда
+    // луч уходит мимо цели, в которую целится пользователь
+    refreshRect();
     captureGrabOffset(grabPoint);
 
     const targets: SnapTarget[] = [];
@@ -247,23 +252,28 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
   }
 
   /**
-   * Высота, на которой окажется объект в этой точке.
+   * Высота, на которой окажется объект под указателем.
    *
-   * На опору забирается только то, что помечено stackable: иначе нижний
-   * шкаф, протащенный под навесным, взлетал бы на него. Для остальных
-   * высота это отметка товара.
+   * Опора выбирается ЛУЧОМ по тому, во что целится пользователь, а не
+   * габаритами в плане: иначе мелочь, брошенная под навесным шкафом,
+   * забиралась бы ему на верх, потому что в плане шкаф оказывается
+   * «под точкой». Пользователь видит поверхность — на неё и кладём.
+   *
+   * На опору забирается только помеченное stackable: корпусная мебель
+   * стоит на своей отметке.
    */
-  function restingHeightAt(
-    point: { x: number; z: number },
+  function restingHeightUnder(
+    clientPoint: Vector2,
     product: Pick<CatalogProduct, 'mountHeightMm' | 'stackable'> | undefined,
+    excludeInstanceId?: string,
   ): number {
+    const v = viewer.value;
     if (!product) return 0;
-    if (!product.stackable) return product.mountHeightMm;
+    if (!product.stackable || !v) return product.mountHeightMm;
 
-    const supports = staticBoxes.map((entry) => entry.box);
     return restingHeightMm(
       product.mountHeightMm,
-      supportTopMm({ x: point.x, y: point.z }, supports),
+      v.supportTopMm(toNdc(clientPoint), excludeInstanceId),
     );
   }
 
@@ -272,12 +282,16 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     grabOffsetMm.set(0, 0);
 
     const instance = selectedId.value ? viewer.value?.registry.get(selectedId.value) : undefined;
-    const floor = grabPoint ? floorPointAt(grabPoint) : null;
-    if (!instance || !floor) return;
+    if (!instance || !grabPoint) return;
+
+    // Захват меряется в плоскости, где объект сейчас стоит: для вещи
+    // на столешнице пол это не та плоскость
+    const hit = floorPointAt(grabPoint, instance.root.position.y * 1000);
+    if (!hit) return;
 
     grabOffsetMm.set(
-      instance.root.position.x * 1000 - floor.x,
-      instance.root.position.z * 1000 - floor.z,
+      instance.root.position.x * 1000 - hit.x,
+      instance.root.position.z * 1000 - hit.z,
     );
   }
 
@@ -427,16 +441,18 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     const instance = v.registry.get(selectedId.value);
     if (!instance || instance.locked) return;
 
-    const floor = camera.projectToFloor(toNdc(screenPoint));
-    if (!floor) return; // луч ушёл выше горизонта — движения нет
+    const product = catalog.bySku.get(selectedPlacement()?.sku ?? '');
+    // Высота берётся из того, во что целится указатель. Считается ПЕРВОЙ:
+    // от неё зависит и плоскость, в которой ищется позиция, и выбор между
+    // стыковкой сбоку и выравниванием поверх соседа. Сам перетаскиваемый
+    // объект из луча исключён — он следует за курсором и перекрыл бы опору.
+    const bottomMm = restingHeightUnder(screenPoint, product, selectedId.value);
+
+    const hit = floorPointAt(screenPoint, bottomMm);
+    if (!hit) return; // луч ушёл выше горизонта — движения нет
 
     // Точка захвата сохраняется: тянут за то место, за которое взялись
-    desiredMm.set(floor.x * 1000 + grabOffsetMm.x, floor.z * 1000 + grabOffsetMm.y);
-
-    const product = catalog.bySku.get(selectedPlacement()?.sku ?? '');
-    // Высота считается по опоре ДО привязки: от неё зависит, стыковать
-    // объект сбоку или выравнивать поверх соседа
-    const bottomMm = restingHeightAt({ x: desiredMm.x, z: desiredMm.y }, product);
+    desiredMm.set(hit.x + grabOffsetMm.x, hit.z + grabOffsetMm.y);
     const result = snapEngine.value.snap(desiredMm, {
       ...DEFAULT_SNAP,
       mmPerPixel: camera.mmPerPixel,
@@ -456,10 +472,9 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     isSnapping.value = result.snapped;
 
     // Прямая мутация Three.js. В Pinia НЕ пишем — это горячий путь.
-    const restingMm = restingHeightAt({ x: result.position.x, z: result.position.y }, product);
     instance.root.position.set(
       result.position.x / 1000,
-      restingMm / 1000,
+      bottomMm / 1000,
       result.position.y / 1000,
     );
     if (result.rotation !== null) {
@@ -560,11 +575,18 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     });
   }
 
-  /** Точка пола под координатой окна, в мм. null — луч ушёл выше горизонта. */
-  function floorPointAt(clientPoint: Vector2): FloorPoint | null {
+  /**
+   * Точка под координатой окна на горизонтальной плоскости высоты
+   * `heightMm`, в мм. null — луч ушёл выше горизонта.
+   *
+   * Высота плоскости обязана совпадать с высотой постановки: луч,
+   * нацеленный на крышку тумбы, пересекает пол далеко за ней, и позиция,
+   * посчитанная по полу, уехала бы на метры от точки прицеливания.
+   */
+  function floorPointAt(clientPoint: Vector2, heightMm = 0): FloorPoint | null {
     if (!camera) return null;
-    const floor = camera.projectToFloor(toNdc(clientPoint));
-    return floor ? { x: floor.x * 1000, z: floor.z * 1000 } : null;
+    const hit = camera.projectToPlane(toNdc(clientPoint), heightMm / 1000);
+    return hit ? { x: hit.x * 1000, z: hit.z * 1000 } : null;
   }
 
   /**
@@ -582,13 +604,17 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     clientX: number,
     clientY: number,
   ): { x: number; z: number; y: number; rotationY: number } | null {
-    const point = floorPointAt(new Vector2(clientX, clientY));
-    if (!point || !camera) return null;
+    const clientPoint = new Vector2(clientX, clientY);
+    if (!camera) return null;
 
     // Исключать нечего: бросаемого объекта в документе ещё нет, а ранее
     // выделенный сосед — как раз тот, к которому надо пристыковаться
     beginDrag(null);
-    const bottomMm = restingHeightAt(point, product);
+
+    // Сначала высота, потом позиция в плоскости этой высоты
+    const bottomMm = restingHeightUnder(clientPoint, product);
+    const point = floorPointAt(clientPoint, bottomMm);
+    if (!point) return null;
     const result = snapEngine.value.snap(new Vector2(point.x, point.z), {
       ...DEFAULT_SNAP,
       mmPerPixel: camera.mmPerPixel,
@@ -602,7 +628,7 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     return {
       x: result.position.x,
       z: result.position.y,
-      y: restingHeightAt({ x: result.position.x, z: result.position.y }, product),
+      y: bottomMm,
       rotationY: result.rotation ?? 0,
     };
   }
@@ -612,7 +638,12 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
   // ---------------------------------------------------------------------
 
   /** Куда встанет объект и с каким разворотом. null — переноса нет. */
-  const preview = shallowRef<{ xMm: number; zMm: number; rotationDeg: number } | null>(null);
+  const preview = shallowRef<{
+    xMm: number;
+    yMm: number;
+    zMm: number;
+    rotationDeg: number;
+  } | null>(null);
   const previewConflicts = shallowRef<ConflictReport>(EMPTY_CONFLICTS);
 
   let previewSku: string | null = null;
@@ -654,7 +685,12 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     }
 
     v.preview.setTransform(point.x, point.y, point.z, point.rotationY);
-    preview.value = { xMm: Math.round(point.x), zMm: Math.round(point.z), rotationDeg: Math.round(point.rotationY) };
+    preview.value = {
+      xMm: Math.round(point.x),
+      yMm: Math.round(point.y),
+      zMm: Math.round(point.z),
+      rotationDeg: Math.round(point.rotationY),
+    };
 
     const box: Box = {
       centre: { x: point.x, y: point.z },

@@ -32,8 +32,8 @@ export const DEFAULT_LIMITS: CameraLimits = {
   maxTargetRadius: 30,
 };
 
-/** Пол сцены. Мебель стоит на y = 0, наклон не поддерживается. */
-const FLOOR = new Plane(new Vector3(0, 1, 0), 0);
+/** Горизонтальная плоскость на нужной высоте. Наклон не поддерживается. */
+const HORIZONTAL = new Plane(new Vector3(0, 1, 0), 0);
 
 const ORBIT_SPEED = 0.008;
 
@@ -116,13 +116,26 @@ export class CameraController {
   }
 
   /**
-   * Точка пола под экранной координатой. null, если луч уходит выше
-   * горизонта — это возможно у края экрана даже при ограниченном угле.
+   * Точка на горизонтальной плоскости заданной высоты под экранной
+   * координатой. null, если луч уходит выше горизонта — это возможно
+   * у края экрана даже при ограниченном угле наклона камеры.
+   *
+   * Высота плоскости обязательна там, где объект ставят на опору: луч,
+   * нацеленный на крышку тумбы, пересекает ПОЛ далеко за ней, и позиция,
+   * посчитанная по полу, уехала бы на метры от того, куда целится
+   * пользователь.
    */
-  projectToFloor(ndc: Vector2): Vector3 | null {
+  projectToPlane(ndc: Vector2, heightM: number): Vector3 | null {
     this.raycaster.setFromCamera(ndc, this.camera);
+    // Плоскость задаётся как y = heightM, отсюда отрицательная константа
+    HORIZONTAL.constant = -heightM;
     const hit = new Vector3();
-    return this.raycaster.ray.intersectPlane(FLOOR, hit) ? hit : null;
+    return this.raycaster.ray.intersectPlane(HORIZONTAL, hit) ? hit : null;
+  }
+
+  /** Точка пола под экранной координатой. */
+  projectToFloor(ndc: Vector2): Vector3 | null {
+    return this.projectToPlane(ndc, 0);
   }
 
   /** Пиксели канваса -> нормализованные координаты устройства. */

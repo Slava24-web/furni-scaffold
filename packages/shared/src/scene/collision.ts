@@ -364,10 +364,20 @@ export function boxContainsPoint(box: Box, point: Vec2, toleranceMm = 0): boolea
  *
  * Ноль означает пол. Берётся максимум, а не первое попадание: над тумбой
  * может лежать столешница, и вещь должна встать на столешницу.
+ *
+ * `maxTopMm` ограничивает поиск сверху. Осадка сцены передаёт туда текущую
+ * высоту объекта: вещь может опуститься, когда из-под неё убрали опору,
+ * но не должна сама запрыгнуть на то, что оказалось рядом выше — иначе
+ * осадка отменяла бы точную постановку пользователя.
  */
-export function supportTopMm(point: Vec2, supports: readonly Box[]): number {
+export function supportTopMm(
+  point: Vec2,
+  supports: readonly Box[],
+  maxTopMm = Infinity,
+): number {
   let top = 0;
   for (const support of supports) {
+    if (support.topMm > maxTopMm) continue;
     if (!boxContainsPoint(support, point)) continue;
     top = Math.max(top, support.topMm);
   }
@@ -516,6 +526,10 @@ export interface SettleChange {
  * осевший объект. Так порядок детерминирован, а взаимные опоры двух
  * объектов на одном уровне не зацикливаются.
  *
+ * Осадка умеет только опускать. Поднять объект может лишь сам
+ * пользователь, целясь в поверхность: иначе она перечёркивала бы точную
+ * постановку, забрасывая вещь на первый попавшийся объект выше.
+ *
  * Возвращаются только изменившиеся высоты: вызывающий код по пустому
  * результату понимает, что переписывать документ не нужно.
  */
@@ -526,8 +540,13 @@ export function settlePlacements(items: readonly SettleItem[]): SettleChange[] {
 
   for (const item of ordered) {
     const centre = { x: item.placement.position.x, y: item.placement.position.z };
+    // Осадка только опускает: подниматься объект может лишь под рукой
+    // пользователя, где опора выбирается лучом по тому, во что он целится
     const yMm = item.stackable
-      ? restingHeightMm(item.mountHeightMm, supportTopMm(centre, settled))
+      ? restingHeightMm(
+          item.mountHeightMm,
+          supportTopMm(centre, settled, item.placement.position.y),
+        )
       : item.mountHeightMm;
 
     if (yMm !== item.placement.position.y) {

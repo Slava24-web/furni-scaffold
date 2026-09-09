@@ -12,6 +12,7 @@
  */
 import { cylinder, mergeGeometries, roundedBox, segmentedBox, translate } from './geometry.mjs';
 import { KITCHEN_PRODUCTS } from './kitchen.mjs';
+import { carcassPanels } from './carcass.mjs';
 
 export const TEST_TENANT = {
   slug: 'test',
@@ -103,7 +104,9 @@ function wardrobe() {
   const doorZ = depth / 2 + 9;
 
   return {
-    white: [translate(segmentedBox(width, corpusHeight, depth, 4), 0, plinth + corpusHeight / 2, 0)],
+    // Корпус из панелей, а не брусок: у шкафа появляются толщина
+    // стенок, внутренний объём и полки
+    white: carcassPanels(width, corpusHeight, depth, { bottomMm: plinth, shelves: 3 }),
     graphite: [translate(segmentedBox(width - 60, plinth, depth - 40, 2), 0, plinth / 2, 0)],
     oak: [
       translate(roundedBox(doorWidth, doorHeight, 18, 5, 6), -(doorWidth / 2 + 6), doorY, doorZ),
@@ -133,7 +136,8 @@ function sideboard() {
   }
 
   return {
-    white: [translate(segmentedBox(width, corpusHeight, depth, 4), 0, plinth + corpusHeight / 2, 0)],
+    // Ящики занимают весь объём, полок внутри нет
+    white: carcassPanels(width, corpusHeight, depth, { bottomMm: plinth }),
     graphite: [translate(segmentedBox(width - 60, plinth, depth - 40, 2), 0, plinth / 2, 0)],
     oak: drawers,
     steel: handles,

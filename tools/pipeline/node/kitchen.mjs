@@ -12,6 +12,7 @@
  * Всё в миллиметрах целыми (CLAUDE.md).
  */
 import { cylinder, mergeGeometries, roundedBox, segmentedBox, translate } from './geometry.mjs';
+import { carcassPanels, openBoxPanels } from './carcass.mjs';
 
 export const PLINTH = 100;
 export const BASE_CARCASS = 720;
@@ -61,9 +62,12 @@ function roundedBoxAt(w, h, d, x, y, z, radius = 3, segments = 3) {
   return translate(roundedBox(w, h, d, radius, segments), x, y, z);
 }
 
-/** Корпус шкафа: коробка без передней стенки видна как единый объём. */
-function carcass(widthMm, heightMm, depthMm, bottomMm) {
-  return translate(segmentedBox(widthMm, heightMm, depthMm, 3), 0, bottomMm + heightMm / 2, 0);
+/**
+ * Корпус шкафа из панелей: боковины, дно, крышка, задняя стенка и полки.
+ * Сплошной брусок читался снаружи как монолит и не имел толщины стенок.
+ */
+function carcass(widthMm, heightMm, depthMm, bottomMm, shelves = 1) {
+  return carcassPanels(widthMm, heightMm, depthMm, { bottomMm, shelves });
 }
 
 function plinth(widthMm, depthMm) {
@@ -76,7 +80,7 @@ function baseCabinet(widthMm) {
   const facadeY = PLINTH + BASE_CARCASS / 2;
 
   return {
-    white: [carcass(widthMm, BASE_CARCASS, BASE_DEPTH, PLINTH)],
+    white: carcass(widthMm, BASE_CARCASS, BASE_DEPTH, PLINTH),
     graphite: [plinth(widthMm, BASE_DEPTH)],
     oak: [facade(widthMm, BASE_CARCASS - FACADE_GAP * 2, facadeY, facadeZ)],
     steel: bracketHandle(0, PLINTH + BASE_CARCASS - 90, facadeZ + FACADE_THICKNESS / 2),
@@ -97,7 +101,8 @@ function baseDrawers(widthMm) {
   }
 
   return {
-    white: [carcass(widthMm, BASE_CARCASS, BASE_DEPTH, PLINTH)],
+    // У шкафа с ящиками полок нет: внутренний объём занимают короба
+    white: carcass(widthMm, BASE_CARCASS, BASE_DEPTH, PLINTH, 0),
     graphite: [plinth(widthMm, BASE_DEPTH)],
     oak: fronts,
     steel: handles,
@@ -109,7 +114,7 @@ function wallCabinet(widthMm, heightMm) {
   const facadeZ = WALL_DEPTH / 2 + FACADE_THICKNESS / 2;
 
   return {
-    white: [carcass(widthMm, heightMm, WALL_DEPTH, 0)],
+    white: carcass(widthMm, heightMm, WALL_DEPTH, 0),
     oak: [facade(widthMm, heightMm - FACADE_GAP * 2, heightMm / 2, facadeZ)],
     steel: bracketHandle(0, 90, facadeZ + FACADE_THICKNESS / 2),
   };
@@ -123,7 +128,8 @@ function tallCabinet(widthMm) {
   const upper = height - lower - FACADE_GAP * 3;
 
   return {
-    white: [carcass(widthMm, height, BASE_DEPTH, PLINTH)],
+    // Пенал высокий: полок больше
+    white: carcass(widthMm, height, BASE_DEPTH, PLINTH, 4),
     graphite: [plinth(widthMm, BASE_DEPTH)],
     oak: [
       facade(widthMm, lower, PLINTH + FACADE_GAP + lower / 2, facadeZ),
@@ -166,7 +172,8 @@ function drawerBox(widthMm) {
   const height = 176;
   const depth = 500;
   return {
-    white: [translate(segmentedBox(widthMm - 40, height, depth, 2), 0, height / 2, -20)],
+    // Настоящий короб: боковины, дно и задний борт, перед закрыт фасадом
+    white: openBoxPanels(widthMm - 40, height, depth, { bottomMm: 0 }),
     oak: [roundedBoxAt(widthMm, height, FACADE_THICKNESS, 0, height / 2, depth / 2 - 10)],
     steel: bracketHandle(0, height / 2, depth / 2 - 10 + FACADE_THICKNESS / 2, 160),
   };

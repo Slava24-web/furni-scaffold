@@ -160,7 +160,9 @@ const previewReadout = computed(() => {
   if (!point) return null;
 
   const rotation = point.rotationDeg === 0 ? '' : `, поворот ${point.rotationDeg}°`;
-  return `X ${point.xMm} мм · Z ${point.zMm} мм${rotation}`;
+  // Высота показывается, только когда объект поднят: на полу она шум
+  const height = point.yMm === 0 ? '' : ` · высота ${point.yMm} мм`;
+  return `X ${point.xMm} мм · Z ${point.zMm} мм${height}${rotation}`;
 });
 
 const hint = computed(() => {

@@ -604,12 +604,15 @@ describe('осадка сцены', () => {
     expect(changes).toEqual([{ instanceId: 'box', yMm: 100 }]);
   });
 
-  it('вещь поднимается, когда опору вернули', () => {
+  it('осадка не поднимает объект сама', () => {
+    // Подъём это действие пользователя: он целится в поверхность.
+    // Осадка, забрасывающая вещь на подвернувшийся объект выше,
+    // перечёркивала бы точную постановку
     const changes = settlePlacements([
       item('cabinet'),
       item('box', { y: 100, heightMm: 176, mountHeightMm: 100, stackable: true }),
     ]);
-    expect(changes).toEqual([{ instanceId: 'box', yMm: 820 }]);
+    expect(changes).toEqual([]);
   });
 
   it('цепочка опор оседает целиком', () => {
@@ -655,14 +658,14 @@ describe('осадка сцены', () => {
     expect(changes).toEqual([]);
   });
 
-  it('две вещи в одной точке складываются стопкой, а не зацикливаются', () => {
-    // Обработка снизу вверх делает порядок определённым: вторая встаёт
-    // на первую, а не обе прыгают друг на друга по кругу
+  it('две вещи на одном уровне осадка не складывает стопкой', () => {
+    // Это конфликт, и он должен остаться видимым конфликтом,
+    // а не превратиться молча в стопку
     const changes = settlePlacements([
       item('a', { y: 0, heightMm: 200, stackable: true }),
       item('b', { y: 0, heightMm: 200, stackable: true }),
     ]);
-    expect(changes).toEqual([{ instanceId: 'b', yMm: 200 }]);
+    expect(changes).toEqual([]);
   });
 
   it('стопка устойчива: повторная осадка её не разбирает', () => {
@@ -676,7 +679,7 @@ describe('осадка сцены', () => {
   it('результат устойчив: повторная осадка ничего не меняет', () => {
     const items = [
       item('cabinet'),
-      item('box', { y: 100, heightMm: 176, mountHeightMm: 100, stackable: true }),
+      item('box', { y: 858, heightMm: 176, mountHeightMm: 100, stackable: true }),
     ];
     const first = settlePlacements(items);
     expect(first).toHaveLength(1);
@@ -692,5 +695,22 @@ describe('осадка сцены', () => {
 
   it('пустая сцена не даёт изменений', () => {
     expect(settlePlacements([])).toEqual([]);
+  });
+});
+
+describe('ограничение поиска опоры сверху', () => {
+  const shelf = cabinet({ bottomMm: 0, topMm: 820 });
+  const upper = cabinet({ bottomMm: 1450, topMm: 2170 });
+
+  it('без ограничения берётся самая высокая опора', () => {
+    expect(supportTopMm({ x: 0, y: 0 }, [shelf, upper])).toBe(2170);
+  });
+
+  it('ограничение отсекает то, что выше объекта', () => {
+    expect(supportTopMm({ x: 0, y: 0 }, [shelf, upper], 900)).toBe(820);
+  });
+
+  it('ограничение ниже всех опор оставляет пол', () => {
+    expect(supportTopMm({ x: 0, y: 0 }, [shelf, upper], 100)).toBe(0);
   });
 });

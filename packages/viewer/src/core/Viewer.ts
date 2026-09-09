@@ -1,5 +1,6 @@
 import {
   ACESFilmicToneMapping,
+  Box3,
   Clock,
   PerspectiveCamera,
   Raycaster,
@@ -52,6 +53,8 @@ export class Viewer {
 
   private readonly clock = new Clock();
   private readonly raycaster = new Raycaster();
+  /** Переиспользуемый габарит: опора считается на каждое движение указателя */
+  private readonly supportBox = new Box3();
   private rafId: number | null = null;
   private disposed = false;
   private firstFrameTime: number | null = null;
@@ -111,16 +114,33 @@ export class Viewer {
    * вложенную деталь разрешается во владельца через реестр: пользователь
    * целится в дверцу шкафа, а выделяется шкаф целиком.
    */
-  pick(ndc: Vector2): RegisteredInstance | null {
+  pick(ndc: Vector2, excludeInstanceId?: string): RegisteredInstance | null {
     const roots = [...this.registry.all()].map((instance) => instance.root);
     if (roots.length === 0) return null;
 
     this.raycaster.setFromCamera(ndc, this.camera);
     for (const hit of this.raycaster.intersectObjects(roots, true)) {
       const owner = this.registry.resolve(hit.object);
-      if (owner) return owner;
+      if (owner && owner.instanceId !== excludeInstanceId) return owner;
     }
     return null;
+  }
+
+  /**
+   * Верх объекта под экранной точкой, миллиметры. Ноль означает пол.
+   *
+   * Опора выбирается лучом, а не габаритами в плане: пользователь видит
+   * поверхность, в которую целится, и вещь должна лечь именно на неё.
+   * По габаритам мелочь, брошенная под навесным шкафом, забиралась бы
+   * ему на верх, потому что в плане шкаф оказывается «под точкой».
+   *
+   * Берётся именно ВЕРХ задетого объекта, а не высота попадания луча:
+   * иначе вещь, брошенная в бок тумбы, влипла бы в её стенку.
+   */
+  supportTopMm(ndc: Vector2, excludeInstanceId?: string): number {
+    const owner = this.pick(ndc, excludeInstanceId);
+    if (!owner) return 0;
+    return this.supportBox.setFromObject(owner.root).max.y * 1000;
   }
 
   /**

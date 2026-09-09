@@ -118,4 +118,43 @@ describe('CameraController', () => {
     const looking = camera.getWorldDirection(new Vector3());
     expect(forward.dot(looking)).toBeCloseTo(1, 5);
   });
+
+  describe('проекция на горизонтальную плоскость', () => {
+    it('на нулевой высоте совпадает с проекцией на пол', () => {
+      const ndc = new Vector2(0.2, -0.3);
+      const floor = controller.projectToFloor(ndc)!;
+      const plane = controller.projectToPlane(ndc, 0)!;
+
+      expect(plane.x).toBeCloseTo(floor.x, 9);
+      expect(plane.z).toBeCloseTo(floor.z, 9);
+    });
+
+    it('попадание лежит на заданной высоте', () => {
+      const hit = controller.projectToPlane(new Vector2(0, -0.2), 0.82);
+      expect(hit).not.toBeNull();
+      expect(hit!.y).toBeCloseTo(0.82, 9);
+    });
+
+    it('точка на поднятой плоскости ближе к камере, чем на полу', () => {
+      // Луч, нацеленный на крышку тумбы, пересекает пол далеко за ней:
+      // именно поэтому позицию нельзя считать по полу
+      const ndc = new Vector2(0, -0.4);
+      const floor = controller.projectToFloor(ndc)!;
+      const raised = controller.projectToPlane(ndc, 0.82)!;
+
+      const distanceToFloor = floor.distanceTo(camera.position);
+      const distanceToRaised = raised.distanceTo(camera.position);
+      expect(distanceToRaised).toBeLessThan(distanceToFloor);
+    });
+
+    it('повторные вызовы с разной высотой не портят друг друга', () => {
+      const ndc = new Vector2(0.1, -0.25);
+      const first = controller.projectToPlane(ndc, 0)!;
+      controller.projectToPlane(ndc, 1.45);
+      const again = controller.projectToPlane(ndc, 0)!;
+
+      expect(again.x).toBeCloseTo(first.x, 9);
+      expect(again.z).toBeCloseTo(first.z, 9);
+    });
+  });
 });
