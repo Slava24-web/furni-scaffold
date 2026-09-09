@@ -35,26 +35,34 @@ function smoothNoise(x, y, scale, seed) {
   );
 }
 
-/** Дубовая текстура: годичные кольца плюс мелкое волокно. */
+/**
+ * Дубовая текстура: годичные кольца плюс мелкое волокно.
+ *
+ * Контраст колец намеренно низкий. Выразительный рисунок на модели
+ * размером с фасад читается как пластик под дерево: у настоящего шпона
+ * перепад тона мягкий, а рисунок мелкий.
+ */
 export async function woodTexture(size = 512) {
   const data = Buffer.alloc(size * size * 3);
 
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
-      const warp = smoothNoise(x, y, 90, 7) * 26;
-      const rings = Math.sin((x + warp) * 0.09) * 0.5 + 0.5;
-      const grain = smoothNoise(x, y, 3, 11) * 0.18;
-      const tone = 0.62 + rings * 0.22 + grain;
+      const warp = smoothNoise(x, y, 130, 7) * 18;
+      const rings = Math.sin((x + warp) * 0.055) * 0.5 + 0.5;
+      const grain = smoothNoise(x, y, 2.2, 11) * 0.09;
+      const tone = 0.82 + rings * 0.1 + grain;
 
       const index = (y * size + x) * 3;
-      data[index] = Math.min(255, Math.round(tone * 214));
-      data[index + 1] = Math.min(255, Math.round(tone * 165));
-      data[index + 2] = Math.min(255, Math.round(tone * 108));
+      data[index] = clampByte(tone * 196);
+      data[index + 1] = clampByte(tone * 158);
+      data[index + 2] = clampByte(tone * 116);
     }
   }
 
   return sharp(data, { raw: { width: size, height: size, channels: 3 } }).png().toBuffer();
 }
+
+const clampByte = (value) => Math.max(0, Math.min(255, Math.round(value)));
 
 /** Рогожка: переплетение нитей по двум осям. */
 export async function fabricTexture(size = 512) {
@@ -62,14 +70,14 @@ export async function fabricTexture(size = 512) {
 
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
-      const weave = (Math.sin(x * 0.8) * Math.sin(y * 0.8)) * 0.08;
-      const fibre = smoothNoise(x, y, 2.5, 23) * 0.14;
-      const tone = 0.55 + weave + fibre;
+      const weave = Math.sin(x * 0.8) * Math.sin(y * 0.8) * 0.05;
+      const fibre = smoothNoise(x, y, 2.2, 23) * 0.09;
+      const tone = 0.86 + weave + fibre;
 
       const index = (y * size + x) * 3;
-      data[index] = Math.round(tone * 150);
-      data[index + 1] = Math.round(tone * 154);
-      data[index + 2] = Math.round(tone * 150);
+      data[index] = clampByte(tone * 132);
+      data[index + 1] = clampByte(tone * 136);
+      data[index + 2] = clampByte(tone * 132);
     }
   }
 

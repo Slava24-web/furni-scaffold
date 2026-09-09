@@ -13,6 +13,7 @@
 import { cylinder, mergeGeometries, roundedBox, segmentedBox, translate } from './geometry.mjs';
 import { KITCHEN_PRODUCTS } from './kitchen.mjs';
 import { carcassPanels } from './carcass.mjs';
+import { panelFacade } from './facade.mjs';
 
 export const TEST_TENANT = {
   slug: 'test',
@@ -27,9 +28,11 @@ export const TEST_TENANT = {
 export const MATERIALS = {
   oak: {
     code: 'oak',
+    // Цвет несёт текстура, поэтому множитель почти белый: иначе тон
+    // перемножается дважды и дуб уходит в оранжевый пластик
     name: 'Дуб натуральный',
-    baseColorFactor: [0.72, 0.56, 0.36, 1],
-    roughness: 0.68,
+    baseColorFactor: [0.96, 0.94, 0.9, 1],
+    roughness: 0.62,
     metallic: 0,
     texture: 'wood',
     priceModifierCents: 0,
@@ -55,8 +58,8 @@ export const MATERIALS = {
   fabric: {
     code: 'fabric',
     name: 'Рогожка серая',
-    baseColorFactor: [0.55, 0.57, 0.56, 1],
-    roughness: 0.95,
+    baseColorFactor: [0.94, 0.95, 0.94, 1],
+    roughness: 0.92,
     metallic: 0,
     texture: 'fabric',
     priceModifierCents: 0,
@@ -109,8 +112,8 @@ function wardrobe() {
     white: carcassPanels(width, corpusHeight, depth, { bottomMm: plinth, shelves: 3 }),
     graphite: [translate(segmentedBox(width - 60, plinth, depth - 40, 2), 0, plinth / 2, 0)],
     oak: [
-      translate(roundedBox(doorWidth, doorHeight, 18, 5, 6), -(doorWidth / 2 + 6), doorY, doorZ),
-      translate(roundedBox(doorWidth, doorHeight, 18, 5, 6), doorWidth / 2 + 6, doorY, doorZ),
+      ...panelFacade(doorWidth, doorHeight, 18, { x: -(doorWidth / 2 + 6), y: doorY, z: doorZ }),
+      ...panelFacade(doorWidth, doorHeight, 18, { x: doorWidth / 2 + 6, y: doorY, z: doorZ }),
     ],
     steel: [
       verticalHandle(-30, doorY, doorZ + 20, 900),

@@ -32,7 +32,7 @@ test.describe('Бюджет производительности сцены', ()
 
     // Прогреваем: первые кадры включают компиляцию шейдеров
     await page.waitForTimeout(2000);
-    await orbitCamera(page, 3000);
+    await orbitCamera(page, 180);
 
     const snapshot = await page.evaluate(() => window.__furni.viewer.telemetry.snapshot());
     const budget = RENDER_BUDGETS.mid;
@@ -105,19 +105,51 @@ async function seedScene(page: Page, count: number): Promise<void> {
   );
 }
 
-async function orbitCamera(page: Page, durationMs: number): Promise<void> {
-  const box = await page.locator('canvas').boundingBox();
-  if (!box) throw new Error('Канвас не найден');
-  const steps = Math.floor(durationMs / 16);
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  await page.mouse.down();
-  for (let i = 0; i < steps; i++) {
-    await page.mouse.move(
-      box.x + box.width / 2 + Math.sin(i / 10) * 200,
-      box.y + box.height / 2 + Math.cos(i / 15) * 80,
-    );
-  }
-  await page.mouse.up();
+/**
+ * Облёт сцены с движением указателя НА КАЖДЫЙ КАДР.
+ *
+ * Жест разыгрывается внутри страницы по requestAnimationFrame, а не
+ * через CDP: между вызовами page.mouse.move проходит несколько кадров,
+ * сцена при рендере по требованию перерисовывается рывками, и подряд
+ * отрисованных кадров не набирается вовсе. Телеметрия считает интервал
+ * только между соседними отрисованными кадрами, поэтому выборка
+ * оставалась пустой. Настоящий палец даёт движение каждый кадр — это
+ * и воспроизводим.
+ */
+async function orbitCamera(page: Page, frames: number): Promise<void> {
+  await page.evaluate(async (steps) => {
+    const canvas = document.querySelector('canvas');
+    if (!canvas) throw new Error('Канвас не найден');
+
+    const rect = canvas.getBoundingClientRect();
+    const centreX = rect.left + rect.width / 2;
+    const centreY = rect.top + rect.height / 2;
+    const fire = (type: string, x: number, y: number): void => {
+      canvas.dispatchEvent(
+        new PointerEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          clientX: x,
+          clientY: y,
+          pointerId: 1,
+          isPrimary: true,
+        }),
+      );
+    };
+
+    fire('pointerdown', centreX, centreY);
+    await new Promise<void>((resolve) => {
+      let index = 0;
+      const step = (): void => {
+        fire('pointermove', centreX + Math.sin(index / 10) * 200, centreY + Math.cos(index / 15) * 80);
+        index += 1;
+        if (index < steps) requestAnimationFrame(step);
+        else resolve();
+      };
+      requestAnimationFrame(step);
+    });
+    fire('pointerup', centreX, centreY);
+  }, frames);
 }
 
 async function measureLcp(page: Page): Promise<number> {

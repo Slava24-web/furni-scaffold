@@ -14,6 +14,7 @@ import {
   placementBox,
   planAngleDeg,
   restingHeightMm,
+  restsOnSomething,
   settlePlacements,
   supportTopMm,
   verticallyOverlapping,
@@ -712,5 +713,59 @@ describe('ограничение поиска опоры сверху', () => {
 
   it('ограничение ниже всех опор оставляет пол', () => {
     expect(supportTopMm({ x: 0, y: 0 }, [shelf, upper], 100)).toBe(0);
+  });
+});
+
+describe('осадка и опоры выше своей поверхности', () => {
+  /** Столешница с пристенным плинтусом: верх габарита выше рабочей плоскости. */
+  const worktop = (over: Partial<Box> = {}): Box => ({
+    centre: { x: 0, y: 0 },
+    halfWidthMm: 600,
+    halfDepthMm: 300,
+    rotationDeg: 0,
+    bottomMm: 820,
+    topMm: 918,
+    ...over,
+  });
+
+  const sinkItem = (y: number) => ({
+    instanceId: 'sink',
+    placement: { position: { x: 0, y, z: 0 }, rotationY: 0 },
+    size: { widthMm: 500, heightMm: 180, depthMm: 440 },
+    mountHeightMm: 0,
+    stackable: true,
+  });
+
+  const worktopItem = {
+    instanceId: 'worktop',
+    placement: { position: { x: 0, y: 820, z: 0 }, rotationY: 0 },
+    size: { widthMm: 1200, heightMm: 98, depthMm: 600 },
+    mountHeightMm: 820,
+    stackable: false,
+  };
+
+  it('вещь на рабочей плоскости не роняется из-за плинтуса выше неё', () => {
+    // Верх габарита столешницы 918, мойка стоит на 858: сравнение
+    // с верхом габарита сочло бы столешницу «висящей выше»
+    expect(settlePlacements([worktopItem, sinkItem(858)])).toEqual([]);
+  });
+
+  it('вещь опускается, когда столешницу убрали', () => {
+    expect(settlePlacements([sinkItem(858)])).toEqual([{ instanceId: 'sink', yMm: 0 }]);
+  });
+
+  it('опорой считается вхождение в вертикальный диапазон', () => {
+    expect(restsOnSomething({ x: 0, y: 0 }, 858, [worktop()])).toBe(true);
+    expect(restsOnSomething({ x: 0, y: 0 }, 820, [worktop()])).toBe(true);
+    expect(restsOnSomething({ x: 0, y: 0 }, 918, [worktop()])).toBe(true);
+  });
+
+  it('вне диапазона опоры нет', () => {
+    expect(restsOnSomething({ x: 0, y: 0 }, 1200, [worktop()])).toBe(false);
+    expect(restsOnSomething({ x: 0, y: 0 }, 400, [worktop()])).toBe(false);
+  });
+
+  it('опора в стороне не считается', () => {
+    expect(restsOnSomething({ x: 5000, y: 0 }, 858, [worktop()])).toBe(false);
   });
 });

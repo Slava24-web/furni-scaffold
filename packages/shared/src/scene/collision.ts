@@ -360,6 +360,31 @@ export function boxContainsPoint(box: Box, point: Vec2, toleranceMm = 0): boolea
 }
 
 /**
+ * Есть ли под точкой опора, на которой объект уже стоит.
+ *
+ * Габарит опоры может быть выше самой опорной поверхности: у столешницы
+ * с пристенным плинтусом верх габарита на 60 мм выше плоскости, на которой
+ * стоит мойка. Сравнивать высоту объекта с верхом габарита нельзя — иначе
+ * такая опора считается «висящей выше» и объект роняется на предмет под ней.
+ *
+ * Поэтому проверяется вхождение: низ объекта лежит в вертикальном
+ * диапазоне опоры.
+ */
+export function restsOnSomething(
+  point: Vec2,
+  bottomMm: number,
+  supports: readonly Box[],
+  toleranceMm = TOUCH_TOLERANCE_MM,
+): boolean {
+  return supports.some(
+    (support) =>
+      bottomMm >= support.bottomMm - toleranceMm &&
+      bottomMm <= support.topMm + toleranceMm &&
+      boxContainsPoint(support, point),
+  );
+}
+
+/**
  * Верх опоры под точкой: на какой высоте окажется объект, поставленный сюда.
  *
  * Ноль означает пол. Берётся максимум, а не первое попадание: над тумбой
@@ -540,13 +565,8 @@ export function settlePlacements(items: readonly SettleItem[]): SettleChange[] {
 
   for (const item of ordered) {
     const centre = { x: item.placement.position.x, y: item.placement.position.z };
-    // Осадка только опускает: подниматься объект может лишь под рукой
-    // пользователя, где опора выбирается лучом по тому, во что он целится
     const yMm = item.stackable
-      ? restingHeightMm(
-          item.mountHeightMm,
-          supportTopMm(centre, settled, item.placement.position.y),
-        )
+      ? settledHeight(item, centre, settled)
       : item.mountHeightMm;
 
     if (yMm !== item.placement.position.y) {
@@ -559,4 +579,21 @@ export function settlePlacements(items: readonly SettleItem[]): SettleChange[] {
   }
 
   return changes;
+}
+
+/**
+ * Высота объекта после осадки.
+ *
+ * Пока под объектом что-то есть, он остаётся на месте: точную постановку
+ * пользователя осадка не трогает. Опора исчезла — объект опускается на
+ * ближайшую, что ниже, но никогда не поднимается сам.
+ */
+function settledHeight(
+  item: SettleItem,
+  centre: Vec2,
+  settled: readonly Box[],
+): number {
+  const current = item.placement.position.y;
+  if (restsOnSomething(centre, current, settled)) return current;
+  return restingHeightMm(item.mountHeightMm, supportTopMm(centre, settled, current));
 }

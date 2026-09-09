@@ -4,8 +4,12 @@ import {
   GridHelper,
   Group,
   HemisphereLight,
+  PMREMGenerator,
   type Scene,
+  type Texture,
+  type WebGLRenderer,
 } from 'three';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 
 export type EnvironmentPreset = 'daylight' | 'evening' | 'studio';
 
@@ -72,12 +76,45 @@ export class Environment {
 
   private readonly hemisphere = new HemisphereLight(0xffffff, 0xb9bdc4, 2.2);
   private readonly sun = new DirectionalLight(0xfff4e6, 2.0);
+  private environmentMap: Texture | null = null;
 
-  constructor(private readonly scene: Scene) {
+  constructor(
+    private readonly scene: Scene,
+    renderer?: WebGLRenderer,
+  ) {
     this.root.name = 'environment';
     this.root.add(this.hemisphere, this.sun);
     scene.add(this.root);
+
+    if (renderer) this.buildEnvironmentMap(renderer);
     this.apply('daylight');
+  }
+
+  /**
+   * Карта окружения для отражений.
+   *
+   * Без неё металл физически не может выглядеть металлом: у него нет
+   * диффузной составляющей, отражать нечего, и хромированный смеситель
+   * рендерится чёрным пятном. Она же добавляет мягкую подсветку матовым
+   * поверхностям, поэтому фасады перестают выглядеть плоскими.
+   *
+   * Считается один раз на старте и стоит несколько миллисекунд:
+   * PMREM это свёртка маленькой кубической карты, а не рендер сцены.
+   */
+  private buildEnvironmentMap(renderer: WebGLRenderer): void {
+    const pmrem = new PMREMGenerator(renderer);
+    const room = new RoomEnvironment();
+
+    this.environmentMap = pmrem.fromScene(room, 0.04).texture;
+    this.scene.environment = this.environmentMap;
+
+    // Исходная сцена и генератор больше не нужны: держим только текстуру
+    room.traverse((object) => {
+      const mesh = object as { geometry?: { dispose(): void }; material?: { dispose(): void } };
+      mesh.geometry?.dispose();
+      mesh.material?.dispose();
+    });
+    pmrem.dispose();
   }
 
   apply(preset: EnvironmentPreset): void {
@@ -127,6 +164,11 @@ export class Environment {
 
   dispose(): void {
     this.disposeGrid();
+    if (this.environmentMap) {
+      this.scene.environment = null;
+      this.environmentMap.dispose();
+      this.environmentMap = null;
+    }
     this.hemisphere.dispose();
     this.sun.dispose();
     this.scene.remove(this.root);

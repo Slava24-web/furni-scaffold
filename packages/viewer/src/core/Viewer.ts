@@ -86,7 +86,7 @@ export class Viewer {
     this.camera.lookAt(0, 0.8, 0);
 
     this.registry = new SceneRegistry(this.scene);
-    this.environment = new Environment(this.scene);
+    this.environment = new Environment(this.scene, this.renderer);
     this.selection = new SelectionIndicator(this.scene);
     this.conflicts = new ConflictHighlighter(this.scene);
     this.rotation = new RotationGizmo(this.scene);

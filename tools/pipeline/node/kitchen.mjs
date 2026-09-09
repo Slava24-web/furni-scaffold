@@ -13,6 +13,7 @@
  */
 import { cylinder, mergeGeometries, roundedBox, segmentedBox, translate } from './geometry.mjs';
 import { carcassPanels, openBoxPanels } from './carcass.mjs';
+import { flatFacade, panelFacade } from './facade.mjs';
 
 export const PLINTH = 100;
 export const BASE_CARCASS = 720;
@@ -53,9 +54,16 @@ function bracketHandle(centreXMm, centreYMm, frontZMm, spanMm = 224) {
   return parts;
 }
 
-/** Фасад с зазором по периметру и ручкой. */
+/**
+ * Фасад с зазором по периметру. Возвращает список деталей: у филёнчатого
+ * фасада их пять, у плоского фронта ящика одна.
+ */
 function facade(widthMm, heightMm, centreYMm, frontZMm) {
-  return roundedBoxAt(widthMm - FACADE_GAP * 2, heightMm, FACADE_THICKNESS, 0, centreYMm, frontZMm);
+  return panelFacade(widthMm - FACADE_GAP * 2, heightMm, FACADE_THICKNESS, {
+    x: 0,
+    y: centreYMm,
+    z: frontZMm,
+  });
 }
 
 function roundedBoxAt(w, h, d, x, y, z, radius = 3, segments = 3) {
@@ -82,7 +90,7 @@ function baseCabinet(widthMm) {
   return {
     white: carcass(widthMm, BASE_CARCASS, BASE_DEPTH, PLINTH),
     graphite: [plinth(widthMm, BASE_DEPTH)],
-    oak: [facade(widthMm, BASE_CARCASS - FACADE_GAP * 2, facadeY, facadeZ)],
+    oak: facade(widthMm, BASE_CARCASS - FACADE_GAP * 2, facadeY, facadeZ),
     steel: bracketHandle(0, PLINTH + BASE_CARCASS - 90, facadeZ + FACADE_THICKNESS / 2),
   };
 }
@@ -96,7 +104,7 @@ function baseDrawers(widthMm) {
   const handles = [];
   for (let i = 0; i < 3; i++) {
     const centreY = PLINTH + FACADE_GAP + drawerHeight / 2 + i * (drawerHeight + FACADE_GAP);
-    fronts.push(facade(widthMm, drawerHeight, centreY, facadeZ));
+    fronts.push(...facade(widthMm, drawerHeight, centreY, facadeZ));
     handles.push(...bracketHandle(0, centreY, facadeZ + FACADE_THICKNESS / 2, 160));
   }
 
@@ -115,7 +123,7 @@ function wallCabinet(widthMm, heightMm) {
 
   return {
     white: carcass(widthMm, heightMm, WALL_DEPTH, 0),
-    oak: [facade(widthMm, heightMm - FACADE_GAP * 2, heightMm / 2, facadeZ)],
+    oak: facade(widthMm, heightMm - FACADE_GAP * 2, heightMm / 2, facadeZ),
     steel: bracketHandle(0, 90, facadeZ + FACADE_THICKNESS / 2),
   };
 }
@@ -132,8 +140,8 @@ function tallCabinet(widthMm) {
     white: carcass(widthMm, height, BASE_DEPTH, PLINTH, 4),
     graphite: [plinth(widthMm, BASE_DEPTH)],
     oak: [
-      facade(widthMm, lower, PLINTH + FACADE_GAP + lower / 2, facadeZ),
-      facade(widthMm, upper, PLINTH + lower + FACADE_GAP * 2 + upper / 2, facadeZ),
+      ...facade(widthMm, lower, PLINTH + FACADE_GAP + lower / 2, facadeZ),
+      ...facade(widthMm, upper, PLINTH + lower + FACADE_GAP * 2 + upper / 2, facadeZ),
     ],
     steel: [
       ...bracketHandle(0, PLINTH + lower - 60, facadeZ + FACADE_THICKNESS / 2),
@@ -142,24 +150,103 @@ function tallCabinet(widthMm) {
   };
 }
 
-/** Столешница. Кладётся на нижний ряд, поэтому origin у неё внизу плиты. */
+/**
+ * Столешница с пристенным плинтусом.
+ *
+ * Плинтус закрывает стык со стеной: без него столешница выглядит
+ * положенной сверху доской, а не частью кухни.
+ */
 function worktop(widthMm) {
+  const depth = 600;
+  const offsetZ = (depth - BASE_DEPTH) / 2 - 20;
+  const skirtHeight = 60;
+  const skirtThickness = 18;
+
   return {
     stone: [
+      translate(roundedBox(widthMm, WORKTOP_THICKNESS, depth, 4, 3), 0, WORKTOP_THICKNESS / 2, offsetZ),
       translate(
-        roundedBox(widthMm, WORKTOP_THICKNESS, 600, 4, 3),
+        segmentedBox(widthMm, skirtHeight, skirtThickness, 1),
         0,
-        WORKTOP_THICKNESS / 2,
-        (600 - BASE_DEPTH) / 2 - 20,
+        WORKTOP_THICKNESS + skirtHeight / 2,
+        offsetZ - (depth - skirtThickness) / 2,
       ),
     ],
   };
 }
 
+/**
+ * Врезная мойка с однорычажным смесителем.
+ *
+ * Ставится на столешницу: собственной отметки нет, высоту даёт опора
+ * под указателем.
+ */
+function sink() {
+  const width = 500;
+  const depth = 440;
+  const wallHeight = 170;
+  const wall = 12;
+  const rim = 26;
+
+  const parts = [];
+  // Дно чаши и четыре борта
+  parts.push(translate(segmentedBox(width, wall, depth, 1), 0, wall / 2, 0));
+  for (const side of [-1, 1]) {
+    parts.push(
+      translate(segmentedBox(wall, wallHeight, depth, 1), (side * (width - wall)) / 2, wallHeight / 2, 0),
+    );
+    parts.push(
+      translate(
+        segmentedBox(width - wall * 2, wallHeight, wall, 1),
+        0,
+        wallHeight / 2,
+        (side * (depth - wall)) / 2,
+      ),
+    );
+  }
+
+  // Бортик по периметру: им мойка ложится на столешницу
+  parts.push(
+    translate(roundedBox(width + rim * 2, 10, depth + rim * 2, 3, 2), 0, wallHeight + 5, 0),
+  );
+
+  // Смеситель: стойка и излив
+  const tapZ = -(depth / 2 + rim / 2);
+  parts.push(translate(cylinder(19, 300, 12), 0, wallHeight + 150, tapZ));
+  parts.push(translate(roundedBox(24, 24, 190, 12, 4), 0, wallHeight + 290, tapZ + 95));
+
+  return { steel: parts };
+}
+
+/**
+ * Варочная панель: стеклянная плита с конфорками.
+ * Как и мойка, встаёт на ту поверхность, в которую целятся.
+ */
+function hob() {
+  const width = 580;
+  const depth = 510;
+
+  const glass = [translate(roundedBox(width, 12, depth, 3, 2), 0, 6, 0)];
+  const burners = [];
+  for (const dx of [-1, 1]) {
+    for (const dz of [-1, 1]) {
+      burners.push(
+        translate(cylinder(88, 5, 20), dx * (width / 4), 14, dz * (depth / 4)),
+      );
+    }
+  }
+
+  return { graphite: glass, steel: burners };
+}
+
 /** Отдельная деталь: фасад или дверца с ручкой. */
 function loosePanel(widthMm, heightMm, withHandle) {
   const parts = {
-    oak: [roundedBoxAt(widthMm, heightMm, FACADE_THICKNESS, 0, heightMm / 2, 0)],
+    oak: panelFacade(widthMm, heightMm, FACADE_THICKNESS, {
+      x: 0,
+      y: heightMm / 2,
+      z: 0,
+    }),
   };
   if (withHandle) {
     parts.steel = bracketHandle(0, heightMm - 90, FACADE_THICKNESS / 2);
@@ -174,7 +261,7 @@ function drawerBox(widthMm) {
   return {
     // Настоящий короб: боковины, дно и задний борт, перед закрыт фасадом
     white: openBoxPanels(widthMm - 40, height, depth, { bottomMm: 0 }),
-    oak: [roundedBoxAt(widthMm, height, FACADE_THICKNESS, 0, height / 2, depth / 2 - 10)],
+    oak: flatFacade(widthMm, height, FACADE_THICKNESS, { x: 0, y: height / 2, z: depth / 2 - 10 }),
     steel: bracketHandle(0, height / 2, depth / 2 - 10 + FACADE_THICKNESS / 2, 160),
   };
 }
@@ -267,6 +354,26 @@ export const KITCHEN_PRODUCTS = [
     mountHeightMm: WORKTOP_HEIGHT,
     snapToWall: true,
     build: () => worktop(2000),
+  },
+  {
+    sku: 'TEST-KIT-SINK-500',
+    name: 'Кухня: мойка 500 со смесителем',
+    category: 'Кухня / Техника и мойки',
+    basePriceCents: 1450000,
+    mountHeightMm: 0,
+    snapToWall: false,
+    stackable: true,
+    build: sink,
+  },
+  {
+    sku: 'TEST-KIT-HOB-580',
+    name: 'Кухня: варочная панель 580',
+    category: 'Кухня / Техника и мойки',
+    basePriceCents: 2190000,
+    mountHeightMm: 0,
+    snapToWall: false,
+    stackable: true,
+    build: hob,
   },
   {
     sku: 'TEST-KIT-FCD-600',
