@@ -7,7 +7,11 @@ import {
   findConflicts,
   hasConflicts,
   isInsideContour,
+  normalizeAngleDeg,
+  overlayCandidates,
   placementBox,
+  planAngleDeg,
+  verticallyOverlapping,
   wallToBox,
   type Box,
 } from './collision';
@@ -298,5 +302,124 @@ describe('поиск конфликтов', () => {
     const upper = cabinet({ bottomMm: 1450, topMm: 2170, halfDepthMm: 190 });
     const report = findConflicts(upper, [other('base', 0, 0)], room.walls);
     expect(hasConflicts(report)).toBe(false);
+  });
+});
+
+describe('выравнивание поверх', () => {
+  /** Нижний модуль 800 мм глубиной 600, стоящий у стены. */
+  const base = cabinet({ halfWidthMm: 400, halfDepthMm: 300, bottomMm: 0, topMm: 820 });
+
+  it('совмещает задние грани: столешница и тумба прижаты к одной стене', () => {
+    // Столешница глубже тумбы на 40 мм, значит её центр уходит вперёд на 40
+    const [leftFlush] = overlayCandidates(base, 1000, 340);
+    expect(leftFlush?.position.y).toBeCloseTo(40, 6);
+  });
+
+  it('даёт три варианта вдоль ряда', () => {
+    const alignments = overlayCandidates(base, 1000, 300).map((c) => c.alignment);
+    expect(alignments.sort()).toEqual(['centred', 'leftFlush', 'rightFlush']);
+  });
+
+  it('по левому краю совмещает левые грани', () => {
+    const left = overlayCandidates(base, 1000, 300).find((c) => c.alignment === 'leftFlush')!;
+    // Левая грань тумбы на -400, левая грань столешницы должна встать туда же
+    expect(left.position.x - 1000).toBeCloseTo(-400, 6);
+  });
+
+  it('по правому краю совмещает правые грани', () => {
+    const right = overlayCandidates(base, 1000, 300).find((c) => c.alignment === 'rightFlush')!;
+    expect(right.position.x + 1000).toBeCloseTo(400, 6);
+  });
+
+  it('по центру оставляет центр цели', () => {
+    const centred = overlayCandidates(base, 1000, 300).find((c) => c.alignment === 'centred')!;
+    expect(centred.position.x).toBeCloseTo(0, 6);
+  });
+
+  it('наследует разворот цели', () => {
+    const rotated = cabinet({ rotationDeg: 90, halfWidthMm: 400 });
+    for (const candidate of overlayCandidates(rotated, 1000, 300)) {
+      expect(candidate.rotationDeg).toBe(90);
+    }
+  });
+
+  it('у повёрнутой цели выравнивание идёт вдоль её осей', () => {
+    const rotated = cabinet({ rotationDeg: 90, halfWidthMm: 400, halfDepthMm: 300 });
+    const left = overlayCandidates(rotated, 1000, 300).find((c) => c.alignment === 'leftFlush')!;
+    // Локальная +X при повороте на 90° смотрит в −Z плана
+    expect(left.position.x).toBeCloseTo(0, 6);
+    expect(left.position.y).toBeCloseTo(-600, 6);
+  });
+
+  it('выровненная столешница не конфликтует с тумбой', () => {
+    const [leftFlush] = overlayCandidates(base, 1000, 300);
+    const worktop: Box = {
+      centre: leftFlush!.position,
+      halfWidthMm: 1000,
+      halfDepthMm: 300,
+      rotationDeg: leftFlush!.rotationDeg,
+      bottomMm: 820,
+      topMm: 858,
+    };
+    expect(boxesOverlap(base, worktop)).toBe(false);
+  });
+});
+
+describe('пересечение по высоте', () => {
+  it('модули одного ряда пересекаются по высоте', () => {
+    expect(verticallyOverlapping({ bottomMm: 0, topMm: 820 }, { bottomMm: 0, topMm: 820 })).toBe(true);
+  });
+
+  it('столешница над тумбой по высоте не пересекается', () => {
+    expect(verticallyOverlapping({ bottomMm: 0, topMm: 820 }, { bottomMm: 820, topMm: 858 })).toBe(
+      false,
+    );
+  });
+
+  it('верхний шкаф над нижним по высоте не пересекается', () => {
+    expect(verticallyOverlapping({ bottomMm: 0, topMm: 820 }, { bottomMm: 1450, topMm: 2170 })).toBe(
+      false,
+    );
+  });
+
+  it('пенал пересекается и с нижним, и с верхним рядом', () => {
+    const tall = { bottomMm: 0, topMm: 2240 };
+    expect(verticallyOverlapping(tall, { bottomMm: 0, topMm: 820 })).toBe(true);
+    expect(verticallyOverlapping(tall, { bottomMm: 1450, topMm: 2170 })).toBe(true);
+  });
+});
+
+describe('углы в плане', () => {
+  it('ноль соответствует направлению +Z', () => {
+    expect(planAngleDeg(0, 1)).toBe(0);
+  });
+
+  it('90 градусов соответствует направлению +X', () => {
+    expect(planAngleDeg(1, 0)).toBe(90);
+  });
+
+  it('обратные направления дают 180 и -90', () => {
+    expect(Math.abs(planAngleDeg(0, -1))).toBe(180);
+    expect(planAngleDeg(-1, 0)).toBe(-90);
+  });
+
+  it('согласован с разворотом объекта: угол задаёт направление локальной +Z', () => {
+    for (const angle of [0, 37, 90, 145, -63]) {
+      const { forward } = boxAxes({ rotationDeg: angle });
+      expect(normalizeAngleDeg(planAngleDeg(forward.x, forward.y) - angle)).toBeCloseTo(0, 6);
+    }
+  });
+
+  it('приведение угла укладывает значение в (-180, 180]', () => {
+    expect(normalizeAngleDeg(0)).toBe(0);
+    expect(normalizeAngleDeg(370)).toBe(10);
+    expect(normalizeAngleDeg(-370)).toBe(-10);
+    expect(normalizeAngleDeg(540)).toBe(180);
+    expect(normalizeAngleDeg(-180)).toBe(180);
+  });
+
+  it('разница углов через ноль не даёт скачка на 360', () => {
+    // Поворот через границу: с 179 на -179 это два градуса, а не 358
+    expect(normalizeAngleDeg(-179 - 179)).toBe(2);
   });
 });

@@ -76,9 +76,7 @@ function project(points: readonly Vec2[], axis: Vec2): { min: number; max: numbe
   return { min, max };
 }
 
-function verticalOverlap(a: Box, b: Box, toleranceMm: number): boolean {
-  return a.bottomMm < b.topMm - toleranceMm && b.bottomMm < a.topMm - toleranceMm;
-}
+
 
 /**
  * Пересечение двух габаритов по теореме о разделяющей оси.
@@ -88,7 +86,7 @@ function verticalOverlap(a: Box, b: Box, toleranceMm: number): boolean {
  * нормали от каждого прямоугольника.
  */
 export function boxesOverlap(a: Box, b: Box, toleranceMm = TOUCH_TOLERANCE_MM): boolean {
-  if (!verticalOverlap(a, b, toleranceMm)) return false;
+  if (!verticallyOverlapping(a, b, toleranceMm)) return false;
 
   const cornersA = boxCorners(a);
   const cornersB = boxCorners(b);
@@ -125,6 +123,15 @@ export function wallToBox(wall: Wall): Box {
     bottomMm: 0,
     topMm: wall.height,
   };
+}
+
+/** Пересекаются ли габариты по высоте. */
+export function verticallyOverlapping(
+  a: Pick<Box, 'bottomMm' | 'topMm'>,
+  b: Pick<Box, 'bottomMm' | 'topMm'>,
+  toleranceMm = TOUCH_TOLERANCE_MM,
+): boolean {
+  return a.bottomMm < b.topMm - toleranceMm && b.bottomMm < a.topMm - toleranceMm;
 }
 
 export type DockSide = 'right' | 'left' | 'front' | 'back';
@@ -269,4 +276,71 @@ export function findConflicts(
   const outsideRoom = isClosedContour(walls) && !isInsideContour(subject.centre, walls);
 
   return { objectIds, wallIds, outsideRoom };
+}
+
+export type OverlayAlignment = 'leftFlush' | 'rightFlush' | 'centred';
+
+export interface OverlayCandidate {
+  position: Vec2;
+  rotationDeg: number;
+  alignment: OverlayAlignment;
+}
+
+/**
+ * Позиции, в которых объект выравнивается ПОВЕРХ другого.
+ *
+ * Нужны для того, что не стоит рядом, а лежит сверху: столешница над
+ * нижним рядом, верхний шкаф над нижним. Стыковать их боками нельзя —
+ * столешница уехала бы вбок от тумбы вместо того, чтобы лечь на неё.
+ *
+ * Задняя грань совмещается с задней гранью цели: и столешница, и шкаф
+ * прижаты к одной стене, а спереди свесы у них разные. Вдоль ряда даётся
+ * три варианта — по левому краю, по правому и по центру: ими собирается
+ * и середина ряда, и его торцы.
+ */
+export function overlayCandidates(
+  target: Box,
+  movingHalfWidthMm: number,
+  movingHalfDepthMm: number,
+): OverlayCandidate[] {
+  const { right, forward } = boxAxes(target);
+
+  // Совмещение задних граней: смещение вперёд на разницу полуглубин
+  const depthShift = movingHalfDepthMm - target.halfDepthMm;
+  const base = {
+    x: target.centre.x + forward.x * depthShift,
+    y: target.centre.y + forward.y * depthShift,
+  };
+
+  const shifted = (offset: number, alignment: OverlayAlignment): OverlayCandidate => ({
+    position: { x: base.x + right.x * offset, y: base.y + right.y * offset },
+    rotationDeg: target.rotationDeg,
+    alignment,
+  });
+
+  // Совместить левые грани значит сдвинуть центр ВПРАВО на разницу
+  // полуширин: широкая столешница выступает вправо, а не влево
+  const flush = movingHalfWidthMm - target.halfWidthMm;
+  return [
+    shifted(flush, 'leftFlush'),
+    shifted(-flush, 'rightFlush'),
+    shifted(0, 'centred'),
+  ];
+}
+
+/**
+ * Угол направления в плане, градусы.
+ *
+ * Ноль соответствует направлению +Z, потому что поворот объекта вокруг Y
+ * на φ переводит его локальную +Z именно туда. Возвращать atan2(z, x)
+ * значило бы держать в коде постоянную поправку на 90°.
+ */
+export function planAngleDeg(dx: number, dz: number): number {
+  return (Math.atan2(dx, dz) * 180) / Math.PI;
+}
+
+/** Разница углов, приведённая к диапазону (-180, 180]. */
+export function normalizeAngleDeg(deg: number): number {
+  const wrapped = ((deg + 180) % 360 + 360) % 360 - 180;
+  return wrapped === -180 ? 180 : wrapped;
 }

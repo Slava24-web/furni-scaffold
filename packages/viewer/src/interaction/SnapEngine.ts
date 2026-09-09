@@ -1,5 +1,10 @@
 import { Vector2 } from 'three';
-import { dockCandidates, type Box } from '@furni/shared';
+import {
+  dockCandidates,
+  overlayCandidates,
+  verticallyOverlapping,
+  type Box,
+} from '@furni/shared';
 
 /** Точечная цель: центр другого объекта, узел сетки, ось. */
 export interface PointSnapTarget {
@@ -10,11 +15,15 @@ export interface PointSnapTarget {
   rotation?: number;
   sourceId?: string;
   /**
-   * Габарит цели в плане. Если задан, цель участвует в стыковке боками
+   * Габарит цели. Если задан, цель участвует в стыковке или выравнивании
    * и НЕ участвует в притягивании к центру: совмещение центров всегда
    * означает наложение объектов друг на друга.
+   *
+   * Диапазон высот решает, что именно предложить: пересекающиеся по
+   * высоте объекты стыкуются боками, непересекающиеся выравниваются
+   * друг над другом.
    */
-  footprint?: { halfWidthMm: number; halfDepthMm: number };
+  footprint?: { halfWidthMm: number; halfDepthMm: number; bottomMm: number; topMm: number };
 }
 
 /**
@@ -63,6 +72,9 @@ export interface SnapConfig {
   objectHalfDepthMm?: number;
   /** Половина ширины перетаскиваемого объекта, мм. Нужна для стыковки. */
   objectHalfWidthMm?: number;
+  /** Диапазон высот перетаскиваемого объекта, мм. */
+  objectBottomMm?: number;
+  objectTopMm?: number;
 }
 
 export const DEFAULT_SNAP: Omit<SnapConfig, 'mmPerPixel'> = {
@@ -73,6 +85,8 @@ export const DEFAULT_SNAP: Omit<SnapConfig, 'mmPerPixel'> = {
   enableObjects: true,
   objectHalfDepthMm: 0,
   objectHalfWidthMm: 0,
+  objectBottomMm: 0,
+  objectTopMm: 0,
 };
 
 interface Candidate {
@@ -101,7 +115,7 @@ export class SnapEngine {
     const thresholdMm = config.thresholdPx * config.mmPerPixel;
 
     const best =
-      this.bestOf(this.dockCandidates(desired, config), thresholdMm) ??
+      this.bestOf(this.neighbourCandidates(desired, config), thresholdMm) ??
       this.bestOf(this.wallCandidates(desired, config), thresholdMm) ??
       this.bestOf(this.objectCandidates(desired, config), thresholdMm);
 
@@ -142,16 +156,24 @@ export class SnapEngine {
   }
 
   /**
-   * Стыковка боками: позиции, в которых объект встаёт вплотную к соседу
-   * и наследует его разворот. Ради этого кухонные модули и собираются
-   * в ряд без зазоров.
+   * Позиции относительно соседа: стыковка боками или выравнивание поверх.
+   *
+   * Что предложить, решает перекрытие по высоте. Модули одного ряда
+   * стыкуются гранями и собираются без зазоров. Столешница и верхний
+   * шкаф по высоте с нижним рядом не пересекаются — их надо не ставить
+   * рядом, а выравнивать над ним, иначе столешница уезжает вбок от тумбы.
    */
-  private dockCandidates(desired: Vector2, config: SnapConfig): Candidate[] {
+  private neighbourCandidates(desired: Vector2, config: SnapConfig): Candidate[] {
     if (!config.enableObjects) return [];
 
     const halfWidth = config.objectHalfWidthMm ?? 0;
     const halfDepth = config.objectHalfDepthMm ?? 0;
     if (halfWidth <= 0 && halfDepth <= 0) return [];
+
+    const moving = {
+      bottomMm: config.objectBottomMm ?? 0,
+      topMm: config.objectTopMm ?? 0,
+    };
 
     const candidates: Candidate[] = [];
     for (const target of this.targets) {
@@ -162,16 +184,22 @@ export class SnapEngine {
         halfWidthMm: target.footprint.halfWidthMm,
         halfDepthMm: target.footprint.halfDepthMm,
         rotationDeg: target.rotation ?? 0,
-        // Высота для стыковки не важна: соседа выбирает пользователь
-        bottomMm: 0,
-        topMm: 1,
+        bottomMm: target.footprint.bottomMm,
+        topMm: target.footprint.topMm,
       };
 
-      for (const dock of dockCandidates(box, halfWidth, halfDepth)) {
-        const position = new Vector2(dock.position.x, dock.position.y);
+      const sideBySide =
+        moving.topMm <= moving.bottomMm || verticallyOverlapping(box, moving);
+
+      const positions = sideBySide
+        ? dockCandidates(box, halfWidth, halfDepth)
+        : overlayCandidates(box, halfWidth, halfDepth);
+
+      for (const option of positions) {
+        const position = new Vector2(option.position.x, option.position.y);
         candidates.push({
           position,
-          rotation: dock.rotationDeg,
+          rotation: option.rotationDeg,
           target,
           distanceMm: desired.distanceTo(position),
         });

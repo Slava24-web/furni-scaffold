@@ -196,10 +196,16 @@ describe('стыковка модулей между собой', () => {
     position: new Vector2(x, z),
     rotation,
     sourceId: 'neighbour',
-    footprint: { halfWidthMm: 300, halfDepthMm: 300 },
+    footprint: { halfWidthMm: 300, halfDepthMm: 300, bottomMm: 0, topMm: 820 },
   });
 
-  const moving = { objectHalfWidthMm: 300, objectHalfDepthMm: 300 };
+  /** Такой же модуль: по высоте с соседом пересекается, значит стыкуется. */
+  const moving = {
+    objectHalfWidthMm: 300,
+    objectHalfDepthMm: 300,
+    objectBottomMm: 0,
+    objectTopMm: 820,
+  };
 
   it('ставит модуль грань в грань с соседом', () => {
     const engine = new SnapEngine();
@@ -292,6 +298,85 @@ describe('стыковка модулей между собой', () => {
     const result = engine.snap(new Vector2(1420, 10), config(10, moving));
     // Левая грань дальнего соседа ближе, чем правая грань ближнего
     expect(result.position.x).toBe(1400);
+  });
+});
+
+describe('выравнивание поверх соседа', () => {
+  /** Нижний модуль 800×600 у стены. */
+  const base = (): SnapTarget => ({
+    kind: 'object',
+    position: new Vector2(0, 0),
+    rotation: 0,
+    sourceId: 'base',
+    footprint: { halfWidthMm: 400, halfDepthMm: 300, bottomMm: 0, topMm: 820 },
+  });
+
+  /** Столешница 2000×600 на отметке 820. */
+  const worktop = {
+    objectHalfWidthMm: 1000,
+    objectHalfDepthMm: 300,
+    objectBottomMm: 820,
+    objectTopMm: 858,
+  };
+
+  it('столешница ложится поверх тумбы, а не встаёт рядом', () => {
+    const engine = new SnapEngine();
+    engine.setTargets([base()]);
+
+    // Целимся так, чтобы левые грани совпали: центр столешницы на +600
+    const result = engine.snap(new Vector2(640, 20), config(10, worktop));
+
+    expect(result.snapped).toBe(true);
+    expect(result.position.x).toBe(600);
+    expect(result.position.y).toBe(0);
+  });
+
+  it('даёт выравнивание и по правому краю, и по центру', () => {
+    const engine = new SnapEngine();
+    engine.setTargets([base()]);
+
+    expect(engine.snap(new Vector2(-580, 0), config(10, worktop)).position.x).toBe(-600);
+    expect(engine.snap(new Vector2(30, 0), config(10, worktop)).position.x).toBe(0);
+  });
+
+  it('верхний шкаф выравнивается над нижним, а не приставляется сбоку', () => {
+    const engine = new SnapEngine();
+    engine.setTargets([base()]);
+
+    const upper = {
+      objectHalfWidthMm: 400,
+      objectHalfDepthMm: 190,
+      objectBottomMm: 1450,
+      objectTopMm: 2170,
+    };
+    // Целимся рядом с позицией, где задние грани совпадут
+    const result = engine.snap(new Vector2(20, -100), config(10, upper));
+
+    expect(result.position.x).toBe(0);
+    // Задние грани совмещены: центр уходит вперёд на разницу полуглубин
+    expect(result.position.y).toBeCloseTo(-110, 6);
+  });
+
+  it('модули одного ряда по-прежнему стыкуются боками', () => {
+    const engine = new SnapEngine();
+    engine.setTargets([base()]);
+
+    const sameRow = {
+      objectHalfWidthMm: 300,
+      objectHalfDepthMm: 300,
+      objectBottomMm: 0,
+      objectTopMm: 820,
+    };
+    // 400 своей полуширины плюс 300 полуширины соседа
+    expect(engine.snap(new Vector2(680, 0), config(10, sameRow)).position.x).toBe(700);
+  });
+
+  it('без заданных высот поведение прежнее — стыковка боками', () => {
+    const engine = new SnapEngine();
+    engine.setTargets([base()]);
+
+    const noHeights = { objectHalfWidthMm: 300, objectHalfDepthMm: 300 };
+    expect(engine.snap(new Vector2(680, 0), config(10, noHeights)).position.x).toBe(700);
   });
 });
 

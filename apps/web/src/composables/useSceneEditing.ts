@@ -14,8 +14,11 @@ import {
   findConflicts,
   hasConflicts,
   innerNormal,
+  normalizeAngleDeg,
   placementBox,
+  planAngleDeg,
   type Box,
+  type CatalogProduct,
   type ConflictReport,
   type Placement,
   type Wall,
@@ -108,10 +111,19 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     return camera.toNdc(point.x - rect.left, point.y - rect.top, ndc);
   }
 
+  /**
+   * Попадание в выделение: сам объект или кольцо поворота вокруг него.
+   *
+   * Кольцо обязано считаться выделением, иначе GestureController отдаст
+   * жест камере и поворот превратится в облёт сцены.
+   */
   function hitTestSelection(point: Vector2): boolean {
     const v = viewer.value;
     if (!selectedId.value || !v) return false;
-    return v.pick(toNdc(point))?.instanceId === selectedId.value;
+
+    const ndc = toNdc(point);
+    if (v.intersects(ndc, v.rotation.mesh)) return true;
+    return v.pick(ndc)?.instanceId === selectedId.value;
   }
 
   function select(instanceId: string | null): void {
@@ -120,8 +132,13 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     if (!v) return;
 
     const instance = instanceId ? v.registry.get(instanceId) : undefined;
-    if (instance) v.selection.show(instance.root);
-    else v.selection.hide();
+    if (instance) {
+      v.selection.show(instance.root);
+      v.rotation.attach(instance.root);
+    } else {
+      v.selection.hide();
+      v.rotation.detach();
+    }
     v.invalidate();
   }
 
@@ -157,12 +174,32 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
   let staticBoxes: { id: string; box: Box }[] = [];
   let dragWalls: Wall[] = [];
 
+  /** Что делает текущий жест: двигает объект или вращает его. */
+  let dragKind: 'move' | 'rotate' = 'move';
+  let rotateCentreMm = new Vector2();
+  let rotatePointerStartDeg = 0;
+  let rotateObjectStartDeg = 0;
+
+  /**
+   * Смещение между центром объекта и точкой захвата, мм.
+   *
+   * Без него объект прыгает центром под курсор в момент касания: взяли
+   * за угол шкафа — шкаф скакнул на пол-ширины. При взгляде вдоль пола
+   * такой прыжок измеряется метрами.
+   */
+  const grabOffsetMm = new Vector2();
+
   /**
    * Цели привязки: стены помещения и габариты остальных объектов.
    * Габарит превращает соседа в цель СТЫКОВКИ: модуль встаёт грань
    * в грань, а не центром в центр.
    */
-  function beginDrag(exceptId: string | null = selectedId.value): void {
+  function beginDrag(
+    exceptId: string | null = selectedId.value,
+    grabPoint?: Vector2,
+  ): void {
+    captureGrabOffset(grabPoint);
+
     const targets: SnapTarget[] = [];
 
     for (const room of scene.doc.rooms) {
@@ -188,7 +225,16 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
         rotation: placement.rotationY,
         sourceId: placement.instanceId,
         ...(product
-          ? { footprint: { halfWidthMm: product.widthMm / 2, halfDepthMm: product.depthMm / 2 } }
+          ? {
+              footprint: {
+                halfWidthMm: product.widthMm / 2,
+                halfDepthMm: product.depthMm / 2,
+                // Высоты решают, стыковать сбоку или выравнивать поверх:
+                // столешница и верхний шкаф ложатся НАД нижним рядом
+                bottomMm: placement.position.y,
+                topMm: placement.position.y + product.heightMm,
+              },
+            }
           : {}),
       });
     }
@@ -196,6 +242,20 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     snapEngine.value.setTargets(targets);
     staticBoxes = otherBoxes(exceptId);
     dragWalls = allWalls();
+  }
+
+  /** Запоминает, за какую точку объекта взялись. */
+  function captureGrabOffset(grabPoint?: Vector2): void {
+    grabOffsetMm.set(0, 0);
+
+    const instance = selectedId.value ? viewer.value?.registry.get(selectedId.value) : undefined;
+    const floor = grabPoint ? floorPointAt(grabPoint) : null;
+    if (!instance || !floor) return;
+
+    grabOffsetMm.set(
+      instance.root.position.x * 1000 - floor.x,
+      instance.root.position.z * 1000 - floor.z,
+    );
   }
 
   /**
@@ -212,6 +272,7 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     if (!id) {
       conflicts.value = EMPTY_CONFLICTS;
       v?.selection.setConflict(false);
+      v?.conflicts.clear();
       return;
     }
 
@@ -219,6 +280,7 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     if (!box) {
       conflicts.value = EMPTY_CONFLICTS;
       v?.selection.setConflict(false);
+      v?.conflicts.clear();
       return;
     }
 
@@ -227,7 +289,19 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
 
     conflicts.value = findConflicts(box, neighbours, walls);
     v?.selection.setConflict(hasConflicts(conflicts.value));
+    highlightConflicting(conflicts.value.objectIds);
     v?.invalidate();
+  }
+
+  /** Подсветить сами конфликтующие объекты, а не только рамку выделения. */
+  function highlightConflicting(instanceIds: readonly string[]): void {
+    const v = viewer.value;
+    if (!v) return;
+
+    const roots = instanceIds
+      .map((id) => v.registry.get(id)?.root)
+      .filter((root): root is NonNullable<typeof root> => root !== undefined);
+    v.conflicts.show(roots);
   }
 
   function documentBox(instanceId: string): Box | null {
@@ -280,12 +354,16 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
       }
 
       case 'dragStart':
-        if (e.onSelection) beginDrag();
+        if (!e.onSelection) break;
+        dragKind = v.intersects(toNdc(e.point), v.rotation.mesh) ? 'rotate' : 'move';
+        if (dragKind === 'rotate') beginRotate(e.point);
+        else beginDrag(selectedId.value, e.point);
         break;
 
       case 'dragMove':
         if (e.onSelection && selectedId.value) {
-          moveSelected(e.point);
+          if (dragKind === 'rotate') rotateSelected(e.point);
+          else moveSelected(e.point);
         } else {
           camera.orbit(e.delta.x, e.delta.y);
         }
@@ -296,6 +374,7 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
         if (e.onSelection && selectedId.value) {
           commitSelectedPosition();
         }
+        dragKind = 'move';
         isSnapping.value = false;
         break;
 
@@ -320,9 +399,11 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     const floor = camera.projectToFloor(toNdc(screenPoint));
     if (!floor) return; // луч ушёл выше горизонта — движения нет
 
-    desiredMm.set(floor.x * 1000, floor.z * 1000);
+    // Точка захвата сохраняется: тянут за то место, за которое взялись
+    desiredMm.set(floor.x * 1000 + grabOffsetMm.x, floor.z * 1000 + grabOffsetMm.y);
 
     const product = catalog.bySku.get(selectedPlacement()?.sku ?? '');
+    const bottomMm = instance.root.position.y * 1000;
     const result = snapEngine.value.snap(desiredMm, {
       ...DEFAULT_SNAP,
       mmPerPixel: camera.mmPerPixel,
@@ -331,6 +412,8 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
       // к стенам не липнет.
       objectHalfDepthMm: (product?.depthMm ?? 0) / 2,
       objectHalfWidthMm: (product?.widthMm ?? 0) / 2,
+      objectBottomMm: bottomMm,
+      objectTopMm: bottomMm + (product?.heightMm ?? 0),
       enableWalls: product?.snapToWall ?? true,
     });
 
@@ -350,7 +433,51 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
       instance.root.rotation.y = (result.rotation * Math.PI) / 180;
     }
     v.selection.refresh(instance.root);
+    v.rotation.update(instance.root);
     updateConflicts(liveBox(selectedId.value) ?? undefined);
+  }
+
+  /**
+   * Начало поворота. Запоминаются угол указателя и угол объекта: дальше
+   * применяется их разница, поэтому объект не прыгает под курсор в момент
+   * захвата кольца.
+   */
+  function beginRotate(point: Vector2): void {
+    const v = viewer.value;
+    const instance = selectedId.value ? v?.registry.get(selectedId.value) : undefined;
+    const floor = floorPointAt(point);
+    if (!instance || !floor) return;
+
+    rotateCentreMm.set(instance.root.position.x * 1000, instance.root.position.z * 1000);
+    rotatePointerStartDeg = planAngleDeg(floor.x - rotateCentreMm.x, floor.z - rotateCentreMm.y);
+    rotateObjectStartDeg = (instance.root.rotation.y * 180) / Math.PI;
+
+    // Соседи на время жеста не меняются: конфликты считаются по кэшу
+    beginDrag();
+  }
+
+  /**
+   * Плавный поворот на любой угол.
+   *
+   * Шага нет намеренно: мебель ставят не только по осям, а кратные углы
+   * и так достижимы привязкой к стене и стыковкой с соседом.
+   */
+  function rotateSelected(point: Vector2): void {
+    const v = viewer.value;
+    const instance = selectedId.value ? v?.registry.get(selectedId.value) : undefined;
+    const floor = floorPointAt(point);
+    if (!v || !instance || !floor || instance.locked) return;
+
+    const pointerDeg = planAngleDeg(floor.x - rotateCentreMm.x, floor.z - rotateCentreMm.y);
+    const delta = normalizeAngleDeg(pointerDeg - rotatePointerStartDeg);
+    const next = rotateObjectStartDeg + delta;
+
+    // Прямая мутация Three.js: в Pinia пишем один раз на dragEnd
+    instance.root.rotation.y = (next * Math.PI) / 180;
+
+    v.selection.refresh(instance.root);
+    v.rotation.update(instance.root);
+    updateConflicts(liveBox(selectedId.value!) ?? undefined);
   }
 
   function commitSelectedPosition(): void {
@@ -385,7 +512,10 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
    * каждый шкаф вручную.
    */
   function snapDropPoint(
-    product: { widthMm: number; depthMm: number; snapToWall: boolean },
+    product: Pick<
+      CatalogProduct,
+      'widthMm' | 'heightMm' | 'depthMm' | 'mountHeightMm' | 'snapToWall'
+    >,
     clientX: number,
     clientY: number,
   ): { x: number; z: number; rotationY: number } | null {
@@ -400,10 +530,94 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
       mmPerPixel: camera.mmPerPixel,
       objectHalfDepthMm: product.depthMm / 2,
       objectHalfWidthMm: product.widthMm / 2,
+      objectBottomMm: product.mountHeightMm,
+      objectTopMm: product.mountHeightMm + product.heightMm,
       enableWalls: product.snapToWall,
     });
 
     return { x: result.position.x, z: result.position.y, rotationY: result.rotation ?? 0 };
+  }
+
+  // ---------------------------------------------------------------------
+  // Предварительное положение при переносе из каталога
+  // ---------------------------------------------------------------------
+
+  /** Куда встанет объект и с каким разворотом. null — переноса нет. */
+  const preview = shallowRef<{ xMm: number; zMm: number; rotationDeg: number } | null>(null);
+  const previewConflicts = shallowRef<ConflictReport>(EMPTY_CONFLICTS);
+
+  let previewSku: string | null = null;
+  let previewRef: { productId: string; urlTemplate: string } | null = null;
+
+  /**
+   * Обновление призрака под указателем.
+   *
+   * Точка отпускания и место постановки различаются: работают привязка
+   * к стене, стыковка с соседом и высота установки. Без призрака перенос
+   * получается вслепую.
+   */
+  async function updatePreview(
+    product: CatalogProduct,
+    clientX: number,
+    clientY: number,
+  ): Promise<void> {
+    const v = viewer.value;
+    if (!v) return;
+
+    const point = snapDropPoint(product, clientX, clientY);
+    if (!point) {
+      hidePreview();
+      return;
+    }
+
+    if (previewSku !== product.sku) {
+      previewSku = product.sku;
+      const ref = { productId: product.sku, urlTemplate: product.urlTemplate };
+      // Превью грузится в самом лёгком LOD: оно живёт доли секунды,
+      // а полная модель на слабом устройстве не успеет появиться
+      const group = await v.assets.load(ref, 2);
+      // Пока грузили, пользователь мог схватить другой товар
+      if (previewSku !== product.sku) return;
+
+      releasePreviewAsset();
+      previewRef = ref;
+      v.preview.show(group);
+    }
+
+    v.preview.setTransform(point.x, product.mountHeightMm, point.z, point.rotationY);
+    preview.value = { xMm: Math.round(point.x), zMm: Math.round(point.z), rotationDeg: Math.round(point.rotationY) };
+
+    const box: Box = {
+      centre: { x: point.x, y: point.z },
+      halfWidthMm: product.widthMm / 2,
+      halfDepthMm: product.depthMm / 2,
+      rotationDeg: point.rotationY,
+      bottomMm: product.mountHeightMm,
+      topMm: product.mountHeightMm + product.heightMm,
+    };
+    previewConflicts.value = findConflicts(box, otherBoxes(null), allWalls());
+    v.preview.setConflict(hasConflicts(previewConflicts.value));
+    // Виновник подсвечивается и до отпускания: пользователь видит, во что
+    // упрётся объект, ещё на подлёте
+    highlightConflicting(previewConflicts.value.objectIds);
+    v.invalidate();
+  }
+
+  function hidePreview(): void {
+    const v = viewer.value;
+    v?.preview.hide();
+    v?.conflicts.clear();
+    releasePreviewAsset();
+    previewSku = null;
+    preview.value = null;
+    previewConflicts.value = EMPTY_CONFLICTS;
+    v?.invalidate();
+  }
+
+  /** Счётчик ссылок загрузчика: без возврата модель никогда не вытеснится. */
+  function releasePreviewAsset(): void {
+    if (previewRef) viewer.value?.assets.release(previewRef, 2);
+    previewRef = null;
   }
 
   /** Показать помещение целиком: вызывается после создания планировки. */
@@ -441,6 +655,10 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     isSnapping,
     conflicts,
     hasConflict,
+    preview,
+    previewConflicts,
+    updatePreview,
+    hidePreview,
     attach,
     detach,
     select,

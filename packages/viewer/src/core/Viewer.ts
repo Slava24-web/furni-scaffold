@@ -10,6 +10,10 @@ import {
 } from 'three';
 import { Environment } from './Environment';
 import { SelectionIndicator } from './SelectionIndicator';
+import { ConflictHighlighter } from './ConflictHighlighter';
+import { RotationGizmo } from '../interaction/RotationGizmo';
+import { PlacementPreview } from '../scene/PlacementPreview';
+import type { Object3D } from 'three';
 import type { RegisteredInstance } from './SceneRegistry';
 import { AssetLoader } from '../loading/AssetLoader';
 import { QualityManager } from '../perf/QualityManager';
@@ -40,6 +44,9 @@ export class Viewer {
   readonly environment: Environment;
   readonly assets: AssetLoader;
   readonly selection: SelectionIndicator;
+  readonly conflicts: ConflictHighlighter;
+  readonly rotation: RotationGizmo;
+  readonly preview: PlacementPreview;
   readonly quality: QualityManager;
   readonly telemetry: Telemetry;
 
@@ -80,6 +87,9 @@ export class Viewer {
     this.registry = new SceneRegistry(this.scene);
     this.environment = new Environment(this.scene);
     this.selection = new SelectionIndicator(this.scene);
+    this.conflicts = new ConflictHighlighter(this.scene);
+    this.rotation = new RotationGizmo(this.scene);
+    this.preview = new PlacementPreview(this.scene);
     this.telemetry = new Telemetry();
     this.quality = new QualityManager(this.renderer, this.telemetry, options.forceTier);
     // Загрузчик держит кэш моделей и зависит от бюджета видеопамяти
@@ -111,6 +121,16 @@ export class Viewer {
       if (owner) return owner;
     }
     return null;
+  }
+
+  /**
+   * Попадает ли луч в конкретный объект — например, в кольцо поворота.
+   * Отдельно от pick: манипуляторы не зарегистрированы в реестре сцены.
+   */
+  intersects(ndc: Vector2, object: Object3D): boolean {
+    if (!object.visible) return false;
+    this.raycaster.setFromCamera(ndc, this.camera);
+    return this.raycaster.intersectObject(object, true).length > 0;
   }
 
   /**
@@ -191,6 +211,9 @@ export class Viewer {
     this.registry.disposeAll();
     this.assets.dispose();
     this.selection.dispose();
+    this.conflicts.dispose();
+    this.rotation.dispose();
+    this.preview.dispose();
     this.environment.dispose();
     this.renderer.dispose();
     this.renderer.forceContextLoss();

@@ -44,6 +44,10 @@ const {
   screenToFloorMm,
   snapDropPoint,
   focusArea,
+  preview,
+  previewConflicts,
+  updatePreview,
+  hidePreview,
 } = useSceneEditing(
   viewer,
   {
@@ -72,6 +76,10 @@ defineExpose({
   screenToFloorMm,
   snapDropPoint,
   focusArea,
+  preview,
+  previewConflicts,
+  updatePreview,
+  hidePreview,
   containerRef,
 });
 </script>

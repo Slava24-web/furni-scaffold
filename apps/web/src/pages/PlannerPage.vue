@@ -42,6 +42,8 @@ const drawing = useWallDrawing({ onWall: (wall: Wall) => scene.addWall(wall) });
 const drag = useCatalogDrag({
   isOverScene: (x, y) => isInsideScene(x, y),
   onDrop: (product, x, y) => dropProduct(product, x, y),
+  onMoveOverScene: (product, x, y) => void canvas.value?.updatePreview(product, x, y),
+  onLeaveScene: () => canvas.value?.hidePreview(),
 });
 
 function sceneRect(): DOMRect | null {
@@ -59,7 +61,9 @@ function isInsideScene(clientX: number, clientY: number): boolean {
 /** Сброс товара из каталога: точка отпускания проецируется на пол. */
 function dropProduct(product: CatalogProduct, clientX: number, clientY: number): void {
   const point = canvas.value?.snapDropPoint(product, clientX, clientY);
+  canvas.value?.hidePreview();
   if (!point) return;
+
   const placement = scene.addPlacement(product, point, point.rotationY);
   canvas.value?.select(placement.instanceId);
 }
@@ -139,7 +143,25 @@ function deleteSelected(): void {
 }
 
 /** Конфликт важнее подсказки режима: он требует действия пользователя. */
-const conflict = computed(() => conflictMessage(canvas.value?.conflicts));
+const conflict = computed(() =>
+  drag.product.value
+    ? conflictMessage(canvas.value?.previewConflicts)
+    : conflictMessage(canvas.value?.conflicts),
+);
+
+/**
+ * Точные координаты постановки во время переноса.
+ *
+ * Показываются именно те значения, которые уйдут в документ после
+ * привязки, а не координаты курсора: они различаются.
+ */
+const previewReadout = computed(() => {
+  const point = canvas.value?.preview;
+  if (!point) return null;
+
+  const rotation = point.rotationDeg === 0 ? '' : `, поворот ${point.rotationDeg}°`;
+  return `X ${point.xMm} мм · Z ${point.zMm} мм${rotation}`;
+});
 
 const hint = computed(() => {
   if (mode.value === 'draw-wall') {
@@ -189,6 +211,9 @@ onBeforeUnmount(() => uninstallTestingApi());
           @floor-double-tap="finishDrawing"
         />
         <p v-if="conflict" class="planner__hint planner__hint--conflict">{{ conflict }}</p>
+        <p v-else-if="previewReadout" class="planner__hint planner__hint--readout">
+          {{ previewReadout }}
+        </p>
         <p v-else-if="hint" class="planner__hint">{{ hint }}</p>
       </div>
     </div>
@@ -231,6 +256,10 @@ onBeforeUnmount(() => uninstallTestingApi());
 }
 .planner__hint--conflict {
   background: rgb(217 45 32 / 0.92);
+}
+.planner__hint--readout {
+  background: rgb(47 111 237 / 0.92);
+  font-variant-numeric: tabular-nums;
 }
 .planner__hint {
   position: absolute;

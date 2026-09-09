@@ -13,6 +13,10 @@ export function useCatalogDrag(options: {
   onDrop: (product: CatalogProduct, clientX: number, clientY: number) => void;
   /** Попадает ли точка в область сцены */
   isOverScene: (clientX: number, clientY: number) => boolean;
+  /** Движение над сценой: по нему обновляется призрак постановки */
+  onMoveOverScene?: (product: CatalogProduct, clientX: number, clientY: number) => void;
+  /** Указатель ушёл со сцены или перенос завершён */
+  onLeaveScene?: () => void;
 }) {
   const product = shallowRef<CatalogProduct | null>(null);
   const ghostX = ref(0);
@@ -37,7 +41,14 @@ export function useCatalogDrag(options: {
   function move(event: PointerEvent): void {
     ghostX.value = event.clientX;
     ghostY.value = event.clientY;
-    overScene.value = options.isOverScene(event.clientX, event.clientY);
+
+    const inside = options.isOverScene(event.clientX, event.clientY);
+    overScene.value = inside;
+
+    const item = product.value;
+    if (!item) return;
+    if (inside) options.onMoveOverScene?.(item, event.clientX, event.clientY);
+    else options.onLeaveScene?.();
   }
 
   function onMove(event: PointerEvent): void {
@@ -60,6 +71,7 @@ export function useCatalogDrag(options: {
   }
 
   function cleanup(): void {
+    options.onLeaveScene?.();
     window.removeEventListener('pointermove', onMove);
     window.removeEventListener('pointerup', onUp);
     window.removeEventListener('pointercancel', cancel);

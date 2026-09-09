@@ -2,7 +2,10 @@ export { Viewer, type ViewerOptions } from './core/Viewer';
 export { SceneRegistry, type RegisteredInstance } from './core/SceneRegistry';
 export { Environment, type EnvironmentPreset } from './core/Environment';
 export { SelectionIndicator } from './core/SelectionIndicator';
+export { ConflictHighlighter, MAX_HIGHLIGHTS } from './core/ConflictHighlighter';
+export { RotationGizmo } from './interaction/RotationGizmo';
 export { RoomBuilder } from './scene/RoomBuilder';
+export { PlacementPreview } from './scene/PlacementPreview';
 export {
   CameraController,
   DEFAULT_LIMITS,
