@@ -185,6 +185,8 @@ function handle(spanMm) {
  * `mountHeightMm` — высота установки низа модели над полом.
  * `snapToWall` — участвует ли в привязке к стенам: россыпь мелких
  * деталей к стене не липнет, иначе ручка прыгала бы через всю кухню.
+ * `stackable` — можно ли ставить на другие объекты. Корпусные модули
+ * стоят на полу или висят на своей отметке, мелочь кладут на столешницу.
  */
 export const KITCHEN_PRODUCTS = [
   {
@@ -266,6 +268,7 @@ export const KITCHEN_PRODUCTS = [
     basePriceCents: 240000,
     mountHeightMm: PLINTH,
     snapToWall: false,
+    stackable: true,
     build: () => loosePanel(596, 716, false),
   },
   {
@@ -275,6 +278,7 @@ export const KITCHEN_PRODUCTS = [
     basePriceCents: 290000,
     mountHeightMm: PLINTH,
     snapToWall: false,
+    stackable: true,
     build: () => loosePanel(596, 716, true),
   },
   {
@@ -284,6 +288,7 @@ export const KITCHEN_PRODUCTS = [
     basePriceCents: 320000,
     mountHeightMm: PLINTH,
     snapToWall: false,
+    stackable: true,
     build: () => drawerBox(596),
   },
   {
@@ -293,6 +298,7 @@ export const KITCHEN_PRODUCTS = [
     basePriceCents: 45000,
     mountHeightMm: 0,
     snapToWall: false,
+    stackable: true,
     build: () => handle(224),
   },
 ];

@@ -488,3 +488,56 @@ function mergeChainBox(boxes: readonly Box[]): Box {
     topMm: Math.max(...boxes.map((box) => box.topMm)),
   };
 }
+
+export interface SettleItem {
+  instanceId: string;
+  placement: Pick<Placement, 'position' | 'rotationY'>;
+  size: ProductSize;
+  /** Собственная отметка товара из каталога */
+  mountHeightMm: number;
+  /** Может ли объект стоять на других объектах */
+  stackable: boolean;
+}
+
+export interface SettleChange {
+  instanceId: string;
+  yMm: number;
+}
+
+/**
+ * Осадка сцены: приведение высот к тому, что реально стоит под объектами.
+ *
+ * Нужна после любого изменения документа. Убрали столешницу — вещи на ней
+ * обязаны опуститься, а не остаться висеть в воздухе; вернули отменой —
+ * подняться обратно. Без этого документ рассогласуется с физикой сцены
+ * при первом же удалении опоры.
+ *
+ * Объекты обрабатываются снизу вверх, и опорой считается только уже
+ * осевший объект. Так порядок детерминирован, а взаимные опоры двух
+ * объектов на одном уровне не зацикливаются.
+ *
+ * Возвращаются только изменившиеся высоты: вызывающий код по пустому
+ * результату понимает, что переписывать документ не нужно.
+ */
+export function settlePlacements(items: readonly SettleItem[]): SettleChange[] {
+  const ordered = [...items].sort((a, b) => a.placement.position.y - b.placement.position.y);
+  const settled: Box[] = [];
+  const changes: SettleChange[] = [];
+
+  for (const item of ordered) {
+    const centre = { x: item.placement.position.x, y: item.placement.position.z };
+    const yMm = item.stackable
+      ? restingHeightMm(item.mountHeightMm, supportTopMm(centre, settled))
+      : item.mountHeightMm;
+
+    if (yMm !== item.placement.position.y) {
+      changes.push({ instanceId: item.instanceId, yMm });
+    }
+
+    settled.push(
+      placementBox({ position: { ...item.placement.position, y: yMm }, rotationY: item.placement.rotationY }, item.size),
+    );
+  }
+
+  return changes;
+}

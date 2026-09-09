@@ -286,6 +286,9 @@ export const PRODUCTS = [...FURNITURE, ...KITCHEN_PRODUCTS].map((product) => ({
   type: 'static',
   mountHeightMm: 0,
   snapToWall: true,
+  // По умолчанию объект на другие не ставится: корпусная мебель стоит
+  // на полу, и «взлёт» на случайную опору был бы неожиданностью
+  stackable: false,
   ...product,
 }));
 

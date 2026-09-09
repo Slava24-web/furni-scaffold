@@ -28,6 +28,15 @@ export const CatalogProductSchema = z.object({
   mountHeightMm: z.number().int().min(0).default(0),
   /** Участвует ли объект в привязке к стенам */
   snapToWall: z.boolean().default(true),
+  /**
+   * Может ли объект стоять на других объектах.
+   *
+   * Признак явный, а не выводимый из габаритов: без него опорой считался
+   * бы любой объект под точкой, и нижний шкаф, протащенный под навесным,
+   * взлетал бы на него. Корпусная мебель стоит на полу или висит на своей
+   * отметке, а на столешницу ставят мелочь.
+   */
+  stackable: z.boolean().default(false),
   materials: z.array(z.string()).default([]),
   /** Шаблон с плейсхолдером {lod} */
   urlTemplate: z.string().min(1),

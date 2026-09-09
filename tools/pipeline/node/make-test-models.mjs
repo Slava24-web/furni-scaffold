@@ -90,6 +90,8 @@ async function main() {
       mountHeightMm: product.mountHeightMm,
       /** Участвует ли объект в привязке к стенам */
       snapToWall: product.snapToWall,
+      /** Можно ли ставить объект на другие объекты */
+      stackable: product.stackable,
       materials: groups.map((g) => g.material),
       /** Шаблон под AssetRef.urlTemplate из packages/viewer */
       urlTemplate: `/assets/test/${product.sku}/lod{lod}.glb`,

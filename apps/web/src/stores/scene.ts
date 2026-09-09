@@ -5,6 +5,7 @@ import {
   deterministicUuid,
   emptySceneDoc,
   randomUUID,
+  settlePlacements,
   type CatalogProduct,
   type Opening,
   type Placement,
@@ -12,6 +13,7 @@ import {
   type SceneDoc,
   type Wall,
 } from '@furni/shared';
+import { useCatalogStore } from './catalog';
 
 /**
  * Стор сцены. Хранит ТОЛЬКО сериализуемый документ.
@@ -23,6 +25,7 @@ import {
  * фиксации жеста.
  */
 export const useSceneStore = defineStore('scene', () => {
+  const catalog = useCatalogStore();
   const doc = shallowRef<SceneDoc>(emptySceneDoc());
   const sceneId = ref<string | null>(null);
   const dirty = ref(false);
@@ -40,8 +43,46 @@ export const useSceneStore = defineStore('scene', () => {
   /** Единственная точка записи документа: история и флаг правки не забываются. */
   function commit(next: SceneDoc): void {
     pushHistory();
-    doc.value = next;
+    doc.value = settle(next);
     dirty.value = true;
+  }
+
+  /**
+   * Осадка: высоты приводятся к тому, что реально стоит под объектами.
+   *
+   * Делается на КАЖДУЮ запись документа, а не только на удаление: опору
+   * можно не только убрать, но и отодвинуть. Убрали столешницу — вещи на
+   * ней опускаются, вернули отменой — поднимаются обратно. Иначе документ
+   * рассогласуется со сценой при первом же удалении опоры.
+   */
+  function settle(candidate: SceneDoc): SceneDoc {
+    const items = candidate.placements.flatMap((placement) => {
+      const product = catalog.bySku.get(placement.sku);
+      if (!product) return [];
+      return [
+        {
+          instanceId: placement.instanceId,
+          placement,
+          size: product,
+          mountHeightMm: product.mountHeightMm,
+          stackable: product.stackable,
+        },
+      ];
+    });
+
+    const changes = settlePlacements(items);
+    if (changes.length === 0) return candidate;
+
+    const heights = new Map(changes.map((change) => [change.instanceId, change.yMm]));
+    return {
+      ...candidate,
+      placements: candidate.placements.map((placement) => {
+        const yMm = heights.get(placement.instanceId);
+        return yMm === undefined
+          ? placement
+          : { ...placement, position: { ...placement.position, y: yMm } };
+      }),
+    };
   }
 
   function updatePlacement(instanceId: string, patch: Partial<Placement>): void {

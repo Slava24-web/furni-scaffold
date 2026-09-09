@@ -249,13 +249,22 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
   /**
    * Высота, на которой окажется объект в этой точке.
    *
-   * Собственная отметка товара или верх опоры под точкой — что выше.
-   * Так вещь встаёт на столешницу, а навесной шкаф над тумбой остаётся
-   * на своей высоте.
+   * На опору забирается только то, что помечено stackable: иначе нижний
+   * шкаф, протащенный под навесным, взлетал бы на него. Для остальных
+   * высота это отметка товара.
    */
-  function restingHeightAt(point: { x: number; z: number }, mountHeightMm: number): number {
+  function restingHeightAt(
+    point: { x: number; z: number },
+    product: Pick<CatalogProduct, 'mountHeightMm' | 'stackable'> | undefined,
+  ): number {
+    if (!product) return 0;
+    if (!product.stackable) return product.mountHeightMm;
+
     const supports = staticBoxes.map((entry) => entry.box);
-    return restingHeightMm(mountHeightMm, supportTopMm({ x: point.x, y: point.z }, supports));
+    return restingHeightMm(
+      product.mountHeightMm,
+      supportTopMm({ x: point.x, y: point.z }, supports),
+    );
   }
 
   /** Запоминает, за какую точку объекта взялись. */
@@ -427,10 +436,7 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     const product = catalog.bySku.get(selectedPlacement()?.sku ?? '');
     // Высота считается по опоре ДО привязки: от неё зависит, стыковать
     // объект сбоку или выравнивать поверх соседа
-    const bottomMm = restingHeightAt(
-      { x: desiredMm.x, z: desiredMm.y },
-      product?.mountHeightMm ?? 0,
-    );
+    const bottomMm = restingHeightAt({ x: desiredMm.x, z: desiredMm.y }, product);
     const result = snapEngine.value.snap(desiredMm, {
       ...DEFAULT_SNAP,
       mmPerPixel: camera.mmPerPixel,
@@ -450,10 +456,7 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     isSnapping.value = result.snapped;
 
     // Прямая мутация Three.js. В Pinia НЕ пишем — это горячий путь.
-    const restingMm = restingHeightAt(
-      { x: result.position.x, z: result.position.y },
-      product?.mountHeightMm ?? 0,
-    );
+    const restingMm = restingHeightAt({ x: result.position.x, z: result.position.y }, product);
     instance.root.position.set(
       result.position.x / 1000,
       restingMm / 1000,
@@ -574,7 +577,7 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
   function snapDropPoint(
     product: Pick<
       CatalogProduct,
-      'widthMm' | 'heightMm' | 'depthMm' | 'mountHeightMm' | 'snapToWall'
+      'widthMm' | 'heightMm' | 'depthMm' | 'mountHeightMm' | 'snapToWall' | 'stackable'
     >,
     clientX: number,
     clientY: number,
@@ -585,7 +588,7 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     // Исключать нечего: бросаемого объекта в документе ещё нет, а ранее
     // выделенный сосед — как раз тот, к которому надо пристыковаться
     beginDrag(null);
-    const bottomMm = restingHeightAt(point, product.mountHeightMm);
+    const bottomMm = restingHeightAt(point, product);
     const result = snapEngine.value.snap(new Vector2(point.x, point.z), {
       ...DEFAULT_SNAP,
       mmPerPixel: camera.mmPerPixel,
@@ -599,10 +602,7 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     return {
       x: result.position.x,
       z: result.position.y,
-      y: restingHeightAt(
-        { x: result.position.x, z: result.position.y },
-        product.mountHeightMm,
-      ),
+      y: restingHeightAt({ x: result.position.x, z: result.position.y }, product),
       rotationY: result.rotation ?? 0,
     };
   }

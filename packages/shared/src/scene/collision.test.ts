@@ -14,6 +14,7 @@ import {
   placementBox,
   planAngleDeg,
   restingHeightMm,
+  settlePlacements,
   supportTopMm,
   verticallyOverlapping,
   wallToBox,
@@ -562,5 +563,134 @@ describe('цепочки смежных модулей', () => {
 
     // Левый край столешницы 1800 совпадает с левым краем ряда
     expect(leftFlush!.position.x - 900).toBeCloseTo(-300, 6);
+  });
+});
+
+describe('осадка сцены', () => {
+  const item = (
+    instanceId: string,
+    over: {
+      x?: number;
+      y?: number;
+      z?: number;
+      heightMm?: number;
+      mountHeightMm?: number;
+      stackable?: boolean;
+    } = {},
+  ) => ({
+    instanceId,
+    placement: {
+      position: { x: over.x ?? 0, y: over.y ?? 0, z: over.z ?? 0 },
+      rotationY: 0,
+    },
+    size: { widthMm: 600, heightMm: over.heightMm ?? 820, depthMm: 600 },
+    mountHeightMm: over.mountHeightMm ?? 0,
+    stackable: over.stackable ?? false,
+  });
+
+  it('согласованная сцена не меняется', () => {
+    const changes = settlePlacements([
+      item('cabinet'),
+      item('box', { y: 820, heightMm: 176, mountHeightMm: 100, stackable: true }),
+    ]);
+    expect(changes).toEqual([]);
+  });
+
+  it('вещь опускается, когда опору убрали', () => {
+    // Тумбы больше нет, ящик остался висеть на её высоте
+    const changes = settlePlacements([
+      item('box', { y: 820, heightMm: 176, mountHeightMm: 100, stackable: true }),
+    ]);
+    expect(changes).toEqual([{ instanceId: 'box', yMm: 100 }]);
+  });
+
+  it('вещь поднимается, когда опору вернули', () => {
+    const changes = settlePlacements([
+      item('cabinet'),
+      item('box', { y: 100, heightMm: 176, mountHeightMm: 100, stackable: true }),
+    ]);
+    expect(changes).toEqual([{ instanceId: 'box', yMm: 820 }]);
+  });
+
+  it('цепочка опор оседает целиком', () => {
+    // Тумба -> столешница -> ящик: убрали тумбу, оседают обе вещи над ней
+    const changes = settlePlacements([
+      item('worktop', { y: 820, heightMm: 38, mountHeightMm: 820 }),
+      item('box', { y: 858, heightMm: 176, mountHeightMm: 100, stackable: true }),
+    ]);
+    // Столешница держит свою отметку, ящик остаётся на ней
+    expect(changes).toEqual([]);
+  });
+
+  it('вещь садится на нижнюю опору, когда убрали верхнюю', () => {
+    const changes = settlePlacements([
+      item('cabinet'),
+      item('box', { y: 858, heightMm: 176, mountHeightMm: 100, stackable: true }),
+    ]);
+    expect(changes).toEqual([{ instanceId: 'box', yMm: 820 }]);
+  });
+
+  it('объект не на опоре высоты не меняет', () => {
+    const changes = settlePlacements([
+      item('cabinet'),
+      item('far', { x: 5000, y: 0 }),
+    ]);
+    expect(changes).toEqual([]);
+  });
+
+  it('навесной шкаф над тумбой остаётся на своей отметке', () => {
+    const changes = settlePlacements([
+      item('cabinet'),
+      item('upper', { y: 1450, heightMm: 720, mountHeightMm: 1450 }),
+    ]);
+    expect(changes).toEqual([]);
+  });
+
+  it('корпусная мебель на опору не забирается', () => {
+    // Нижний шкаф под навесным обязан остаться на полу
+    const changes = settlePlacements([
+      item('upper', { y: 1450, heightMm: 720, mountHeightMm: 1450 }),
+      item('base', { y: 0 }),
+    ]);
+    expect(changes).toEqual([]);
+  });
+
+  it('две вещи в одной точке складываются стопкой, а не зацикливаются', () => {
+    // Обработка снизу вверх делает порядок определённым: вторая встаёт
+    // на первую, а не обе прыгают друг на друга по кругу
+    const changes = settlePlacements([
+      item('a', { y: 0, heightMm: 200, stackable: true }),
+      item('b', { y: 0, heightMm: 200, stackable: true }),
+    ]);
+    expect(changes).toEqual([{ instanceId: 'b', yMm: 200 }]);
+  });
+
+  it('стопка устойчива: повторная осадка её не разбирает', () => {
+    const stacked = [
+      item('a', { y: 0, heightMm: 200, stackable: true }),
+      item('b', { y: 200, heightMm: 200, stackable: true }),
+    ];
+    expect(settlePlacements(stacked)).toEqual([]);
+  });
+
+  it('результат устойчив: повторная осадка ничего не меняет', () => {
+    const items = [
+      item('cabinet'),
+      item('box', { y: 100, heightMm: 176, mountHeightMm: 100, stackable: true }),
+    ];
+    const first = settlePlacements(items);
+    expect(first).toHaveLength(1);
+
+    const applied = items.map((entry) => {
+      const change = first.find((c) => c.instanceId === entry.instanceId);
+      return change
+        ? { ...entry, placement: { ...entry.placement, position: { ...entry.placement.position, y: change.yMm } } }
+        : entry;
+    });
+    expect(settlePlacements(applied)).toEqual([]);
+  });
+
+  it('пустая сцена не даёт изменений', () => {
+    expect(settlePlacements([])).toEqual([]);
   });
 });
