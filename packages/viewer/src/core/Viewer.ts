@@ -1,6 +1,5 @@
 import {
   ACESFilmicToneMapping,
-  Box3,
   Clock,
   PerspectiveCamera,
   Raycaster,
@@ -12,6 +11,7 @@ import {
 import { Environment } from './Environment';
 import { SelectionIndicator } from './SelectionIndicator';
 import { ConflictHighlighter } from './ConflictHighlighter';
+import { upwardSurfaceHeightMm } from './surface';
 import { RotationGizmo } from '../interaction/RotationGizmo';
 import { PlacementPreview } from '../scene/PlacementPreview';
 import type { Object3D } from 'three';
@@ -53,8 +53,6 @@ export class Viewer {
 
   private readonly clock = new Clock();
   private readonly raycaster = new Raycaster();
-  /** Переиспользуемый габарит: опора считается на каждое движение указателя */
-  private readonly supportBox = new Box3();
   private rafId: number | null = null;
   private disposed = false;
   private firstFrameTime: number | null = null;
@@ -127,20 +125,31 @@ export class Viewer {
   }
 
   /**
-   * Верх объекта под экранной точкой, миллиметры. Ноль означает пол.
+   * Высота опорной поверхности под экранной точкой, миллиметры.
+   * Ноль означает пол.
    *
    * Опора выбирается лучом, а не габаритами в плане: пользователь видит
    * поверхность, в которую целится, и вещь должна лечь именно на неё.
    * По габаритам мелочь, брошенная под навесным шкафом, забиралась бы
    * ему на верх, потому что в плане шкаф оказывается «под точкой».
    *
-   * Берётся именно ВЕРХ задетого объекта, а не высота попадания луча:
-   * иначе вещь, брошенная в бок тумбы, влипла бы в её стенку.
+   * Годится только грань, смотрящая вверх: прицел в бок или фасад тумбы
+   * не означает постановку на её крышку. Луч идёт дальше и ищет
+   * следующую подходящую поверхность.
    */
   supportTopMm(ndc: Vector2, excludeInstanceId?: string): number {
-    const owner = this.pick(ndc, excludeInstanceId);
-    if (!owner) return 0;
-    return this.supportBox.setFromObject(owner.root).max.y * 1000;
+    const roots = [...this.registry.all()].map((instance) => instance.root);
+    if (roots.length === 0) return 0;
+
+    this.raycaster.setFromCamera(ndc, this.camera);
+    const height = upwardSurfaceHeightMm(
+      this.raycaster.intersectObjects(roots, true),
+      (object) => {
+        const owner = this.registry.resolve(object);
+        return owner !== undefined && owner.instanceId !== excludeInstanceId;
+      },
+    );
+    return height ?? 0;
   }
 
   /**
