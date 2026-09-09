@@ -14,6 +14,7 @@ import {
 import SceneCanvas from '../components/SceneCanvas.vue';
 import CatalogPanel from '../components/CatalogPanel.vue';
 import RoomToolbar from '../components/RoomToolbar.vue';
+import { conflictMessage } from '../lib/conflictMessage';
 import { useCatalogDrag } from '../composables/useCatalogDrag';
 import { useWallDrawing } from '../composables/useWallDrawing';
 import { installTestingApi, uninstallTestingApi } from '../dev/testingApi';
@@ -137,6 +138,9 @@ function deleteSelected(): void {
   scene.removePlacement(id);
 }
 
+/** Конфликт важнее подсказки режима: он требует действия пользователя. */
+const conflict = computed(() => conflictMessage(canvas.value?.conflicts));
+
 const hint = computed(() => {
   if (mode.value === 'draw-wall') {
     return drawing.points.value.length === 0
@@ -184,7 +188,8 @@ onBeforeUnmount(() => uninstallTestingApi());
           @floor-tap="onFloorTap"
           @floor-double-tap="finishDrawing"
         />
-        <p v-if="hint" class="planner__hint">{{ hint }}</p>
+        <p v-if="conflict" class="planner__hint planner__hint--conflict">{{ conflict }}</p>
+        <p v-else-if="hint" class="planner__hint">{{ hint }}</p>
       </div>
     </div>
 
@@ -223,6 +228,9 @@ onBeforeUnmount(() => uninstallTestingApi());
   border: 2px dashed #2f6fed;
   border-radius: 10px;
   pointer-events: none;
+}
+.planner__hint--conflict {
+  background: rgb(217 45 32 / 0.92);
 }
 .planner__hint {
   position: absolute;

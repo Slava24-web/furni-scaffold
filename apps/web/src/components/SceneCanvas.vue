@@ -36,6 +36,8 @@ const mode = computed<PlannerMode>(() => props.mode ?? 'select');
 const {
   selectedId,
   isSnapping,
+  conflicts,
+  hasConflict,
   attach,
   detach,
   select,
@@ -65,6 +67,8 @@ defineExpose({
   detach,
   select,
   selectedId,
+  conflicts,
+  hasConflict,
   screenToFloorMm,
   snapDropPoint,
   focusArea,
@@ -73,7 +77,11 @@ defineExpose({
 </script>
 
 <template>
-  <div ref="containerRef" class="scene-canvas" :class="{ 'is-snapping': isSnapping }">
+  <div
+    ref="containerRef"
+    class="scene-canvas"
+    :class="{ 'is-snapping': isSnapping, 'has-conflict': hasConflict }"
+  >
     <canvas ref="canvasRef" />
     <!-- Оверлей отладки. Виден при VITE_SHOW_PERF=1 или ?perf=1 -->
     <div v-if="telemetry && showPerf" class="perf-overlay">

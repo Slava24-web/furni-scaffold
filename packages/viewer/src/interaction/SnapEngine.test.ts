@@ -188,3 +188,110 @@ describe('вспомогательная геометрия', () => {
     expect(normalToRotationDeg(new Vector2(-1, 0))).toBe(-90);
   });
 });
+
+describe('стыковка модулей между собой', () => {
+  /** Нижний кухонный модуль 600 мм: полуширина и полуглубина по 300. */
+  const module600 = (x: number, z: number, rotation = 0): SnapTarget => ({
+    kind: 'object',
+    position: new Vector2(x, z),
+    rotation,
+    sourceId: 'neighbour',
+    footprint: { halfWidthMm: 300, halfDepthMm: 300 },
+  });
+
+  const moving = { objectHalfWidthMm: 300, objectHalfDepthMm: 300 };
+
+  it('ставит модуль грань в грань с соседом', () => {
+    const engine = new SnapEngine();
+    engine.setTargets([module600(0, 0)]);
+
+    // Целимся правее соседа с промахом в 40 мм
+    const result = engine.snap(new Vector2(640, 0), config(10, moving));
+
+    expect(result.snapped).toBe(true);
+    expect(result.position.x).toBe(600);
+    expect(result.position.y).toBe(0);
+  });
+
+  it('стыкует с любой из четырёх сторон', () => {
+    const engine = new SnapEngine();
+    engine.setTargets([module600(0, 0)]);
+
+    const cases: [number, number, number, number][] = [
+      [640, 0, 600, 0],
+      [-640, 0, -600, 0],
+      [0, 640, 0, 600],
+      [0, -640, 0, -600],
+    ];
+    for (const [x, z, expectedX, expectedZ] of cases) {
+      const result = engine.snap(new Vector2(x, z), config(10, moving));
+      expect(result.position.x).toBe(expectedX);
+      expect(result.position.y).toBe(expectedZ);
+    }
+  });
+
+  it('наследует разворот соседа: ряд смотрит в одну сторону', () => {
+    const engine = new SnapEngine();
+    engine.setTargets([module600(0, 0, 90)]);
+
+    // У повёрнутого соседа локальная +X смотрит в −Z плана
+    const result = engine.snap(new Vector2(0, -640), config(10, moving));
+    expect(result.rotation).toBe(90);
+  });
+
+  it('стыковка важнее стены', () => {
+    const engine = new SnapEngine();
+    // Сосед уже стоит вплотную к стене; целимся рядом с ним
+    engine.setTargets([northWall(), module600(0, 350)]);
+
+    const result = engine.snap(
+      new Vector2(620, 360),
+      config(10, { ...moving, objectHalfDepthMm: 300 }),
+    );
+
+    expect(result.target?.sourceId).toBe('neighbour');
+    // Ряд получается и состыкованным, и прижатым к стене
+    expect(result.position.x).toBe(600);
+    expect(result.position.y).toBe(350);
+  });
+
+  it('цель с габаритом не притягивает к своему центру', () => {
+    const engine = new SnapEngine();
+    engine.setTargets([module600(0, 0)]);
+
+    // Точка почти в центре соседа: притягивание туда наложило бы
+    // объекты друг на друга. Сработать должна сетка, а не объект.
+    const result = engine.snap(new Vector2(20, 0), config(10, moving));
+    expect(result.target?.kind).toBe('grid');
+    expect(result.snapped).toBe(false);
+  });
+
+  it('без габаритов перетаскиваемого объекта стыковки нет', () => {
+    const engine = new SnapEngine();
+    engine.setTargets([module600(0, 0)]);
+
+    const result = engine.snap(new Vector2(640, 0), config(10));
+    expect(result.target?.kind).not.toBe('object');
+  });
+
+  it('выключение объектов убирает стыковку', () => {
+    const engine = new SnapEngine();
+    engine.setTargets([module600(0, 0)]);
+
+    const result = engine.snap(
+      new Vector2(610, 0),
+      config(10, { ...moving, enableObjects: false }),
+    );
+    expect(result.snapped).toBe(false);
+  });
+
+  it('выбирает ближайшую точку стыковки из нескольких соседей', () => {
+    const engine = new SnapEngine();
+    engine.setTargets([module600(0, 0), module600(2000, 0)]);
+
+    const result = engine.snap(new Vector2(1420, 10), config(10, moving));
+    // Левая грань дальнего соседа ближе, чем правая грань ближнего
+    expect(result.position.x).toBe(1400);
+  });
+});
+

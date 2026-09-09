@@ -1,4 +1,5 @@
 import { Vector2 } from 'three';
+import { dockCandidates, type Box } from '@furni/shared';
 
 /** Точечная цель: центр другого объекта, узел сетки, ось. */
 export interface PointSnapTarget {
@@ -8,6 +9,12 @@ export interface PointSnapTarget {
   /** Угол выравнивания в градусах, если цель его задаёт */
   rotation?: number;
   sourceId?: string;
+  /**
+   * Габарит цели в плане. Если задан, цель участвует в стыковке боками
+   * и НЕ участвует в притягивании к центру: совмещение центров всегда
+   * означает наложение объектов друг на друга.
+   */
+  footprint?: { halfWidthMm: number; halfDepthMm: number };
 }
 
 /**
@@ -54,6 +61,8 @@ export interface SnapConfig {
    * Ноль означает «центром на грань» и годится только для точечных целей.
    */
   objectHalfDepthMm?: number;
+  /** Половина ширины перетаскиваемого объекта, мм. Нужна для стыковки. */
+  objectHalfWidthMm?: number;
 }
 
 export const DEFAULT_SNAP: Omit<SnapConfig, 'mmPerPixel'> = {
@@ -63,6 +72,7 @@ export const DEFAULT_SNAP: Omit<SnapConfig, 'mmPerPixel'> = {
   enableWalls: true,
   enableObjects: true,
   objectHalfDepthMm: 0,
+  objectHalfWidthMm: 0,
 };
 
 interface Candidate {
@@ -73,8 +83,12 @@ interface Candidate {
 }
 
 /**
- * Магнитное примагничивание. Порядок приоритета: стены -> объекты -> сетка.
- * Стены важнее сетки: мебель у стены должна вставать вплотную, а не по сетке.
+ * Магнитное примагничивание.
+ *
+ * Порядок приоритета: стыковка с соседом -> стена -> центр объекта -> сетка.
+ * Стыковка важнее стены: модуль, поставленный рядом с соседом, который уже
+ * стоит у стены, оказывается и у стены тоже, а обратное неверно — привязка
+ * к стене оставила бы между модулями произвольный зазор.
  */
 export class SnapEngine {
   private targets: SnapTarget[] = [];
@@ -87,6 +101,7 @@ export class SnapEngine {
     const thresholdMm = config.thresholdPx * config.mmPerPixel;
 
     const best =
+      this.bestOf(this.dockCandidates(desired, config), thresholdMm) ??
       this.bestOf(this.wallCandidates(desired, config), thresholdMm) ??
       this.bestOf(this.objectCandidates(desired, config), thresholdMm);
 
@@ -126,12 +141,54 @@ export class SnapEngine {
     return best;
   }
 
+  /**
+   * Стыковка боками: позиции, в которых объект встаёт вплотную к соседу
+   * и наследует его разворот. Ради этого кухонные модули и собираются
+   * в ряд без зазоров.
+   */
+  private dockCandidates(desired: Vector2, config: SnapConfig): Candidate[] {
+    if (!config.enableObjects) return [];
+
+    const halfWidth = config.objectHalfWidthMm ?? 0;
+    const halfDepth = config.objectHalfDepthMm ?? 0;
+    if (halfWidth <= 0 && halfDepth <= 0) return [];
+
+    const candidates: Candidate[] = [];
+    for (const target of this.targets) {
+      if (target.kind !== 'object' || !target.footprint) continue;
+
+      const box: Box = {
+        centre: { x: target.position.x, y: target.position.y },
+        halfWidthMm: target.footprint.halfWidthMm,
+        halfDepthMm: target.footprint.halfDepthMm,
+        rotationDeg: target.rotation ?? 0,
+        // Высота для стыковки не важна: соседа выбирает пользователь
+        bottomMm: 0,
+        topMm: 1,
+      };
+
+      for (const dock of dockCandidates(box, halfWidth, halfDepth)) {
+        const position = new Vector2(dock.position.x, dock.position.y);
+        candidates.push({
+          position,
+          rotation: dock.rotationDeg,
+          target,
+          distanceMm: desired.distanceTo(position),
+        });
+      }
+    }
+    return candidates;
+  }
+
   private objectCandidates(desired: Vector2, config: SnapConfig): Candidate[] {
     if (!config.enableObjects) return [];
 
     const candidates: Candidate[] = [];
     for (const target of this.targets) {
       if (target.kind === 'wall' || target.kind === 'grid') continue;
+      // Габарит известен — значит цель уже дала точки стыковки,
+      // а совмещение центров поставило бы объекты друг на друга
+      if (target.footprint) continue;
       candidates.push({
         position: target.position.clone(),
         rotation: target.rotation ?? null,

@@ -1,4 +1,4 @@
-import { markRaw, ref, shallowRef, type Ref, type ShallowRef } from 'vue';
+import { computed, markRaw, ref, shallowRef, watch, type Ref, type ShallowRef } from 'vue';
 import { Vector2, Vector3 } from 'three';
 import {
   CameraController,
@@ -9,7 +9,17 @@ import {
   type SnapTarget,
   type Viewer,
 } from '@furni/viewer';
-import { innerNormal, type Placement } from '@furni/shared';
+import {
+  EMPTY_CONFLICTS,
+  findConflicts,
+  hasConflicts,
+  innerNormal,
+  placementBox,
+  type Box,
+  type ConflictReport,
+  type Placement,
+  type Wall,
+} from '@furni/shared';
 import { useCatalogStore } from '../stores/catalog';
 import { useSceneStore } from '../stores/scene';
 
@@ -41,6 +51,8 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
 
   const selectedId = ref<string | null>(null);
   const isSnapping = ref(false);
+  const conflicts = shallowRef<ConflictReport>(EMPTY_CONFLICTS);
+  const hasConflict = computed(() => hasConflicts(conflicts.value));
   const snapEngine = shallowRef(markRaw(new SnapEngine()));
 
   let gestures: GestureController | null = null;
@@ -118,16 +130,39 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     return scene.doc.placements.find((p) => p.instanceId === selectedId.value);
   }
 
-  /**
-   * Цели привязки: стены помещения и центры остальных объектов.
-   * Собираются один раз на начало жеста — во время перетаскивания
-   * они не меняются, а пересчёт на каждое движение стоил бы обхода
-   * всей сцены в горячем пути.
-   */
-  function refreshSnapTargets(): void {
-    const v = viewer.value;
-    if (!v) return;
+  /** Все стены документа одним списком. */
+  function allWalls(): Wall[] {
+    return scene.doc.rooms.flatMap((room) => room.walls);
+  }
 
+  /** Габариты остальных объектов сцены. Товары без каталога пропускаются. */
+  function otherBoxes(exceptId: string | null): { id: string; box: Box }[] {
+    const boxes: { id: string; box: Box }[] = [];
+    for (const placement of scene.doc.placements) {
+      if (placement.instanceId === exceptId) continue;
+      const product = catalog.bySku.get(placement.sku);
+      if (!product) continue;
+      boxes.push({ id: placement.instanceId, box: placementBox(placement, product) });
+    }
+    return boxes;
+  }
+
+  /**
+   * Кэш соседей на время жеста.
+   *
+   * Ни цели привязки, ни габариты соседей во время перетаскивания
+   * не меняются, а пересчёт на каждое движение указателя означал бы
+   * обход всей сцены в горячем пути.
+   */
+  let staticBoxes: { id: string; box: Box }[] = [];
+  let dragWalls: Wall[] = [];
+
+  /**
+   * Цели привязки: стены помещения и габариты остальных объектов.
+   * Габарит превращает соседа в цель СТЫКОВКИ: модуль встаёт грань
+   * в грань, а не центром в центр.
+   */
+  function beginDrag(exceptId: string | null = selectedId.value): void {
     const targets: SnapTarget[] = [];
 
     for (const room of scene.doc.rooms) {
@@ -144,17 +179,80 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
       }
     }
 
-    for (const instance of v.registry.all()) {
-      if (instance.instanceId === selectedId.value) continue;
+    for (const placement of scene.doc.placements) {
+      if (placement.instanceId === exceptId) continue;
+      const product = catalog.bySku.get(placement.sku);
       targets.push({
         kind: 'object',
-        position: new Vector2(instance.root.position.x * 1000, instance.root.position.z * 1000),
-        rotation: (instance.root.rotation.y * 180) / Math.PI,
-        sourceId: instance.instanceId,
+        position: new Vector2(placement.position.x, placement.position.z),
+        rotation: placement.rotationY,
+        sourceId: placement.instanceId,
+        ...(product
+          ? { footprint: { halfWidthMm: product.widthMm / 2, halfDepthMm: product.depthMm / 2 } }
+          : {}),
       });
     }
 
     snapEngine.value.setTargets(targets);
+    staticBoxes = otherBoxes(exceptId);
+    dragWalls = allWalls();
+  }
+
+  /**
+   * Пересчёт конфликтов выделенного объекта.
+   *
+   * Во время жеста габарит берётся из живого Three.js: в документ
+   * позиция ещё не записана (CLAUDE.md, правило 3). Вне жеста —
+   * из документа, так работает и отмена, и загрузка сцены.
+   */
+  function updateConflicts(subject?: Box): void {
+    const v = viewer.value;
+    const id = selectedId.value;
+
+    if (!id) {
+      conflicts.value = EMPTY_CONFLICTS;
+      v?.selection.setConflict(false);
+      return;
+    }
+
+    const box = subject ?? documentBox(id);
+    if (!box) {
+      conflicts.value = EMPTY_CONFLICTS;
+      v?.selection.setConflict(false);
+      return;
+    }
+
+    const neighbours = subject ? staticBoxes : otherBoxes(id);
+    const walls = subject ? dragWalls : allWalls();
+
+    conflicts.value = findConflicts(box, neighbours, walls);
+    v?.selection.setConflict(hasConflicts(conflicts.value));
+    v?.invalidate();
+  }
+
+  function documentBox(instanceId: string): Box | null {
+    const placement = scene.doc.placements.find((p) => p.instanceId === instanceId);
+    const product = placement && catalog.bySku.get(placement.sku);
+    return placement && product ? placementBox(placement, product) : null;
+  }
+
+  /** Габарит объекта по его текущему положению в сцене. */
+  function liveBox(instanceId: string): Box | null {
+    const v = viewer.value;
+    const instance = v?.registry.get(instanceId);
+    const placement = scene.doc.placements.find((p) => p.instanceId === instanceId);
+    const product = placement && catalog.bySku.get(placement.sku);
+    if (!instance || !product) return null;
+
+    const bottomMm = instance.root.position.y * 1000;
+    return {
+      centre: { x: instance.root.position.x * 1000, y: instance.root.position.z * 1000 },
+      halfWidthMm: product.widthMm / 2,
+      halfDepthMm: product.depthMm / 2,
+      rotationDeg: (instance.root.rotation.y * 180) / Math.PI,
+      bottomMm,
+      topMm: bottomMm + product.heightMm,
+    };
   }
 
   function handleGesture(e: GestureEvent): void {
@@ -182,7 +280,7 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
       }
 
       case 'dragStart':
-        if (e.onSelection) refreshSnapTargets();
+        if (e.onSelection) beginDrag();
         break;
 
       case 'dragMove':
@@ -228,9 +326,11 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     const result = snapEngine.value.snap(desiredMm, {
       ...DEFAULT_SNAP,
       mmPerPixel: camera.mmPerPixel,
-      // Глубина нужна, чтобы объект встал вплотную к стене, а не центром
-      // на её грань. Мелкая фурнитура к стенам не липнет.
+      // Габариты нужны, чтобы объект встал вплотную к стене и грань
+      // в грань к соседу, а не центром на грань. Мелкая фурнитура
+      // к стенам не липнет.
       objectHalfDepthMm: (product?.depthMm ?? 0) / 2,
+      objectHalfWidthMm: (product?.widthMm ?? 0) / 2,
       enableWalls: product?.snapToWall ?? true,
     });
 
@@ -250,6 +350,7 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
       instance.root.rotation.y = (result.rotation * Math.PI) / 180;
     }
     v.selection.refresh(instance.root);
+    updateConflicts(liveBox(selectedId.value) ?? undefined);
   }
 
   function commitSelectedPosition(): void {
@@ -284,18 +385,21 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
    * каждый шкаф вручную.
    */
   function snapDropPoint(
-    product: { depthMm: number; snapToWall: boolean },
+    product: { widthMm: number; depthMm: number; snapToWall: boolean },
     clientX: number,
     clientY: number,
   ): { x: number; z: number; rotationY: number } | null {
     const point = floorPointAt(new Vector2(clientX, clientY));
     if (!point || !camera) return null;
 
-    refreshSnapTargets();
+    // Исключать нечего: бросаемого объекта в документе ещё нет, а ранее
+    // выделенный сосед — как раз тот, к которому надо пристыковаться
+    beginDrag(null);
     const result = snapEngine.value.snap(new Vector2(point.x, point.z), {
       ...DEFAULT_SNAP,
       mmPerPixel: camera.mmPerPixel,
       objectHalfDepthMm: product.depthMm / 2,
+      objectHalfWidthMm: product.widthMm / 2,
       enableWalls: product.snapToWall,
     });
 
@@ -328,9 +432,15 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     rect = null;
   }
 
+  // Вне жеста конфликты пересчитываются по документу: так они верны
+  // после отмены, загрузки сцены и удаления соседа
+  watch([selectedId, () => scene.doc], () => updateConflicts(), { immediate: true });
+
   return {
     selectedId,
     isSnapping,
+    conflicts,
+    hasConflict,
     attach,
     detach,
     select,
