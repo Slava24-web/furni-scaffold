@@ -69,8 +69,10 @@ export interface OpeningFootprint {
 }
 
 interface Parts {
-  /** Детали по коду материала каталога */
+  /** Неподвижные детали по коду материала: коробка и подоконник */
   byMaterial: Map<string, BufferGeometry[]>;
+  /** Детали полотна: они уезжают вместе с открытой дверью */
+  leafByMaterial: Map<string, BufferGeometry[]>;
   glass: BufferGeometry[];
   handle: BufferGeometry[];
   /** Подоконник: его цвет не заказывают вместе с окном */
@@ -109,6 +111,14 @@ export class OpeningBuilder {
   });
 
   private groups: { openingId: string; group: Group }[] = [];
+  /**
+   * Какие двери открыты.
+   *
+   * Состояние живёт во вьюере, а не в документе: распахнутая дверь это
+   * осмотр, а не свойство планировки. Пересборка сцены его не теряет —
+   * иначе дверь захлопывалась бы на каждую правку размера комнаты.
+   */
+  private readonly opened = new Set<string>();
   private previewMesh: Mesh | null = null;
 
   /** Подсветка будущего места проёма. */
@@ -183,6 +193,26 @@ export class OpeningBuilder {
     return this.groups.map((entry) => entry.group);
   }
 
+  /** Открыта ли дверь проёма. */
+  isOpen(openingId: string): boolean {
+    return this.opened.has(openingId);
+  }
+
+  /**
+   * Открыть или закрыть дверь.
+   *
+   * Возвращает true, если состояние изменилось: по нему вызывающий код
+   * решает, надо ли пересобирать сцену.
+   */
+  setOpen(openingId: string, open: boolean): boolean {
+    const was = this.opened.has(openingId);
+    if (was === open) return false;
+
+    if (open) this.opened.add(openingId);
+    else this.opened.delete(openingId);
+    return true;
+  }
+
   /** Проём, которому принадлежит объект под лучом. */
   resolve(object: Object3D): string | null {
     for (let node: Object3D | null = object; node; node = node.parent) {
@@ -206,19 +236,43 @@ export class OpeningBuilder {
     const parts = collectParts(opening, style, wall.thickness);
     const group = new Group();
 
-    const add = (geometries: BufferGeometry[], material: MeshStandardMaterial): void => {
+    /**
+     * Полотно живёт в своей группе с началом в точке навески: только так
+     * распахнутая дверь поворачивается вокруг петель, а не вокруг центра
+     * проёма.
+     */
+    const leaf = new Group();
+    const hingeX = (opening.hinge === 'left' ? -1 : 1) * (opening.width / 2 - style.frameWidthMm);
+    leaf.position.x = hingeX / MM;
+    if (style.kind === 'door' && this.opened.has(opening.id)) {
+      const side = opening.swingInward ? 1 : -1;
+      const direction = opening.hinge === 'left' ? -1 : 1;
+      leaf.rotation.y = (side * direction * Math.PI) / 2;
+    }
+    group.add(leaf);
+
+    const add = (
+      geometries: BufferGeometry[],
+      material: MeshStandardMaterial,
+      movable = false,
+    ): void => {
       const merged = mergeGeometries(geometries, false);
       for (const geometry of geometries) geometry.dispose();
       if (!merged) return;
       merged.computeBoundingSphere();
-      group.add(new Mesh(merged, material));
+      // Геометрия полотна сдвигается на петлю: сама группа уже там
+      if (movable) merged.translate(-hingeX / MM, 0, 0);
+      (movable ? leaf : group).add(new Mesh(merged, material));
     };
 
     for (const [materialCode, geometries] of parts.byMaterial) {
-      add(geometries, materials.get(materialCode) ?? this.fallbackMaterial);
+      add(geometries, materials.get(materialCode) ?? this.fallbackMaterial, false);
     }
-    if (parts.glass.length > 0) add(parts.glass, this.glassMaterial);
-    if (parts.handle.length > 0) add(parts.handle, this.handleMaterial);
+    for (const [materialCode, geometries] of parts.leafByMaterial) {
+      add(geometries, materials.get(materialCode) ?? this.fallbackMaterial, true);
+    }
+    if (parts.glass.length > 0) add(parts.glass, this.glassMaterial, style.kind === 'door');
+    if (parts.handle.length > 0) add(parts.handle, this.handleMaterial, true);
     if (parts.sill.length > 0) add(parts.sill, this.sillMaterial);
     if (group.children.length === 0) return null;
 
@@ -272,12 +326,25 @@ function placeOnWall(group: Object3D, room: Room, wall: Wall, centreOffsetMm: nu
 
 /** Коробка, створки, заполнение и ручка одного проёма. */
 function collectParts(opening: Opening, style: OpeningStyle, thicknessMm: number): Parts {
-  const parts: Parts = { byMaterial: new Map(), glass: [], handle: [], sill: [] };
+  const parts: Parts = {
+    byMaterial: new Map(),
+    leafByMaterial: new Map(),
+    glass: [],
+    handle: [],
+    sill: [],
+  };
   const code = openingMaterial(style, opening.options);
   const frame = (geometry: BufferGeometry): void => {
     const list = parts.byMaterial.get(code) ?? [];
     list.push(geometry);
     parts.byMaterial.set(code, list);
+  };
+
+  /** Деталь полотна: коробка остаётся на месте, полотно уезжает. */
+  const leaf = (geometry: BufferGeometry): void => {
+    const list = parts.leafByMaterial.get(code) ?? [];
+    list.push(geometry);
+    parts.leafByMaterial.set(code, list);
   };
 
   const width = opening.width;
@@ -311,16 +378,16 @@ function collectParts(opening: Opening, style: OpeningStyle, thicknessMm: number
     const leafHeight = revealHeight - GAP_MM;
 
     if (style.fill === 'flush') {
-      frame(box(leafWidth, leafHeight, depth, centreX, centreY, 0));
+      leaf(box(leafWidth, leafHeight, depth, centreX, centreY, 0));
       continue;
     }
 
     // Обвязка створки и заполнение внутри неё
     const rail = Math.min(SASH_RAIL_MM[style.profile], Math.min(leafWidth, leafHeight) / 3);
-    frame(box(rail, leafHeight, depth, centreX - (leafWidth - rail) / 2, centreY, 0));
-    frame(box(rail, leafHeight, depth, centreX + (leafWidth - rail) / 2, centreY, 0));
-    frame(box(leafWidth - rail * 2, rail, depth, centreX, centreY + (leafHeight - rail) / 2, 0));
-    frame(box(leafWidth - rail * 2, rail, depth, centreX, centreY - (leafHeight - rail) / 2, 0));
+    leaf(box(rail, leafHeight, depth, centreX - (leafWidth - rail) / 2, centreY, 0));
+    leaf(box(rail, leafHeight, depth, centreX + (leafWidth - rail) / 2, centreY, 0));
+    leaf(box(leafWidth - rail * 2, rail, depth, centreX, centreY + (leafHeight - rail) / 2, 0));
+    leaf(box(leafWidth - rail * 2, rail, depth, centreX, centreY - (leafHeight - rail) / 2, 0));
 
     const fillWidth = leafWidth - rail * 2;
     const fillHeight = leafHeight - rail * 2;
@@ -331,7 +398,7 @@ function collectParts(opening: Opening, style: OpeningStyle, thicknessMm: number
     } else {
       // Филёнка утоплена относительно обвязки: без утопления полотно
       // читается сплошным щитом
-      frame(box(fillWidth, fillHeight, depth - 16, centreX, centreY, 0));
+      leaf(box(fillWidth, fillHeight, depth - 16, centreX, centreY, 0));
     }
   }
 

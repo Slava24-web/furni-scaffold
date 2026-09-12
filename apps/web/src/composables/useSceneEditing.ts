@@ -185,6 +185,16 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     return scene.doc.placements.find((p) => p.instanceId === selectedId.value);
   }
 
+  /** Открыть или закрыть все дверцы выделенного изделия. */
+  function setDoorsOpen(open: boolean): void {
+    const v = viewer.value;
+    const instance = selectedId.value ? v?.registry.get(selectedId.value) : undefined;
+    if (!v || !instance) return;
+
+    v.doors.setAll(instance.root, open);
+    v.invalidate();
+  }
+
   /** Все стены документа одним списком. */
   function allWalls(): Wall[] {
     return scene.doc.rooms.flatMap((room) => room.walls);
@@ -546,6 +556,13 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
           const drawer = v.pickDrawer(toNdc(e.point), hit.root);
           if (drawer) {
             v.drawers.toggle(drawer);
+            v.invalidate();
+            break;
+          }
+
+          const door = v.pickDoor(toNdc(e.point), hit.root);
+          if (door) {
+            v.doors.toggle(door);
             v.invalidate();
             break;
           }
@@ -970,5 +987,6 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     screenToFloorMm,
     snapDropPoint,
     focusArea,
+    setDoorsOpen,
   };
 }

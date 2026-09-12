@@ -82,17 +82,35 @@ function plinth(widthMm, depthMm) {
   return translate(segmentedBox(widthMm - 20, PLINTH, depthMm - 60, 1), 0, PLINTH / 2, -10);
 }
 
-/** Нижний шкаф с распашным фасадом. */
+/** Нижний шкаф с распашным фасадом. Корпус неподвижен, дверца — узел. */
 function baseCabinet(widthMm) {
-  const facadeZ = BASE_DEPTH / 2 + FACADE_THICKNESS / 2;
-  const facadeY = PLINTH + BASE_CARCASS / 2;
-
   return {
     white: carcass(widthMm, BASE_CARCASS, BASE_DEPTH, PLINTH),
     graphite: [plinth(widthMm, BASE_DEPTH)],
-    oak: facade(widthMm, BASE_CARCASS - FACADE_GAP * 2, facadeY, facadeZ),
-    steel: bracketHandle(0, PLINTH + BASE_CARCASS - 90, facadeZ + FACADE_THICKNESS / 2),
   };
+}
+
+/**
+ * Дверца нижнего шкафа.
+ *
+ * Петли слева: точка навески на левом откосе, полотно распахивается
+ * наружу. Ручка едет вместе с дверцей — она к ней и привинчена.
+ */
+function baseCabinetDoor(widthMm) {
+  const facadeZ = BASE_DEPTH / 2 + FACADE_THICKNESS / 2;
+  const facadeY = PLINTH + BASE_CARCASS / 2;
+
+  return [
+    {
+      hingeXMm: -widthMm / 2,
+      hingeZMm: BASE_DEPTH / 2,
+      maxAngleDeg: 100,
+      parts: {
+        oak: facade(widthMm, BASE_CARCASS - FACADE_GAP * 2, facadeY, facadeZ),
+        steel: bracketHandle(0, PLINTH + BASE_CARCASS - 90, facadeZ + FACADE_THICKNESS / 2),
+      },
+    },
+  ];
 }
 
 /** Раскладка ящиков нижнего модуля: высота фронта и его центр. */
@@ -145,13 +163,23 @@ function baseDrawerParts(widthMm) {
 
 /** Верхний шкаф. Origin остаётся внизу модели, подъём задаёт mountHeightMm. */
 function wallCabinet(widthMm, heightMm) {
+  return { white: carcass(widthMm, heightMm, WALL_DEPTH, 0) };
+}
+
+function wallCabinetDoor(widthMm, heightMm) {
   const facadeZ = WALL_DEPTH / 2 + FACADE_THICKNESS / 2;
 
-  return {
-    white: carcass(widthMm, heightMm, WALL_DEPTH, 0),
-    oak: facade(widthMm, heightMm - FACADE_GAP * 2, heightMm / 2, facadeZ),
-    steel: bracketHandle(0, 90, facadeZ + FACADE_THICKNESS / 2),
-  };
+  return [
+    {
+      hingeXMm: -widthMm / 2,
+      hingeZMm: WALL_DEPTH / 2,
+      maxAngleDeg: 100,
+      parts: {
+        oak: facade(widthMm, heightMm - FACADE_GAP * 2, heightMm / 2, facadeZ),
+        steel: bracketHandle(0, 90, facadeZ + FACADE_THICKNESS / 2),
+      },
+    },
+  ];
 }
 
 /** Пенал: колонна во всю высоту с двумя фасадами. */
@@ -165,15 +193,37 @@ function tallCabinet(widthMm) {
     // Пенал высокий: полок больше
     white: carcass(widthMm, height, BASE_DEPTH, PLINTH, 4),
     graphite: [plinth(widthMm, BASE_DEPTH)],
-    oak: [
-      ...facade(widthMm, lower, PLINTH + FACADE_GAP + lower / 2, facadeZ),
-      ...facade(widthMm, upper, PLINTH + lower + FACADE_GAP * 2 + upper / 2, facadeZ),
-    ],
-    steel: [
-      ...bracketHandle(0, PLINTH + lower - 60, facadeZ + FACADE_THICKNESS / 2),
-      ...bracketHandle(0, PLINTH + lower + FACADE_GAP * 2 + 60, facadeZ + FACADE_THICKNESS / 2),
-    ],
   };
+}
+
+/** Две дверцы пенала: нижняя и верхняя, обе на левых петлях. */
+function tallCabinetDoors(widthMm) {
+  const height = 2140;
+  const facadeZ = BASE_DEPTH / 2 + FACADE_THICKNESS / 2;
+  const lower = 1300;
+  const upper = height - lower - FACADE_GAP * 3;
+  const hinge = { hingeXMm: -widthMm / 2, hingeZMm: BASE_DEPTH / 2, maxAngleDeg: 100 };
+
+  return [
+    {
+      ...hinge,
+      parts: {
+        oak: facade(widthMm, lower, PLINTH + FACADE_GAP + lower / 2, facadeZ),
+        steel: bracketHandle(0, PLINTH + lower - 60, facadeZ + FACADE_THICKNESS / 2),
+      },
+    },
+    {
+      ...hinge,
+      parts: {
+        oak: facade(widthMm, upper, PLINTH + lower + FACADE_GAP * 2 + upper / 2, facadeZ),
+        steel: bracketHandle(
+          0,
+          PLINTH + lower + FACADE_GAP * 2 + 60,
+          facadeZ + FACADE_THICKNESS / 2,
+        ),
+      },
+    },
+  ];
 }
 
 /**
@@ -319,6 +369,7 @@ export const KITCHEN_PRODUCTS = [
     mountHeightMm: 0,
     snapToWall: true,
     build: () => baseCabinet(600),
+    doors: () => baseCabinetDoor(600),
   },
   {
     sku: 'TEST-KIT-BASE-800',
@@ -330,6 +381,7 @@ export const KITCHEN_PRODUCTS = [
     mountHeightMm: 0,
     snapToWall: true,
     build: () => baseCabinet(800),
+    doors: () => baseCabinetDoor(800),
   },
   {
     sku: 'TEST-KIT-DRW-600',
@@ -353,6 +405,7 @@ export const KITCHEN_PRODUCTS = [
     mountHeightMm: WALL_MOUNT_HEIGHT,
     snapToWall: true,
     build: () => wallCabinet(600, 720),
+    doors: () => wallCabinetDoor(600, 720),
   },
   {
     sku: 'TEST-KIT-WALL-800',
@@ -364,6 +417,7 @@ export const KITCHEN_PRODUCTS = [
     mountHeightMm: WALL_MOUNT_HEIGHT,
     snapToWall: true,
     build: () => wallCabinet(800, 720),
+    doors: () => wallCabinetDoor(800, 720),
   },
   {
     sku: 'TEST-KIT-TALL-600',
@@ -375,6 +429,7 @@ export const KITCHEN_PRODUCTS = [
     mountHeightMm: 0,
     snapToWall: true,
     build: () => tallCabinet(600),
+    doors: () => tallCabinetDoors(600),
   },
   {
     sku: 'TEST-KIT-TOP-1200',

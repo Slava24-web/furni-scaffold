@@ -40,6 +40,7 @@ const product = (over: Partial<CatalogProduct> = {}): CatalogProduct => ({
   materials: ['oak'],
   drawerCount: 0,
   drawerTravelMm: 0,
+  doorCount: 0,
   panels: [],
   role: 'base',
   resize: {},

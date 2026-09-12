@@ -6,6 +6,7 @@ export { ConflictHighlighter, MAX_HIGHLIGHTS } from './core/ConflictHighlighter'
 export { upwardSurfaceHeightMm } from './core/surface';
 export { RotationGizmo } from './interaction/RotationGizmo';
 export { DrawerController, drawersOf, travelOf } from './interaction/DrawerController';
+export { DoorController, doorsOf, doorAngleOf } from './interaction/DoorController';
 export { RoomBuilder } from './scene/RoomBuilder';
 export { PlacementPreview } from './scene/PlacementPreview';
 export { DimensionOverlay, type DimensionLabelFactory } from './scene/DimensionOverlay';

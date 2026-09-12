@@ -20,9 +20,11 @@ import {
 const props = defineProps<{
   opening: Opening;
   materials: ReadonlyMap<string, CatalogMaterial>;
+  /** Распахнуто ли полотно сейчас */
+  open: boolean;
 }>();
 
-const emit = defineEmits<{ update: [Partial<Opening>]; remove: [] }>();
+const emit = defineEmits<{ update: [Partial<Opening>]; remove: []; setOpen: [boolean] }>();
 
 const styles = computed<OpeningStyle[]>(() =>
   stylesForKind(props.opening.kind === 'window' ? 'window' : 'door'),
@@ -164,6 +166,32 @@ function setNumber(field: 'width' | 'height' | 'sillHeight', value: number): voi
               @click="emit('update', { hinge: side })"
             >
               {{ side === 'left' ? 'Слева' : 'Справа' }}
+            </button>
+          </li>
+        </ul>
+      </section>
+
+      <section class="field">
+        <span class="field__label">Полотно</span>
+        <ul class="options options--row">
+          <li>
+            <button
+              type="button"
+              class="option"
+              :class="{ 'option--active': props.open }"
+              @click="emit('setOpen', true)"
+            >
+              Открыть
+            </button>
+          </li>
+          <li>
+            <button
+              type="button"
+              class="option"
+              :class="{ 'option--active': !props.open }"
+              @click="emit('setOpen', false)"
+            >
+              Закрыть
             </button>
           </li>
         </ul>

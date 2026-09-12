@@ -14,6 +14,7 @@ import { ConflictHighlighter } from './ConflictHighlighter';
 import { upwardSurfaceHeightMm } from './surface';
 import { RotationGizmo } from '../interaction/RotationGizmo';
 import { DrawerController, drawersOf } from '../interaction/DrawerController';
+import { DoorController, doorsOf } from '../interaction/DoorController';
 import { PlacementPreview } from '../scene/PlacementPreview';
 import { MaterialLibrary } from '../scene/MaterialLibrary';
 import { DimensionOverlay } from '../scene/DimensionOverlay';
@@ -61,6 +62,8 @@ export class Viewer {
   readonly openings: OpeningBuilder;
   /** Выдвижные ящики загруженных моделей */
   readonly drawers = new DrawerController();
+  /** Распашные дверцы загруженных моделей */
+  readonly doors = new DoorController();
   /** Материалы тенанта для смены отделки */
   readonly materials = new MaterialLibrary();
   readonly quality: QualityManager;
@@ -189,6 +192,24 @@ export class Viewer {
   }
 
   /**
+   * Дверца модели под экранной точкой.
+   *
+   * Как и с ящиком, ищется только среди дверец переданного объекта: тап
+   * по чужому фасаду не должен открывать ничего.
+   */
+  pickDoor(ndc: Vector2, root: Object3D): Object3D | null {
+    const doors = doorsOf(root);
+    if (doors.length === 0) return null;
+
+    this.raycaster.setFromCamera(ndc, this.camera);
+    for (const hit of this.raycaster.intersectObjects(doors, true)) {
+      const owner = doors.find((door) => isDescendant(hit.object, door));
+      if (owner) return owner;
+    }
+    return null;
+  }
+
+  /**
    * Ящик модели под экранной точкой.
    *
    * Ищется только среди ящиков переданного объекта: выдвигать ящик
@@ -280,6 +301,7 @@ export class Viewer {
     // Ход ящика — единственная анимация вьюера: пока она идёт,
     // кадры нужны каждый, иначе движение застынет на полпути
     if (this.drawers.update(dt)) this.needsRender = true;
+    if (this.doors.update(dt)) this.needsRender = true;
 
     const rendered = this.needsRender;
     if (rendered) {
@@ -320,6 +342,7 @@ export class Viewer {
     this.conflicts.dispose();
     this.rotation.dispose();
     this.drawers.dispose();
+    this.doors.dispose();
     this.preview.dispose();
     this.dimensions.dispose();
     this.swings.dispose();

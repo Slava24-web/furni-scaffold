@@ -96,17 +96,36 @@ function horizontalHandle(xMm, yMm, zMm, lengthMm) {
   return translate(segmentedBox(lengthMm, 18, 18, 2), xMm, yMm, zMm);
 }
 
-function wardrobe() {
-  const width = 1200;
-  const height = 2200;
-  const depth = 600;
-  const plinth = 90;
-  const corpusHeight = height - plinth;
+const WARDROBE = { width: 1200, height: 2200, depth: 600, plinth: 90 };
 
+/** Раскладка распашных дверец шкафа: две створки на своих петлях. */
+function wardrobeDoors() {
+  const { width, height, depth, plinth } = WARDROBE;
+  const corpusHeight = height - plinth;
   const doorWidth = width / 2 - 12;
   const doorHeight = corpusHeight - 40;
   const doorY = plinth + corpusHeight / 2;
   const doorZ = depth / 2 + 9;
+
+  // Петли по краям, ручки у середины: створки расходятся в стороны
+  return [-1, 1].map((side) => ({
+    hingeXMm: (side * width) / 2,
+    hingeZMm: depth / 2,
+    maxAngleDeg: side < 0 ? 110 : -110,
+    parts: {
+      oak: panelFacade(doorWidth, doorHeight, 18, {
+        x: side * (doorWidth / 2 + 6),
+        y: doorY,
+        z: doorZ,
+      }),
+      steel: [verticalHandle(side * 30, doorY, doorZ + 20, 900)],
+    },
+  }));
+}
+
+function wardrobe() {
+  const { width, height, depth, plinth } = WARDROBE;
+  const corpusHeight = height - plinth;
 
   return {
     // Корпус из панелей, а не брусок: у шкафа появляются толщина
@@ -115,14 +134,6 @@ function wardrobe() {
     // Ножки вместо глухого цоколя: под шкафом виден пол, и корпус
     // перестаёт читаться встроенным коробом
     graphite: taperedLegs(width, depth, { heightMm: plinth }),
-    oak: [
-      ...panelFacade(doorWidth, doorHeight, 18, { x: -(doorWidth / 2 + 6), y: doorY, z: doorZ }),
-      ...panelFacade(doorWidth, doorHeight, 18, { x: doorWidth / 2 + 6, y: doorY, z: doorZ }),
-    ],
-    steel: [
-      verticalHandle(-30, doorY, doorZ + 20, 900),
-      verticalHandle(30, doorY, doorZ + 20, 900),
-    ],
   };
 }
 
@@ -320,6 +331,7 @@ const FURNITURE = [
     type: 'static',
     basePriceCents: 5490000,
     build: wardrobe,
+    doors: wardrobeDoors,
   },
   {
     sku: 'TEST-SBD-1200',
@@ -450,6 +462,7 @@ export function buildProductPanels(product) {
 
   collect(product.build());
   for (const drawer of product.drawers?.() ?? []) collect(drawer.parts);
+  for (const door of product.doors?.() ?? []) collect(door.parts);
   return panels;
 }
 
@@ -465,5 +478,24 @@ export function buildProductDrawers(product) {
     name: `drawer:${index}`,
     travelMm: Math.round(drawer.travelMm),
     groups: mergeByMaterial(drawer.parts),
+  }));
+}
+
+/**
+ * Распашные дверцы изделия.
+ *
+ * Как и ящик, дверца уезжает в GLB отдельным узлом: слить её с корпусом
+ * значит лишить возможности открыть. В extras едет точка навески —
+ * вокруг неё вьюер и поворачивает полотно. Считать её на глаз нельзя:
+ * дверца повернётся вокруг своего центра и уедет сквозь стенку.
+ */
+export function buildProductDoors(product) {
+  return (product.doors?.() ?? []).map((door, index) => ({
+    name: `door:${index}`,
+    hingeXMm: Math.round(door.hingeXMm),
+    hingeZMm: Math.round(door.hingeZMm),
+    /** Знак задаёт сторону распахивания: слева петли или справа */
+    maxAngleDeg: Math.round(door.maxAngleDeg ?? 100),
+    groups: mergeByMaterial(door.parts),
   }));
 }

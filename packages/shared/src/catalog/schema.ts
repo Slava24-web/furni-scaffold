@@ -162,6 +162,8 @@ export const CatalogProductSchema = z.object({
     })
     .default({}),
   drawerCount: z.number().int().min(0).default(0),
+  /** Сколько распашных дверец можно открыть */
+  doorCount: z.number().int().min(0).default(0),
   /**
    * Ход направляющей: на столько ящик выезжает вперёд.
    *

@@ -18,6 +18,7 @@ import {
   MATERIALS,
   PRODUCTS,
   TEST_TENANT,
+  buildProductDoors,
   buildProductDrawers,
   buildProductGeometry,
   buildProductPanels,
@@ -102,12 +103,17 @@ async function main() {
   for (const product of PRODUCTS) {
     const groups = buildProductGeometry(product);
     const drawers = buildProductDrawers(product);
+    const doors = buildProductDoors(product);
     // Листовые детали для карты раскроя: только то, что действительно
     // пилят из плиты, — ручки, ножки и стекло сюда не попадают
     const panels = buildProductPanels(product);
     // Ящики в закрытом положении — часть изделия: и габарит, и вес
     // геометрии считаются вместе с ними
-    const allGroups = [...groups, ...drawers.flatMap((drawer) => drawer.groups)];
+    const allGroups = [
+      ...groups,
+      ...drawers.flatMap((drawer) => drawer.groups),
+      ...doors.flatMap((door) => door.groups),
+    ];
     const sourceTriangles = allGroups.reduce((sum, g) => sum + triangleCount(g.geometry), 0);
     const bounds = boundsMm({
       positions: allGroups.flatMap((g) => g.geometry.positions),
@@ -124,6 +130,7 @@ async function main() {
       name: product.sku,
       groups,
       drawers,
+      doors,
       materials: MATERIALS,
       textures: usedTextures(allGroups, textures),
     });
@@ -177,6 +184,8 @@ async function main() {
       panels,
       /** Сколько ящиков можно выдвинуть */
       drawerCount: drawers.length,
+      /** Сколько дверец можно открыть */
+      doorCount: doors.length,
       /**
        * Ход направляющей: на столько ящик выезжает вперёд. Нужен не
        * вьюеру (он читает его из узла модели), а проверке коллизий —

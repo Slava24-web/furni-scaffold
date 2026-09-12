@@ -32,6 +32,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   update: [Partial<Placement>];
   remove: [];
+  /** Открыть или закрыть дверцы выделенного изделия */
+  setDoors: [boolean];
 }>();
 
 const conflict = computed(() => conflictMessage(props.conflicts));
@@ -152,6 +154,16 @@ function normalize(deg: number): number {
     <p v-if="(props.product?.drawerCount ?? 0) > 0" class="inspector__tip">
       Тап по фасаду выдвигает ящик
     </p>
+
+    <!-- Дверцы: тапом по одной, кнопками — всеми сразу. Заглянуть внутрь
+         шкафа надо, чтобы увидеть полки и понять, что покупаешь -->
+    <section v-if="(props.product?.doorCount ?? 0) > 0" class="doors">
+      <span class="field__label">Дверцы</span>
+      <div class="doors__buttons">
+        <button type="button" @click="emit('setDoors', true)">Открыть</button>
+        <button type="button" @click="emit('setDoors', false)">Закрыть</button>
+      </div>
+    </section>
 
     <section v-for="slot in props.product?.finishes ?? []" :key="slot.code" class="finish">
       <span class="finish__label">{{ slot.label }}</span>
@@ -318,6 +330,27 @@ function normalize(deg: number): number {
   font-size: 11px;
   color: #8a909b;
   font-variant-numeric: tabular-nums;
+}
+.doors {
+  display: grid;
+  gap: 5px;
+}
+.doors__buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.doors__buttons button {
+  padding: 6px 8px;
+  border: 1px solid #e2e4e9;
+  border-radius: 8px;
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.doors__buttons button:hover {
+  border-color: #b6c2d4;
 }
 .inspector__note {
   margin: 0;

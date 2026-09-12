@@ -306,6 +306,30 @@ watch([selectedOpening, () => canvas.value?.viewer], ([opening, viewer]) => {
 
 function onOpeningTap(openingId: string | null): void {
   selectedOpeningId.value = openingId;
+  openingOpen.value = openingId ? isOpeningOpen(openingId) : false;
+}
+
+/**
+ * Распахнутая дверь — состояние вьюера, а не документа: это осмотр, а не
+ * свойство планировки. Поэтому и панель спрашивает вьюер.
+ */
+const openingOpen = ref(false);
+
+function isOpeningOpen(openingId: string): boolean {
+  return canvas.value?.viewer?.openings.isOpen(openingId) ?? false;
+}
+
+function setOpeningOpen(open: boolean): void {
+  const id = selectedOpeningId.value;
+  const viewer = canvas.value?.viewer;
+  if (!id || !viewer) return;
+
+  openingOpen.value = open;
+  if (!viewer.openings.setOpen(id, open)) return;
+
+  // Полотно строится вместе с проёмом: пересобираем сцену комнаты
+  viewer.openings.build(scene.doc.rooms, viewer.materials);
+  viewer.invalidate();
 }
 
 function updateOpening(patch: Partial<Opening>): void {
@@ -486,8 +510,10 @@ onBeforeUnmount(() => uninstallTestingApi());
           v-if="selectedOpening"
           :opening="selectedOpening"
           :materials="catalog.materialByCode"
+          :open="openingOpen"
           @update="updateOpening"
           @remove="removeOpening"
+          @set-open="setOpeningOpen"
         />
         <ObjectInspector
           v-else-if="selected"
@@ -498,6 +524,7 @@ onBeforeUnmount(() => uninstallTestingApi());
           :conflicts="canvas?.conflicts"
           @update="updateSelected"
           @remove="deleteSelected"
+          @set-doors="(open: boolean) => canvas?.setDoorsOpen(open)"
         />
 
         <LeadForm

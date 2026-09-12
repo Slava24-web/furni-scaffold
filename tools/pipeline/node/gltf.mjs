@@ -12,7 +12,7 @@
  */
 import { Document, NodeIO } from '@gltf-transform/core';
 
-export function buildDocument({ name, groups, materials, textures = {}, drawers = [] }) {
+export function buildDocument({ name, groups, materials, textures = {}, drawers = [], doors = [] }) {
   const doc = new Document();
   doc.getRoot().getAsset().generator = 'furni-pipeline';
   const buffer = doc.createBuffer();
@@ -64,6 +64,21 @@ export function buildDocument({ name, groups, materials, textures = {}, drawers 
 
   const node = doc.createNode(name).setMesh(addMesh(name, groups));
   scene.addChild(node);
+
+  for (const door of doors) {
+    // Точка навески едет в узле: вокруг неё поворачивается полотно, и
+    // посчитать её во вьюере по габариту нельзя — дверца ушла бы
+    // сквозь боковину
+    const child = doc
+      .createNode(door.name)
+      .setMesh(addMesh(door.name, door.groups))
+      .setExtras({
+        hingeXMm: door.hingeXMm,
+        hingeZMm: door.hingeZMm,
+        maxAngleDeg: door.maxAngleDeg,
+      });
+    node.addChild(child);
+  }
 
   for (const drawer of drawers) {
     // Ход хранится в самом узле: вьюер не знает каталога, а выдвигать

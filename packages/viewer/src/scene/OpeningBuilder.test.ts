@@ -41,6 +41,15 @@ function build(openings: Partial<Opening>[]): { builder: OpeningBuilder; scene: 
   return { builder, scene };
 }
 
+/** Все меши изделия: часть висит на полотне, часть на коробке. */
+function meshes(group: { traverse: (fn: (node: unknown) => void) => void }): Mesh[] {
+  const found: Mesh[] = [];
+  group.traverse((node) => {
+    if ((node as Mesh).isMesh) found.push(node as Mesh);
+  });
+  return found;
+}
+
 /** Габарит изделия в проёме, метры мира. */
 function bounds(builder: OpeningBuilder): Box3 {
   const group = builder.targets[0]!;
@@ -95,8 +104,8 @@ describe('OpeningBuilder', () => {
 
   it('остеклённое изделие получает прозрачное заполнение', () => {
     const { builder } = build([{ kind: 'window', sku: 'window-pvc-2', width: 1300, height: 1400, sillHeight: 850 }]);
-    const materials = builder.targets[0]!.children.map(
-      (child) => (child as Mesh).material as MeshStandardMaterial,
+    const materials = meshes(builder.targets[0]!).map(
+      (mesh) => mesh.material as MeshStandardMaterial,
     );
 
     expect(materials.some((material) => material.transparent && material.opacity < 1)).toBe(true);
@@ -104,8 +113,8 @@ describe('OpeningBuilder', () => {
 
   it('глухая дверь стекла не получает', () => {
     const { builder } = build([{ sku: 'door-flush' }]);
-    const materials = builder.targets[0]!.children.map(
-      (child) => (child as Mesh).material as MeshStandardMaterial,
+    const materials = meshes(builder.targets[0]!).map(
+      (mesh) => mesh.material as MeshStandardMaterial,
     );
 
     expect(materials.some((material) => material.transparent)).toBe(false);
@@ -116,7 +125,7 @@ describe('OpeningBuilder', () => {
       { kind: 'window', sku: 'window-pvc-3', width: 2000, height: 1400, sillHeight: 850 },
     ]);
     // Профиль, стекло и подоконник — три материала, три меша
-    expect(builder.targets[0]!.children.length).toBeLessThanOrEqual(3);
+    expect(meshes(builder.targets[0]!).length).toBeLessThanOrEqual(4);
   });
 
   it('цвет берётся из каталога тенанта', () => {
@@ -127,7 +136,7 @@ describe('OpeningBuilder', () => {
       get: (code) => (code === 'graphite' ? graphite : undefined),
     });
 
-    const used = builder.targets[0]!.children.map((child) => (child as Mesh).material);
+    const used = meshes(builder.targets[0]!).map((mesh) => mesh.material);
     expect(used).toContain(graphite);
   });
 
@@ -142,7 +151,7 @@ describe('OpeningBuilder', () => {
       get: (code) => (code === 'stone' ? stone : undefined),
     });
 
-    const used = builder.targets[0]!.children.map((child) => (child as Mesh).material);
+    const used = meshes(builder.targets[0]!).map((mesh) => mesh.material);
     expect(used).not.toContain(stone);
   });
 
@@ -193,5 +202,47 @@ describe('OpeningBuilder', () => {
     builder.dispose();
 
     expect(scene.children).not.toContain(builder.root);
+  });
+
+  it('закрытая дверь стоит в плоскости стены', () => {
+    const { builder } = build([{ sku: 'door-flush' }]);
+    const before = bounds(builder).clone();
+
+    builder.setOpen(builder.targets[0]!.userData['openingId'] as string, true);
+    expect(before.min.z).toBeCloseTo(bounds(builder).min.z, 5);
+  });
+
+  it('открытая дверь выходит из плоскости стены', () => {
+    const { builder } = build([{ sku: 'door-flush' }]);
+    const value = room([{ sku: 'door-flush' }]);
+    const id = builder.targets[0]!.userData['openingId'] as string;
+
+    builder.setOpen(id, true);
+    builder.build([{ ...value, openings: [{ ...value.openings[0]!, id }] }], noMaterials);
+
+    // Полотно распахнуто: габарит изделия стал глубже толщины стены
+    const size = bounds(builder).getSize(new Vector3());
+    expect(Math.max(size.x, size.z)).toBeGreaterThan(0.5);
+  });
+
+  it('повторный вызов с тем же состоянием ничего не меняет', () => {
+    const { builder } = build([{ sku: 'door-flush' }]);
+    const id = builder.targets[0]!.userData['openingId'] as string;
+
+    expect(builder.setOpen(id, true)).toBe(true);
+    expect(builder.setOpen(id, true)).toBe(false);
+    expect(builder.isOpen(id)).toBe(true);
+  });
+
+  it('состояние переживает пересборку сцены', () => {
+    const { builder } = build([{ sku: 'door-flush' }]);
+    const id = builder.targets[0]!.userData['openingId'] as string;
+    builder.setOpen(id, true);
+
+    const value = room([{ sku: 'door-flush' }]);
+    builder.build([{ ...value, openings: [{ ...value.openings[0]!, id }] }], noMaterials);
+
+    // Дверь не захлопывается на каждую правку размера комнаты
+    expect(builder.isOpen(id)).toBe(true);
   });
 });
