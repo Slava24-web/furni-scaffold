@@ -44,6 +44,28 @@ export function translate(geometry, xMm, yMm, zMm) {
 }
 
 /**
+ * Поворот геометрии вокруг оси X. Мутирует переданный объект.
+ *
+ * Нормали поворачиваются вместе с позициями: без этого деталь остаётся
+ * освещённой так, будто её не трогали, и наклонная панель вытяжки
+ * бликует как горизонтальная.
+ */
+export function rotateX(geometry, radians) {
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+
+  for (const buffer of [geometry.positions, geometry.normals]) {
+    for (let i = 0; i < buffer.length; i += 3) {
+      const y = buffer[i + 1];
+      const z = buffer[i + 2];
+      buffer[i + 1] = y * cos - z * sin;
+      buffer[i + 2] = y * sin + z * cos;
+    }
+  }
+  return geometry;
+}
+
+/**
  * Грани параллелепипеда: [нормаль, ось U, ось V].
  *
  * Для каждой грани обязано выполняться U x V = нормаль. Вместе с порядком

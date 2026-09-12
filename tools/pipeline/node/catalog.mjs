@@ -12,6 +12,7 @@
  */
 import { cylinder, mergeGeometries, roundedBox, segmentedBox, translate } from './geometry.mjs';
 import { KITCHEN_PRODUCTS } from './kitchen.mjs';
+import { APPLIANCE_PRODUCTS } from './appliances.mjs';
 import { PANEL_THICKNESS, carcassPanels, openBoxPanels } from './carcass.mjs';
 import { taperedLegs } from './legs.mjs';
 import { panelFacade } from './facade.mjs';
@@ -396,11 +397,11 @@ export function finishesFor(materialCodes) {
 }
 
 /**
- * Полный каталог: корпусная мебель плюс кухонные модули и детали.
+ * Полный каталог: корпусная мебель, кухонные модули и техника.
  * Значения по умолчанию проставляются здесь, чтобы описания изделий
  * не повторяли одно и то же.
  */
-export const PRODUCTS = [...FURNITURE, ...KITCHEN_PRODUCTS].map((product) => ({
+export const PRODUCTS = [...FURNITURE, ...KITCHEN_PRODUCTS, ...APPLIANCE_PRODUCTS].map((product) => ({
   type: 'static',
   mountHeightMm: 0,
   snapToWall: true,

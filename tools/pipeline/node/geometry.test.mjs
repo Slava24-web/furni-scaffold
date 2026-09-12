@@ -3,6 +3,7 @@ import {
   boundsMm,
   cylinder,
   mergeGeometries,
+  rotateX,
   roundedBox,
   segmentedBox,
   translate,
@@ -118,5 +119,34 @@ describe('translate', () => {
     const bounds = boundsMm(box);
     expect(bounds).toMatchObject({ widthMm: 200, heightMm: 300, depthMm: 400 });
     expect(bounds.minYMm).toBe(850);
+  });
+});
+
+describe('поворот вокруг оси X', () => {
+  it('переводит верх детали в её перед', () => {
+    const geometry = rotateX(segmentedBox(100, 400, 100, 1), Math.PI / 2);
+    const bounds = boundsMm(geometry);
+
+    expect(bounds.heightMm).toBeCloseTo(100, 3);
+    expect(bounds.depthMm).toBeCloseTo(400, 3);
+  });
+
+  it('поворачивает нормали вместе с позициями', () => {
+    // Иначе наклонная деталь бликует как горизонтальная
+    const geometry = rotateX(segmentedBox(100, 100, 100, 1), Math.PI / 2);
+    for (let i = 0; i < geometry.normals.length; i += 3) {
+      const length = Math.hypot(
+        geometry.normals[i],
+        geometry.normals[i + 1],
+        geometry.normals[i + 2],
+      );
+      expect(length).toBeCloseTo(1, 5);
+    }
+  });
+
+  it('нулевой угол ничего не меняет', () => {
+    const before = segmentedBox(200, 300, 400, 1);
+    const after = rotateX(segmentedBox(200, 300, 400, 1), 0);
+    expect(after.positions).toEqual(before.positions);
   });
 });
