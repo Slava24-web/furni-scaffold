@@ -1,5 +1,6 @@
 import type { Placement, Wall } from './schema';
 import { isClosedContour, wallAngleDeg, wallLengthMm, type Vec2 } from './walls';
+import { blockedSwings, type SwingZone } from './swing';
 
 /**
  * Габариты объектов в плане, их пересечение и точки стыковки.
@@ -234,16 +235,24 @@ export interface ConflictReport {
   wallIds: string[];
   /** Объект вынесен за пределы замкнутого помещения */
   outsideRoom: boolean;
+  /** id проёмов, открыванию которых объект мешает */
+  openingIds: string[];
 }
 
 export function hasConflicts(report: ConflictReport): boolean {
-  return report.objectIds.length > 0 || report.wallIds.length > 0 || report.outsideRoom;
+  return (
+    report.objectIds.length > 0 ||
+    report.wallIds.length > 0 ||
+    report.openingIds.length > 0 ||
+    report.outsideRoom
+  );
 }
 
 export const EMPTY_CONFLICTS: ConflictReport = {
   objectIds: [],
   wallIds: [],
   outsideRoom: false,
+  openingIds: [],
 };
 
 /**
@@ -262,6 +271,7 @@ export function findConflicts(
   others: readonly { id: string; box: Box }[],
   walls: readonly Wall[],
   toleranceMm = TOUCH_TOLERANCE_MM,
+  swings: readonly SwingZone[] = [],
 ): ConflictReport {
   const objectIds: string[] = [];
   for (const other of others) {
@@ -274,8 +284,11 @@ export function findConflicts(
   }
 
   const outsideRoom = isClosedContour(walls) && !isInsideContour(subject.centre, walls);
+  // Зона открывания двери — такое же препятствие, как стена: объект,
+  // поставленный в неё, не даст двери открыться
+  const openingIds = blockedSwings(swings, subject);
 
-  return { objectIds, wallIds, outsideRoom };
+  return { objectIds, wallIds, outsideRoom, openingIds };
 }
 
 export type OverlayAlignment = 'leftFlush' | 'rightFlush' | 'centred';

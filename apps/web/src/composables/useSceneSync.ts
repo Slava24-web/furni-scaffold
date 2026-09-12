@@ -3,6 +3,7 @@ import { RoomBuilder, applyFinishes, type Viewer } from '@furni/viewer';
 import {
   roomDimensions,
   selectedFinish,
+  swingZones,
   type CatalogProduct,
   type Placement,
   type SceneDoc,
@@ -53,6 +54,9 @@ export function useSceneSync(viewer: ShallowRef<Viewer | null>): {
     // Размерные линии пересобираются вместе со стенами: подпись обязана
     // показывать текущий размер, а не тот, что был до правки
     v.dimensions.build(doc.rooms.flatMap((item) => roomDimensions(item)));
+    // Зоны открывания дверей: пользователь должен видеть, куда нельзя
+    // ставить мебель, а не узнавать об этом из сообщения о конфликте
+    v.swings.build(doc.rooms.flatMap((item) => swingZones(item)));
     // Опорная сетка нужна на пустой сцене; в готовом помещении она
     // только спорит с полом
     v.environment.setGridVisible(room.isEmpty);

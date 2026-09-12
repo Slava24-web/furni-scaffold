@@ -147,6 +147,10 @@ describe('ввод размера помещения', () => {
       height: 2100,
       sillHeight: 0,
       swingRadius: null,
+  hinge: 'left' as const,
+  swingInward: true,
+  sku: null,
+  options: {},
     };
     const next = resizeRoomWall({ ...source, openings: [opening] }, wallId, 1000);
     const wall = next.walls.find((w) => w.id === wallId)!;

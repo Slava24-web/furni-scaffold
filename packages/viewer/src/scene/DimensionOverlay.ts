@@ -34,10 +34,15 @@ const MM = 1000;
 /** Высота линий над полом: ниже начинается мерцание с плоскостью пола. */
 const HEIGHT_MM = 30;
 /** Длина засечки по концам размерной линии. */
-const TICK_MM = 160;
-/** Плашка подписи в миллиметрах плана. */
-const LABEL_WIDTH_MM = 760;
-const LABEL_HEIGHT_MM = 260;
+const TICK_MM = 120;
+/**
+ * Плашка подписи в миллиметрах плана.
+ *
+ * Размер сдержанный: подпись — служебная разметка поверх сцены, и
+ * крупная плашка закрывает то, ради чего планировку и рисуют.
+ */
+const LABEL_WIDTH_MM = 470;
+const LABEL_HEIGHT_MM = 150;
 const RENDER_ORDER = 10;
 
 const LINE_COLOR = 0x2f6fed;
@@ -201,20 +206,20 @@ function drawLabel(text: string, editable: boolean): Texture | null {
   if (typeof document === 'undefined') return null;
 
   const canvas = document.createElement('canvas');
-  canvas.width = 256;
-  canvas.height = 88;
+  canvas.width = 224;
+  canvas.height = 72;
   const ctx = canvas.getContext('2d');
   if (!ctx) return null;
 
   ctx.fillStyle = '#ffffff';
   ctx.strokeStyle = editable ? '#2f6fed' : '#c2c7d0';
-  ctx.lineWidth = 5;
-  roundedRect(ctx, 3, 3, canvas.width - 6, canvas.height - 6, 18);
+  ctx.lineWidth = 4;
+  roundedRect(ctx, 2, 2, canvas.width - 4, canvas.height - 4, 14);
   ctx.fill();
   ctx.stroke();
 
   ctx.fillStyle = editable ? '#1a2b4a' : '#6b7280';
-  ctx.font = '600 46px system-ui, -apple-system, sans-serif';
+  ctx.font = '600 42px system-ui, -apple-system, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(text, canvas.width / 2, canvas.height / 2 + 2);

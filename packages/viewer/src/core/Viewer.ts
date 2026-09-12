@@ -17,6 +17,7 @@ import { DrawerController, drawersOf } from '../interaction/DrawerController';
 import { PlacementPreview } from '../scene/PlacementPreview';
 import { MaterialLibrary } from '../scene/MaterialLibrary';
 import { DimensionOverlay } from '../scene/DimensionOverlay';
+import { SwingOverlay } from '../scene/SwingOverlay';
 import type { Object3D } from 'three';
 import type { RegisteredInstance } from './SceneRegistry';
 import { AssetLoader } from '../loading/AssetLoader';
@@ -53,6 +54,8 @@ export class Viewer {
   readonly preview: PlacementPreview;
   /** Размерные линии помещения */
   readonly dimensions: DimensionOverlay;
+  /** Зоны открывания дверей */
+  readonly swings: SwingOverlay;
   /** Выдвижные ящики загруженных моделей */
   readonly drawers = new DrawerController();
   /** Материалы тенанта для смены отделки */
@@ -101,6 +104,7 @@ export class Viewer {
     this.rotation = new RotationGizmo(this.scene);
     this.preview = new PlacementPreview(this.scene);
     this.dimensions = new DimensionOverlay(this.scene);
+    this.swings = new SwingOverlay(this.scene);
     this.telemetry = new Telemetry();
     this.quality = new QualityManager(this.renderer, this.telemetry, options.forceTier);
     // Загрузчик держит кэш моделей и зависит от бюджета видеопамяти
@@ -296,6 +300,7 @@ export class Viewer {
     this.drawers.dispose();
     this.preview.dispose();
     this.dimensions.dispose();
+    this.swings.dispose();
     this.materials.dispose();
     this.environment.dispose();
     this.renderer.dispose();

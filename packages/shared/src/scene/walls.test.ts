@@ -33,6 +33,10 @@ const opening = (over: Partial<Opening> = {}): Opening => ({
   height: 1400,
   sillHeight: 800,
   swingRadius: null,
+  hinge: 'left' as const,
+  swingInward: true,
+  sku: null,
+  options: {},
   ...over,
 });
 

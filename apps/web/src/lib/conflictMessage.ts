@@ -18,6 +18,15 @@ export function conflictMessage(report: ConflictReport | null | undefined): stri
   if (report.wallIds.length > 0) {
     parts.push(report.wallIds.length === 1 ? 'врезается в стену' : 'врезается в стены');
   }
+  if (report.openingIds.length > 0) {
+    // Причина неочевидная: объект ни с чем не пересекается, но дверь
+    // им заблокирована — без прямой формулировки это читается как сбой
+    parts.push(
+      report.openingIds.length === 1
+        ? 'перекрывает зону открывания двери'
+        : 'перекрывает зоны открывания дверей',
+    );
+  }
   if (report.outsideRoom) {
     parts.push('вынесен за пределы комнаты');
   }

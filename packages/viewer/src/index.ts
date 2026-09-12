@@ -9,6 +9,7 @@ export { DrawerController, drawersOf, travelOf } from './interaction/DrawerContr
 export { RoomBuilder } from './scene/RoomBuilder';
 export { PlacementPreview } from './scene/PlacementPreview';
 export { DimensionOverlay, type DimensionLabelFactory } from './scene/DimensionOverlay';
+export { SwingOverlay } from './scene/SwingOverlay';
 export { MaterialLibrary, applyFinishes, type MaterialSpec } from './scene/MaterialLibrary';
 export {
   CameraController,

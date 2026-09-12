@@ -20,10 +20,12 @@ import {
   planAngleDeg,
   restingHeightMm,
   supportTopMm,
+  swingZones,
   type Box,
   type CatalogProduct,
   type ConflictReport,
   type Placement,
+  type SwingZone,
   type Wall,
 } from '@furni/shared';
 import { useCatalogStore } from '../stores/catalog';
@@ -165,6 +167,11 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     return scene.doc.rooms.flatMap((room) => room.walls);
   }
 
+  /** Зоны открывания всех дверей документа. */
+  function allSwings(): SwingZone[] {
+    return scene.doc.rooms.flatMap((room) => swingZones(room));
+  }
+
   /** Габариты остальных объектов сцены. Товары без каталога пропускаются. */
   function otherBoxes(exceptId: string | null): { id: string; box: Box }[] {
     const boxes: { id: string; box: Box }[] = [];
@@ -186,6 +193,7 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
    */
   let staticBoxes: { id: string; box: Box }[] = [];
   let dragWalls: Wall[] = [];
+  let dragSwings: SwingZone[] = [];
 
   /** Что делает текущий жест: двигает объект или вращает его. */
   let dragKind: 'move' | 'rotate' = 'move';
@@ -259,6 +267,7 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
 
     snapEngine.value.setTargets(targets);
     dragWalls = allWalls();
+    dragSwings = allSwings();
   }
 
   /**
@@ -333,8 +342,9 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
 
     const neighbours = subject ? staticBoxes : otherBoxes(id);
     const walls = subject ? dragWalls : allWalls();
+    const swings = subject ? dragSwings : allSwings();
 
-    conflicts.value = findConflicts(box, neighbours, walls);
+    conflicts.value = findConflicts(box, neighbours, walls, undefined, swings);
     v?.selection.setConflict(hasConflicts(conflicts.value));
     highlightConflicting(conflicts.value.objectIds);
     v?.invalidate();
@@ -731,7 +741,7 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
       bottomMm: point.y,
       topMm: point.y + product.heightMm,
     };
-    previewConflicts.value = findConflicts(box, otherBoxes(null), allWalls());
+    previewConflicts.value = findConflicts(box, otherBoxes(null), allWalls(), undefined, allSwings());
     v.preview.setConflict(hasConflicts(previewConflicts.value));
     // Виновник подсвечивается и до отпускания: пользователь видит, во что
     // упрётся объект, ещё на подлёте

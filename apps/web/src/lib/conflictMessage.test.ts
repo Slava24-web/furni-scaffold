@@ -5,6 +5,7 @@ const report = (over: Partial<Parameters<typeof conflictMessage>[0]> = {}) => ({
   objectIds: [],
   wallIds: [],
   outsideRoom: false,
+  openingIds: [],
   ...over,
 });
 
@@ -48,5 +49,14 @@ describe('сообщение о конфликте', () => {
     expect(
       conflictMessage(report({ objectIds: ['a'], wallIds: ['w1'], outsideRoom: true })),
     ).toBe('Объект пересекается с 1 объектом, врезается в стену, вынесен за пределы комнаты');
+  });
+
+  it('называет перекрытую зону открывания двери', () => {
+    expect(conflictMessage(report({ openingIds: ['d1'] }))).toBe(
+      'Объект перекрывает зону открывания двери',
+    );
+    expect(conflictMessage(report({ openingIds: ['d1', 'd2'] }))).toBe(
+      'Объект перекрывает зоны открывания дверей',
+    );
   });
 });

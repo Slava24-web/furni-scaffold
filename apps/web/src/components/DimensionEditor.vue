@@ -64,37 +64,37 @@ function apply(): void {
   z-index: 5;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   /* Поле встаёт над точкой тапа, чтобы не закрывать саму размерную линию */
   transform: translate(-50%, -130%);
-  padding: 6px 8px;
+  padding: 3px 4px 3px 6px;
   border: 1px solid #2f6fed;
-  border-radius: 10px;
+  border-radius: 8px;
   background: #fff;
-  box-shadow: 0 8px 22px rgb(16 24 40 / 0.16);
+  box-shadow: 0 6px 16px rgb(16 24 40 / 0.16);
 }
 input {
-  width: 84px;
-  padding: 5px 7px;
+  width: 62px;
+  padding: 2px 4px;
   border: 1px solid #d5d8dd;
-  border-radius: 6px;
+  border-radius: 5px;
   font: inherit;
-  font-size: 13px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 .dimension__units {
-  font-size: 11px;
+  font-size: 10px;
   color: #6b7280;
 }
 button {
-  padding: 5px 9px;
+  padding: 3px 6px;
   border: 1px solid #2f6fed;
-  border-radius: 6px;
+  border-radius: 5px;
   background: #2f6fed;
   color: #fff;
   font: inherit;
-  font-size: 13px;
-  line-height: 1;
+  font-size: 12px;
+  line-height: 1.2;
   cursor: pointer;
 }
 button:disabled {

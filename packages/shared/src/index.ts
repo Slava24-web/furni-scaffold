@@ -4,6 +4,7 @@ export * from './scene/migrate';
 export * from './scene/walls';
 export * from './scene/dimensions';
 export * from './scene/collision';
+export * from './scene/swing';
 export * from './catalog/schema';
 export * from './catalog/estimate';
 export { randomUUID, deterministicUuid } from './scene/uuid';

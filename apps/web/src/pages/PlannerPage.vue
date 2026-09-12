@@ -139,6 +139,10 @@ function insertOpening(point: FloorPoint, kind: 'door' | 'window'): void {
     height: kind === 'door' ? 2100 : 1400,
     sillHeight: kind === 'door' ? 0 : 800,
     swingRadius: null,
+    hinge: 'left',
+    swingInward: true,
+    sku: null,
+    options: {},
   };
 
   scene.addOpening(opening);

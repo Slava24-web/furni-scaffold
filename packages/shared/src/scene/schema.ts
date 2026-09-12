@@ -36,8 +36,16 @@ export const OpeningSchema = z.object({
   width: z.number().int().min(100),
   height: z.number().int().min(100),
   sillHeight: z.number().int().min(0).default(0),
-  /** Зона открывания для проверки коллизий, мм. null = не учитывать */
+  /** Зона открывания для проверки коллизий, мм. null = по ширине полотна */
   swingRadius: z.number().int().nullable().default(null),
+  /** Сторона навески, считая от начала стены */
+  hinge: z.enum(['left', 'right']).default('left'),
+  /** Открывается внутрь помещения. Наружу открывают входные двери */
+  swingInward: z.boolean().default(true),
+  /** Изделие каталога в проёме: дверь или окно. null — голый проём */
+  sku: z.string().nullable().default(null),
+  /** Выбранные опции изделия: код группы -> код варианта */
+  options: z.record(z.string(), z.string()).default({}),
 });
 
 export const RoomSchema = z.object({

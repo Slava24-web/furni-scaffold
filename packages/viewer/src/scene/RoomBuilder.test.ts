@@ -58,6 +58,10 @@ describe('RoomBuilder', () => {
           height: 2100,
           sillHeight: 0,
           swingRadius: null,
+  hinge: 'left' as const,
+  swingInward: true,
+  sku: null,
+  options: {},
         },
       ],
     };
