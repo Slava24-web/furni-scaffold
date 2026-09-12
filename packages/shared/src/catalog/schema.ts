@@ -42,12 +42,24 @@ export const CatalogMaterialSchema = z.object({
  */
 export const PanelSpecSchema = z.object({
   name: z.string().min(1),
+  /** Вид детали: по нему считается фурнитура, а не по названию */
+  kind: z
+    .enum(['side', 'bottom', 'top', 'back', 'shelf', 'facade', 'drawer-box', 'other'])
+    .default('other'),
   material: z.string().min(1),
   widthMm: z.number().int().positive(),
   heightMm: z.number().int().positive(),
   thicknessMm: z.number().int().positive(),
   /** Направленный рисунок: такую деталь при раскрое не повернуть */
   grain: z.boolean().default(false),
+  /**
+   * Длина кромки на деталь и её толщина.
+   *
+   * Кромкуют не всё: задняя стенка уходит в паз, невидимые торцы корпуса
+   * оставляют голыми. Ноль означает «кромка не нужна», а не «неизвестно».
+   */
+  edgeLengthMm: z.number().int().min(0).default(0),
+  edgeThicknessMm: z.number().min(0).default(0),
 });
 
 /**

@@ -9,7 +9,10 @@
  *
  * Все размеры в миллиметрах, деталь строится вокруг переданного центра.
  */
-import { markPanel, roundedBox, segmentedBox, translate } from './geometry.mjs';
+import { markPanel, perimeterMm, roundedBox, segmentedBox, translate } from './geometry.mjs';
+
+/** Кромка фасада толще корпусной: по ней и бьют дверцей. */
+export const FACADE_EDGE_THICKNESS = 2;
 
 /** Ширина обвязки рамки. */
 export const FRAME_WIDTH = 68;
@@ -36,8 +39,14 @@ export function flatFacade(widthMm, heightMm, thicknessMm, centre) {
       widthMm,
       heightMm,
       thicknessMm,
-      // У фасада направленный рисунок: при раскрое его не повернуть
-      { grain: true },
+      // У фасада направленный рисунок: при раскрое его не повернуть.
+      // Кромка по всему периметру: видны все четыре торца
+      {
+        grain: true,
+        kind: 'facade',
+        edgeLengthMm: perimeterMm(widthMm, heightMm),
+        edgeThicknessMm: FACADE_EDGE_THICKNESS,
+      },
     ),
   ];
 }
@@ -91,6 +100,11 @@ export function panelFacade(widthMm, heightMm, thicknessMm, centre) {
 
   // Заказывают фасад целиком, а не пятью брусками: метка раскроя
   // ставится на одну деталь и несёт габарит всего фасада
-  markPanel(parts[0], 'Фасад', widthMm, heightMm, thicknessMm, { grain: true });
+  markPanel(parts[0], 'Фасад', widthMm, heightMm, thicknessMm, {
+    grain: true,
+    kind: 'facade',
+    edgeLengthMm: perimeterMm(widthMm, heightMm),
+    edgeThicknessMm: FACADE_EDGE_THICKNESS,
+  });
   return parts;
 }

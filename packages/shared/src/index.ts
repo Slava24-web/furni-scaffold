@@ -12,6 +12,7 @@ export * from './scene/drawerZone';
 export * from './catalog/schema';
 export * from './catalog/estimate';
 export * from './cut/plan';
+export * from './cut/hardware';
 export { randomUUID, deterministicUuid } from './scene/uuid';
 export * from './rules/dsl';
 export * from './rules/evaluate';

@@ -5,6 +5,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { PricingService } from '../pricing/pricing.service';
 import { QuoteService } from './quote.service';
 import { LeadsService } from '../leads/leads.service';
+import { LeadWebhookService, sign } from '../leads/lead-webhook.service';
 
 /**
  * Серверный расчёт сметы и приём заявки на живой БД.
@@ -25,7 +26,8 @@ suite('Смета и заявка', () => {
   const prisma = new PrismaService();
   const pricing = new PricingService(prisma);
   const quote = new QuoteService(pricing);
-  const leads = new LeadsService(prisma, quote);
+  const webhook = new LeadWebhookService();
+  const leads = new LeadsService(prisma, quote, webhook);
 
   const tenant = { id: randomUUID(), slug: `quote-${Date.now()}` };
   const sku = `QUOTE-CAB-${Date.now()}`;
@@ -167,5 +169,73 @@ suite('Смета и заявка', () => {
 
   it('кривой документ сцены отклоняется на разборе', () => {
     expect(() => quote.parse({ version: 999 })).toThrow();
+  });
+
+  it('без настроенной CRM заявка принимается и никуда не уходит', async () => {
+    const result = await leads.create(tenant.id, { contact, doc: doc(1) });
+    expect(result.delivered).toBe(false);
+  });
+
+  it('заявка уходит в CRM магазина подписанной', async () => {
+    const calls: { body: string; signature: string | null }[] = [];
+    const original = globalThis.fetch;
+    globalThis.fetch = (async (_url: string, init: RequestInit) => {
+      calls.push({
+        body: String(init.body),
+        signature: new Headers(init.headers).get('x-furni-signature'),
+      });
+      return new Response('ok', { status: 200 });
+    }) as typeof fetch;
+
+    await prisma.withTenant(tenant.id, (tx) =>
+      tx.tenant.update({
+        where: { id: tenant.id },
+        data: { leadWebhookUrl: 'https://crm.example/hook', leadWebhookSecret: 'секрет' },
+      }),
+    );
+
+    try {
+      const result = await leads.create(tenant.id, { contact, doc: doc(2) });
+
+      expect(result.delivered).toBe(true);
+      expect(calls).toHaveLength(1);
+      expect(JSON.parse(calls[0]!.body).totalCents).toBe(200_000);
+      expect(calls[0]!.signature).toBe(sign(calls[0]!.body, 'секрет'));
+    } finally {
+      globalThis.fetch = original;
+      await prisma.withTenant(tenant.id, (tx) =>
+        tx.tenant.update({ where: { id: tenant.id }, data: { leadWebhookUrl: null } }),
+      );
+    }
+  });
+
+  it('недоступная CRM не отменяет заявку', async () => {
+    const original = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      throw new Error('сеть недоступна');
+    }) as typeof fetch;
+
+    await prisma.withTenant(tenant.id, (tx) =>
+      tx.tenant.update({
+        where: { id: tenant.id },
+        data: { leadWebhookUrl: 'https://crm.example/hook' },
+      }),
+    );
+
+    try {
+      const result = await leads.create(tenant.id, { contact, doc: doc(1) });
+
+      // Заявка сохранена, доставка провалилась — покупатель не виноват
+      expect(result.delivered).toBe(false);
+      const stored = await prisma.withTenant(tenant.id, (tx) =>
+        tx.lead.findFirst({ where: { id: result.id } }),
+      );
+      expect(stored).not.toBeNull();
+    } finally {
+      globalThis.fetch = original;
+      await prisma.withTenant(tenant.id, (tx) =>
+        tx.tenant.update({ where: { id: tenant.id }, data: { leadWebhookUrl: null } }),
+      );
+    }
   });
 });

@@ -10,6 +10,9 @@
  */
 import { markPanel, segmentedBox, translate } from './geometry.mjs';
 
+/** Толщина кромки на видимых торцах корпуса. */
+export const EDGE_THICKNESS = 2;
+
 /** Толщина ЛДСП и задней стенки из ХДФ. */
 export const PANEL_THICKNESS = 18;
 export const BACK_THICKNESS = 6;
@@ -48,6 +51,8 @@ export function carcassPanels(widthMm, heightMm, depthMm, options = {}) {
         depthMm,
         heightMm,
         thickness,
+        // Кромкуется только передний торец: остальные внутри корпуса
+        { kind: 'side', edgeLengthMm: heightMm, edgeThicknessMm: EDGE_THICKNESS },
       ),
     );
   }
@@ -59,6 +64,7 @@ export function carcassPanels(widthMm, heightMm, depthMm, options = {}) {
       innerWidth,
       depthMm,
       thickness,
+      { kind: 'bottom', edgeLengthMm: innerWidth, edgeThicknessMm: EDGE_THICKNESS },
     ),
   );
 
@@ -70,6 +76,7 @@ export function carcassPanels(widthMm, heightMm, depthMm, options = {}) {
         innerWidth,
         depthMm,
         thickness,
+        { kind: 'top', edgeLengthMm: innerWidth, edgeThicknessMm: EDGE_THICKNESS },
       ),
     );
   }
@@ -87,6 +94,8 @@ export function carcassPanels(widthMm, heightMm, depthMm, options = {}) {
         innerWidth,
         heightMm - thickness * 2,
         BACK_THICKNESS,
+        // ХДФ уходит в паз: кромка ему не нужна
+        { kind: 'back' },
       ),
     );
   }
@@ -101,6 +110,7 @@ export function carcassPanels(widthMm, heightMm, depthMm, options = {}) {
         innerWidth,
         depthMm - 30,
         thickness,
+        { kind: 'shelf', edgeLengthMm: innerWidth, edgeThicknessMm: EDGE_THICKNESS },
       ),
     );
   }
@@ -133,6 +143,7 @@ export function openBoxPanels(widthMm, heightMm, depthMm, options = {}) {
       widthMm - thickness * 2,
       heightMm,
       thickness,
+      { kind: 'drawer-box' },
     ),
   );
 

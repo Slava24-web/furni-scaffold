@@ -54,15 +54,32 @@ export function translate(geometry, xMm, yMm, zMm) {
  * отдельных деталей уже нет.
  */
 export function markPanel(geometry, name, widthMm, heightMm, thicknessMm, options = {}) {
+  const width = Math.round(widthMm);
+  const height = Math.round(heightMm);
+
   geometry.panel = {
     name,
-    widthMm: Math.round(widthMm),
-    heightMm: Math.round(heightMm),
+    /** Вид детали: по нему считается фурнитура, а не по названию */
+    kind: options.kind ?? 'other',
+    widthMm: width,
+    heightMm: height,
     thicknessMm: Math.round(thicknessMm),
     // Деталь с направленным рисунком нельзя повернуть при раскрое
     grain: options.grain ?? false,
+    /**
+     * Длина кромки и её толщина. Кромкуют не всё: задняя стенка из ХДФ
+     * уходит в паз, а невидимые торцы корпуса оставляют голыми —
+     * заказывать кромку на них значит платить за то, чего никто не увидит.
+     */
+    edgeLengthMm: Math.round(options.edgeLengthMm ?? 0),
+    edgeThicknessMm: options.edgeThicknessMm ?? 0,
   };
   return geometry;
+}
+
+/** Периметр детали: столько кромки уходит на фасад. */
+export function perimeterMm(widthMm, heightMm) {
+  return Math.round((widthMm + heightMm) * 2);
 }
 
 /**

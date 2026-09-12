@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { SceneDoc } from '@furni/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { QuoteService } from '../quote/quote.service';
+import { LeadWebhookService } from './lead-webhook.service';
 
 /**
  * Заявки покупателей.
@@ -40,6 +41,8 @@ export interface LeadResult {
   currency: string;
   /** Расхождение с суммой, которую показывал клиент */
   clientTotalCents: number | null;
+  /** Ушла ли заявка в CRM магазина */
+  delivered: boolean;
 }
 
 @Injectable()
@@ -49,6 +52,7 @@ export class LeadsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly quote: QuoteService,
+    private readonly webhook: LeadWebhookService,
   ) {}
 
   async create(
@@ -80,23 +84,45 @@ export class LeadsService {
       );
     }
 
-    const lead = await this.prisma.withTenant(tenantId, async (tx) =>
-      tx.lead.create({
+    const { lead, target } = await this.prisma.withTenant(tenantId, async (tx) => {
+      const created = await tx.lead.create({
         data: {
           tenantId,
           sceneId: input.sceneId ?? null,
           contact,
           totalCents: quote.totalCents,
         },
-        select: { id: true },
-      }),
-    );
+        select: { id: true, createdAt: true },
+      });
+      const tenant = await tx.tenant.findFirst({
+        where: { id: tenantId },
+        select: { leadWebhookUrl: true, leadWebhookSecret: true },
+      });
+
+      return {
+        lead: created,
+        target: tenant?.leadWebhookUrl
+          ? { url: tenant.leadWebhookUrl, secret: tenant.leadWebhookSecret }
+          : null,
+      };
+    });
+
+    // Заявка уже сохранена: отправка в CRM её судьбу не решает
+    const delivered = await this.webhook.send(target, {
+      leadId: lead.id,
+      tenantId,
+      totalCents: quote.totalCents,
+      currency: quote.currency,
+      contact,
+      createdAt: lead.createdAt.toISOString(),
+    });
 
     return {
       id: lead.id,
       totalCents: quote.totalCents,
       currency: quote.currency,
       clientTotalCents: input.clientTotalCents ?? null,
+      delivered,
     };
   }
 }

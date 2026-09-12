@@ -4,7 +4,10 @@ import {
   SHEET_HEIGHT_MM,
   SHEET_WIDTH_MM,
   TRIM_MM,
+  edgeBanding,
+  hardwareList,
   planCut,
+  sceneParts,
   type CatalogMaterial,
   type CatalogProduct,
   type Placement,
@@ -51,6 +54,15 @@ const summary = computed(() => {
 });
 
 const sheetCount = computed(() => plan.value.sheets.length);
+
+/**
+ * Кромка и фурнитура.
+ *
+ * Без них раскрой — половина заказа: плиту привезут, а собрать из неё
+ * будет нечего.
+ */
+const banding = computed(() => edgeBanding(sceneParts(props.placements, props.products)));
+const hardware = computed(() => hardwareList(props.placements, props.products));
 
 function materialName(code: string): string {
   return props.materials.get(code)?.name ?? code;
@@ -262,6 +274,25 @@ function verticalBands(sheet: { parts: readonly { yMm: number; heightMm: number 
         </svg>
       </section>
 
+      <section v-if="banding.length > 0 || hardware.length > 0" class="parts">
+        <h3 class="parts__title">Кромка и фурнитура</h3>
+        <table class="parts__table">
+          <tbody>
+            <tr v-for="line in banding" :key="`edge-${line.thicknessMm}`">
+              <td>Кромка ПВХ {{ line.thicknessMm }} мм</td>
+              <td class="num">{{ line.metres }} м</td>
+            </tr>
+            <tr v-for="line in hardware" :key="line.name">
+              <td>{{ line.name }}</td>
+              <td class="num">{{ line.quantity }} {{ line.unit }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="parts__note">
+          Кромка посчитана с запасом на обрезку. Фурнитура — по составу изделий.
+        </p>
+      </section>
+
       <section v-if="summary.length > 0" class="parts">
         <h3 class="parts__title">Спецификация</h3>
         <table class="parts__table">
@@ -401,5 +432,10 @@ function verticalBands(sheet: { parts: readonly { yMm: number; heightMm: number 
 }
 .num {
   font-variant-numeric: tabular-nums;
+}
+.parts__note {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: #8a909b;
 }
 </style>

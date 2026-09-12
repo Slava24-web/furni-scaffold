@@ -15,6 +15,9 @@ import type { Placement } from '../scene/schema';
 
 const part = (over: Partial<CutPart> = {}): CutPart => ({
   name: 'Боковина',
+  kind: 'side',
+  edgeLengthMm: 720,
+  edgeThicknessMm: 2,
   material: 'white',
   widthMm: 560,
   heightMm: 720,
@@ -198,7 +201,7 @@ describe('детали сцены', () => {
       sku: 'TEST-KIT-BASE-600',
       name: 'Нижний шкаф 600',
       panels: [
-        { name: 'Боковина', material: 'white', widthMm: 560, heightMm: 720, thicknessMm: 18, grain: false },
+        { name: 'Боковина', kind: 'side', material: 'white', widthMm: 560, heightMm: 720, thicknessMm: 18, grain: false, edgeLengthMm: 0, edgeThicknessMm: 0 },
       ],
       finishes: [],
       ...over,
@@ -239,8 +242,8 @@ describe('детали сцены', () => {
         'TEST-KIT-BASE-600',
         product({
           panels: [
-            { name: 'Боковина', material: 'white', widthMm: 560, heightMm: 720, thicknessMm: 18, grain: false },
-            { name: 'Фасад', material: 'oak', widthMm: 592, heightMm: 712, thicknessMm: 18, grain: true },
+            { name: 'Боковина', kind: 'side', material: 'white', widthMm: 560, heightMm: 720, thicknessMm: 18, grain: false, edgeLengthMm: 0, edgeThicknessMm: 0 },
+            { name: 'Фасад', kind: 'facade', material: 'oak', widthMm: 592, heightMm: 712, thicknessMm: 18, grain: true, edgeLengthMm: 0, edgeThicknessMm: 0 },
           ],
           finishes: [
             { code: 'facade', label: 'Фасад', slotMaterial: 'oak', options: ['oak', 'graphite'] },
@@ -260,7 +263,7 @@ describe('детали сцены', () => {
         'TEST-KIT-BASE-600',
         product({
           panels: [
-            { name: 'Фасад', material: 'oak', widthMm: 592, heightMm: 712, thicknessMm: 18, grain: true },
+            { name: 'Фасад', kind: 'facade', material: 'oak', widthMm: 592, heightMm: 712, thicknessMm: 18, grain: true, edgeLengthMm: 0, edgeThicknessMm: 0 },
           ],
           finishes: [
             { code: 'facade', label: 'Фасад', slotMaterial: 'oak', options: ['oak', 'graphite'] },
@@ -278,7 +281,7 @@ describe('детали сцены', () => {
         'TEST-KIT-BASE-600',
         product({
           panels: [
-            { name: 'Фасад', material: 'oak', widthMm: 592, heightMm: 712, thicknessMm: 18, grain: true },
+            { name: 'Фасад', kind: 'facade', material: 'oak', widthMm: 592, heightMm: 712, thicknessMm: 18, grain: true, edgeLengthMm: 0, edgeThicknessMm: 0 },
           ],
           finishes: [
             { code: 'facade', label: 'Фасад', slotMaterial: 'oak', options: ['oak', 'graphite'] },

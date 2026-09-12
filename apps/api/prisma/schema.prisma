@@ -60,6 +60,10 @@ model Tenant {
   limits    Json     @default("{}")
   /// Домены, где разрешено встраивать виджет. Защита от воровства.
   allowedOrigins String[] @default([])
+  /// Куда отправлять заявку. Пусто — заявка просто лежит в базе.
+  leadWebhookUrl String? @map("lead_webhook_url")
+  /// Ключ подписи вызова: получатель обязан проверить, что зовём мы
+  leadWebhookSecret String? @map("lead_webhook_secret")
   createdAt DateTime @default(now())
 
   users     User[]

@@ -11,6 +11,7 @@ import { QuoteController } from './modules/quote/quote.controller';
 import { QuoteService } from './modules/quote/quote.service';
 import { LeadsController } from './modules/leads/leads.controller';
 import { LeadsService } from './modules/leads/leads.service';
+import { LeadWebhookService } from './modules/leads/lead-webhook.service';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { LeadsService } from './modules/leads/leads.service';
     PricingService,
     QuoteService,
     LeadsService,
+    LeadWebhookService,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })
