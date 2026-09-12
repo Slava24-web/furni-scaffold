@@ -313,6 +313,7 @@ function sofa() {
 const FURNITURE = [
   {
     sku: 'TEST-WRD-1200',
+    role: 'furniture',
     name: 'Шкаф «Орион» 1200',
     category: 'Шкафы',
     type: 'static',
@@ -321,6 +322,7 @@ const FURNITURE = [
   },
   {
     sku: 'TEST-SBD-1200',
+    role: 'furniture',
     name: 'Комод «Орион» 1200',
     category: 'Комоды',
     type: 'static',
@@ -330,6 +332,7 @@ const FURNITURE = [
   },
   {
     sku: 'TEST-TBL-1400',
+    role: 'furniture',
     name: 'Стол «Норд» 1400',
     category: 'Столы',
     type: 'static',
@@ -338,6 +341,7 @@ const FURNITURE = [
   },
   {
     sku: 'TEST-CHR-460',
+    role: 'furniture',
     name: 'Стул «Норд»',
     category: 'Стулья',
     type: 'static',
@@ -346,6 +350,7 @@ const FURNITURE = [
   },
   {
     sku: 'TEST-SFA-2040',
+    role: 'furniture',
     name: 'Диван «Ленокс» 2040',
     category: 'Диваны',
     type: 'static',

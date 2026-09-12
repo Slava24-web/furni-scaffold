@@ -311,6 +311,7 @@ function handle(spanMm) {
 export const KITCHEN_PRODUCTS = [
   {
     sku: 'TEST-KIT-BASE-600',
+    role: 'base',
     name: 'Кухня: нижний шкаф 600',
     category: 'Кухня / Нижние модули',
     basePriceCents: 890000,
@@ -320,6 +321,7 @@ export const KITCHEN_PRODUCTS = [
   },
   {
     sku: 'TEST-KIT-BASE-800',
+    role: 'base',
     name: 'Кухня: нижний шкаф 800',
     category: 'Кухня / Нижние модули',
     basePriceCents: 1090000,
@@ -329,6 +331,7 @@ export const KITCHEN_PRODUCTS = [
   },
   {
     sku: 'TEST-KIT-DRW-600',
+    role: 'base',
     name: 'Кухня: нижний шкаф с ящиками 600',
     category: 'Кухня / Нижние модули',
     basePriceCents: 1290000,
@@ -339,6 +342,7 @@ export const KITCHEN_PRODUCTS = [
   },
   {
     sku: 'TEST-KIT-WALL-600',
+    role: 'wall',
     name: 'Кухня: верхний шкаф 600',
     category: 'Кухня / Верхние модули',
     basePriceCents: 690000,
@@ -348,6 +352,7 @@ export const KITCHEN_PRODUCTS = [
   },
   {
     sku: 'TEST-KIT-WALL-800',
+    role: 'wall',
     name: 'Кухня: верхний шкаф 800',
     category: 'Кухня / Верхние модули',
     basePriceCents: 790000,
@@ -357,6 +362,7 @@ export const KITCHEN_PRODUCTS = [
   },
   {
     sku: 'TEST-KIT-TALL-600',
+    role: 'tall',
     name: 'Кухня: пенал 600',
     category: 'Кухня / Нижние модули',
     basePriceCents: 1890000,
@@ -366,6 +372,7 @@ export const KITCHEN_PRODUCTS = [
   },
   {
     sku: 'TEST-KIT-TOP-1200',
+    role: 'worktop',
     name: 'Кухня: столешница 1200',
     category: 'Кухня / Столешницы',
     basePriceCents: 540000,
@@ -375,6 +382,7 @@ export const KITCHEN_PRODUCTS = [
   },
   {
     sku: 'TEST-KIT-TOP-2000',
+    role: 'worktop',
     name: 'Кухня: столешница 2000',
     category: 'Кухня / Столешницы',
     basePriceCents: 820000,
@@ -384,6 +392,7 @@ export const KITCHEN_PRODUCTS = [
   },
   {
     sku: 'TEST-KIT-SINK-500',
+    role: 'sink',
     name: 'Кухня: мойка 500 со смесителем',
     category: 'Кухня / Техника и мойки',
     basePriceCents: 1450000,
@@ -394,6 +403,7 @@ export const KITCHEN_PRODUCTS = [
   },
   {
     sku: 'TEST-KIT-HOB-580',
+    role: 'hob',
     name: 'Кухня: варочная панель 580',
     category: 'Кухня / Техника и мойки',
     basePriceCents: 2190000,
@@ -404,6 +414,7 @@ export const KITCHEN_PRODUCTS = [
   },
   {
     sku: 'TEST-KIT-FCD-600',
+    role: 'part',
     name: 'Кухня: фасад 600×716',
     category: 'Кухня / Детали',
     basePriceCents: 240000,
@@ -414,6 +425,7 @@ export const KITCHEN_PRODUCTS = [
   },
   {
     sku: 'TEST-KIT-DOOR-600',
+    role: 'part',
     name: 'Кухня: дверца 600×716 с ручкой',
     category: 'Кухня / Детали',
     basePriceCents: 290000,
@@ -424,6 +436,7 @@ export const KITCHEN_PRODUCTS = [
   },
   {
     sku: 'TEST-KIT-DRWBOX-600',
+    role: 'part',
     name: 'Кухня: ящик 600',
     category: 'Кухня / Детали',
     basePriceCents: 320000,
@@ -434,6 +447,7 @@ export const KITCHEN_PRODUCTS = [
   },
   {
     sku: 'TEST-KIT-HANDLE-224',
+    role: 'part',
     name: 'Кухня: ручка-скоба 224',
     category: 'Кухня / Детали',
     basePriceCents: 45000,

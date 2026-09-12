@@ -87,6 +87,31 @@ export const CatalogProductSchema = z.object({
   stackable: z.boolean().default(false),
   materials: z.array(z.string()).default([]),
   /**
+   * Роль изделия в кухне: по ней считаются правила эргономики.
+   *
+   * Задаётся каталогом, а не выводится из артикула: у каждого тенанта
+   * своя система артикулов, и разбор строки развалился бы на первом же
+   * магазине.
+   */
+  role: z
+    .enum([
+      'base',
+      'wall',
+      'tall',
+      'worktop',
+      'sink',
+      'hob',
+      'hood',
+      'fridge',
+      'oven',
+      'dishwasher',
+      'washer',
+      'microwave',
+      'furniture',
+      'part',
+    ])
+    .default('furniture'),
+  /**
    * Сколько ящиков изделия можно выдвинуть.
    *
    * Нужен интерфейсу, а не сцене: ящики она находит по узлам самой

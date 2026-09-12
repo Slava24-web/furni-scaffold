@@ -11,6 +11,8 @@ import {
 } from '@furni/viewer';
 import {
   EMPTY_CONFLICTS,
+  clampToRoom,
+  roomBounds,
   findConflicts,
   groupIntoChains,
   hasConflicts,
@@ -26,6 +28,7 @@ import {
   type CatalogProduct,
   type ConflictReport,
   type Placement,
+  type RoomBoundsMm,
   type SwingZone,
   type Wall,
 } from '@furni/shared';
@@ -230,6 +233,8 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
   let dragWalls: Wall[] = [];
   let dragSwings: SwingZone[] = [];
   let dragDrawerZones: { instanceId: string; box: Box }[] = [];
+  /** Границы комнаты на время жеста: стены за жест не двигаются. */
+  let dragBounds: RoomBoundsMm | null = null;
 
   /** Что делает текущий жест: двигает объект или вращает его. */
   let dragKind: 'move' | 'rotate' = 'move';
@@ -305,6 +310,7 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     dragWalls = allWalls();
     dragSwings = allSwings();
     dragDrawerZones = neighbourDrawerZones(exceptId);
+    dragBounds = roomBounds(scene.doc.rooms);
   }
 
   /**
@@ -574,12 +580,20 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     }
     isSnapping.value = result.snapped;
 
-    // Прямая мутация Three.js. В Pinia НЕ пишем — это горячий путь.
-    instance.root.position.set(
-      result.position.x / 1000,
-      bottomMm / 1000,
-      result.position.y / 1000,
+    // Стена — край рабочей области: без прижатия объект уезжает за неё
+    // и вернуть его можно только отменой
+    const inside = clampToRoom(
+      result.position,
+      {
+        halfWidthMm: (product?.widthMm ?? 0) / 2,
+        halfDepthMm: (product?.depthMm ?? 0) / 2,
+        rotationDeg: result.rotation ?? (instance.root.rotation.y * 180) / Math.PI,
+      },
+      dragBounds,
     );
+
+    // Прямая мутация Three.js. В Pinia НЕ пишем — это горячий путь.
+    instance.root.position.set(inside.x / 1000, bottomMm / 1000, inside.y / 1000);
     if (result.rotation !== null) {
       instance.root.rotation.y = (result.rotation * Math.PI) / 180;
     }
@@ -728,12 +742,20 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
       enableWalls: product.snapToWall,
     });
 
-    return {
-      x: result.position.x,
-      z: result.position.y,
-      y: bottomMm,
-      rotationY: result.rotation ?? 0,
-    };
+    // Бросок за стену прижимается так же, как перетаскивание: объект,
+    // упавший в соседнюю квартиру, пользователю не нужен
+    const rotationY = result.rotation ?? 0;
+    const inside = clampToRoom(
+      result.position,
+      {
+        halfWidthMm: product.widthMm / 2,
+        halfDepthMm: product.depthMm / 2,
+        rotationDeg: rotationY,
+      },
+      roomBounds(scene.doc.rooms),
+    );
+
+    return { x: inside.x, z: inside.y, y: bottomMm, rotationY };
   }
 
   // ---------------------------------------------------------------------

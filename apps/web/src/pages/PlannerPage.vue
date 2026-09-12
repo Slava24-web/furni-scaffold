@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router';
 import {
   createRectangularRoom,
   defaultStyle,
+  checkErgonomics,
   estimateScene,
   placementPriceCents,
   planDimensions,
@@ -25,6 +26,7 @@ import ObjectInspector from '../components/ObjectInspector.vue';
 import EstimatePanel from '../components/EstimatePanel.vue';
 import FloorPanel from '../components/FloorPanel.vue';
 import CutPlanView from '../components/CutPlanView.vue';
+import ErgonomicsPanel from '../components/ErgonomicsPanel.vue';
 import LeadForm from '../components/LeadForm.vue';
 import DimensionEditor from '../components/DimensionEditor.vue';
 import OpeningInspector from '../components/OpeningInspector.vue';
@@ -300,6 +302,14 @@ const selected = computed(() => {
   return id ? scene.doc.placements.find((p) => p.instanceId === id) : undefined;
 });
 
+/**
+ * Замечания по эргономике.
+ *
+ * Считаются на каждое изменение документа, а не по кнопке: правило,
+ * о котором надо вспомнить и нажать, не работает.
+ */
+const ergonomics = computed(() => checkErgonomics(scene.doc.placements, catalog.bySku));
+
 /** Предварительная смета: считается на клиенте, итог — за сервером. */
 const estimate = computed(() =>
   estimateScene(scene.doc.placements, catalog.bySku, catalog.materialByCode),
@@ -312,6 +322,17 @@ const selectedPrice = computed(() => {
     ? placementPriceCents(product, placement.options, catalog.materialByCode)
     : 0;
 });
+
+/**
+ * Подсветка виновников замечания.
+ *
+ * Выделяется первый из них, остальные помечаются как конфликтующие:
+ * выделение в сцене одно, а объяснить надо про пару.
+ */
+function highlightFinding(instanceIds: readonly string[]): void {
+  const [first] = instanceIds;
+  if (first) canvas.value?.select(first);
+}
 
 function updateSelected(patch: Partial<Placement>): void {
   const id = canvas.value?.selectedId;
@@ -399,6 +420,7 @@ onBeforeUnmount(() => uninstallTestingApi());
     <div class="planner__body">
       <div class="planner__sidebar">
         <CatalogPanel :dragging="drag.product.value" @drag-start="drag.start" />
+        <ErgonomicsPanel :findings="ergonomics" @highlight="highlightFinding" />
         <FloorPanel
           v-if="scene.doc.rooms.length > 0"
           :groups="catalog.floorGroups"

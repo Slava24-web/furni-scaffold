@@ -283,6 +283,7 @@ function builtInHood(widthMm) {
 export const APPLIANCE_PRODUCTS = [
   {
     sku: 'TEST-APP-FRIDGE-600',
+    role: 'fridge',
     name: 'Холодильник 600',
     category: 'Техника / Холодильники',
     basePriceCents: 5490000,
@@ -291,6 +292,7 @@ export const APPLIANCE_PRODUCTS = [
   },
   {
     sku: 'TEST-APP-FRIDGE-900',
+    role: 'fridge',
     name: 'Холодильник Side-by-Side 900',
     category: 'Техника / Холодильники',
     basePriceCents: 12990000,
@@ -299,6 +301,7 @@ export const APPLIANCE_PRODUCTS = [
   },
   {
     sku: 'TEST-APP-WASHER-600',
+    role: 'washer',
     name: 'Стиральная машина 600',
     category: 'Техника / Стирка и мойка',
     basePriceCents: 3790000,
@@ -306,6 +309,7 @@ export const APPLIANCE_PRODUCTS = [
   },
   {
     sku: 'TEST-APP-DISH-600',
+    role: 'dishwasher',
     name: 'Посудомоечная машина 600',
     category: 'Техника / Стирка и мойка',
     basePriceCents: 4290000,
@@ -313,6 +317,7 @@ export const APPLIANCE_PRODUCTS = [
   },
   {
     sku: 'TEST-APP-OVEN-600',
+    role: 'oven',
     name: 'Духовой шкаф 600',
     category: 'Техника / Встраиваемая',
     basePriceCents: 3590000,
@@ -320,6 +325,7 @@ export const APPLIANCE_PRODUCTS = [
   },
   {
     sku: 'TEST-APP-HOB-GAS-580',
+    role: 'hob',
     name: 'Варочная панель газовая 580',
     category: 'Техника / Встраиваемая',
     basePriceCents: 1890000,
@@ -329,6 +335,7 @@ export const APPLIANCE_PRODUCTS = [
   },
   {
     sku: 'TEST-APP-MICRO-500',
+    role: 'microwave',
     name: 'Микроволновая печь 500',
     category: 'Техника / Встраиваемая',
     basePriceCents: 1290000,
@@ -338,6 +345,7 @@ export const APPLIANCE_PRODUCTS = [
   },
   {
     sku: 'TEST-APP-HOOD-DOME-600',
+    role: 'hood',
     name: 'Вытяжка купольная 600',
     category: 'Техника / Вытяжки',
     basePriceCents: 2290000,
@@ -346,6 +354,7 @@ export const APPLIANCE_PRODUCTS = [
   },
   {
     sku: 'TEST-APP-HOOD-DOME-900',
+    role: 'hood',
     name: 'Вытяжка купольная 900',
     category: 'Техника / Вытяжки',
     basePriceCents: 2990000,
@@ -354,6 +363,7 @@ export const APPLIANCE_PRODUCTS = [
   },
   {
     sku: 'TEST-APP-HOOD-SLANT-600',
+    role: 'hood',
     name: 'Вытяжка наклонная 600',
     category: 'Техника / Вытяжки',
     basePriceCents: 2690000,
@@ -362,6 +372,7 @@ export const APPLIANCE_PRODUCTS = [
   },
   {
     sku: 'TEST-APP-HOOD-BUILTIN-600',
+    role: 'hood',
     name: 'Вытяжка встраиваемая 600',
     category: 'Техника / Вытяжки',
     basePriceCents: 1690000,
