@@ -373,6 +373,9 @@ export const KITCHEN_PRODUCTS = [
   {
     sku: 'TEST-KIT-TOP-1200',
     role: 'worktop',
+    // Пристенный плинтус входит в габарит, но класть на него ничего
+    // нельзя: рабочая поверхность — сама плита
+    surfaceHeightMm: WORKTOP_THICKNESS,
     name: 'Кухня: столешница 1200',
     category: 'Кухня / Столешницы',
     basePriceCents: 540000,
@@ -383,6 +386,7 @@ export const KITCHEN_PRODUCTS = [
   {
     sku: 'TEST-KIT-TOP-2000',
     role: 'worktop',
+    surfaceHeightMm: WORKTOP_THICKNESS,
     name: 'Кухня: столешница 2000',
     category: 'Кухня / Столешницы',
     basePriceCents: 820000,

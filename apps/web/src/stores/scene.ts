@@ -122,6 +122,17 @@ export const useSceneStore = defineStore('scene', () => {
     return placement;
   }
 
+  /**
+   * Готовая раскладка кухни поверх текущей сцены.
+   *
+   * Прежние размещения не стираются: сценарий добавляют к тому, что уже
+   * стоит, а передумавшему остаётся отмена.
+   */
+  function addPlacements(items: readonly Placement[]): void {
+    if (items.length === 0) return;
+    commit({ ...doc.value, placements: [...doc.value.placements, ...items] });
+  }
+
   function removePlacement(instanceId: string): void {
     commit({
       ...doc.value,
@@ -231,6 +242,7 @@ export const useSceneStore = defineStore('scene', () => {
     redoStack,
     updatePlacement,
     addPlacement,
+    addPlacements,
     removePlacement,
     setRoom,
     addWall,

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import { KITCHEN_LAYOUTS, type KitchenLayoutKind } from '@furni/shared';
 import type { PlannerMode } from '../composables/useSceneEditing';
 
 const props = defineProps<{
@@ -17,6 +18,7 @@ const emit = defineEmits<{
   undo: [];
   redo: [];
   showCut: [];
+  buildKitchen: [KitchenLayoutKind];
 }>();
 
 const widthMm = ref(4000);
@@ -75,6 +77,19 @@ function toggleMode(mode: PlannerMode): void {
       <button type="button" @click="emit('showCut')">Раскрой</button>
     </div>
 
+    <div class="toolbar__group">
+      <span class="toolbar__label">Собрать кухню</span>
+      <button
+        v-for="layout in KITCHEN_LAYOUTS"
+        :key="layout.kind"
+        type="button"
+        :title="layout.description"
+        @click="emit('buildKitchen', layout.kind)"
+      >
+        {{ layout.name }}
+      </button>
+    </div>
+
     <div class="toolbar__group toolbar__group--end">
       <button type="button" :disabled="!props.canUndo" @click="emit('undo')">Отменить</button>
       <button type="button" :disabled="!props.canRedo" @click="emit('redo')">Повторить</button>
@@ -99,6 +114,11 @@ function toggleMode(mode: PlannerMode): void {
 }
 .toolbar__group--end {
   margin-left: auto;
+}
+.toolbar__label {
+  align-self: center;
+  font-size: 11px;
+  color: #6b7280;
 }
 .field {
   display: grid;

@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import {
+  buildKitchen,
   createRectangularRoom,
   defaultStyle,
   checkErgonomics,
@@ -25,17 +26,26 @@ import RoomToolbar from '../components/RoomToolbar.vue';
 import ObjectInspector from '../components/ObjectInspector.vue';
 import EstimatePanel from '../components/EstimatePanel.vue';
 import FloorPanel from '../components/FloorPanel.vue';
-import CutPlanView from '../components/CutPlanView.vue';
 import ErgonomicsPanel from '../components/ErgonomicsPanel.vue';
-import LeadForm from '../components/LeadForm.vue';
 import DimensionEditor from '../components/DimensionEditor.vue';
 import OpeningInspector from '../components/OpeningInspector.vue';
 import { conflictMessage } from '../lib/conflictMessage';
+
+/**
+ * Раскрой и форма заявки грузятся по требованию.
+ *
+ * Обе страницы открывают редко, а их код тянет за собой укладку деталей
+ * и клиент API. В первом кадре планировщика им делать нечего — бюджет
+ * TTFF считается по нему (LOAD_BUDGETS.timeToFirstFrameMs).
+ */
+const CutPlanView = defineAsyncComponent(() => import('../components/CutPlanView.vue'));
+const LeadForm = defineAsyncComponent(() => import('../components/LeadForm.vue'));
 import { useCatalogDrag } from '../composables/useCatalogDrag';
 import { useWallDrawing } from '../composables/useWallDrawing';
 import { installTestingApi, uninstallTestingApi } from '../dev/testingApi';
 import { useCatalogStore } from '../stores/catalog';
 import { useSceneStore } from '../stores/scene';
+import type { KitchenLayoutKind } from '@furni/shared';
 import type { DimensionHit, FloorPoint, PlannerMode } from '../composables/useSceneEditing';
 
 const route = useRoute();
@@ -100,6 +110,26 @@ function createRoom(size: { widthMm: number; depthMm: number }): void {
     Math.max(size.widthMm, size.depthMm) * 0.75,
   );
 }
+
+/**
+ * Готовый сценарий кухни.
+ *
+ * Раскладка добавляется к сцене одним шагом истории: передумавшему
+ * достаточно отмены, а разбирать её по модулю никто не станет.
+ */
+function assembleKitchen(kind: KitchenLayoutKind): void {
+  const [room] = scene.doc.rooms;
+  if (!room) {
+    kitchenProblem.value = 'Сначала постройте помещение';
+    return;
+  }
+
+  const result = buildKitchen(kind, room, catalog.products);
+  kitchenProblem.value = result.problems[0] ?? null;
+  scene.addPlacements(result.placements);
+}
+
+const kitchenProblem = ref<string | null>(null);
 
 function setMode(next: PlannerMode): void {
   mode.value = next;
@@ -377,6 +407,7 @@ const hint = computed(() => {
   }
   if (mode.value === 'add-door') return 'Тапните по стене, куда поставить дверь';
   if (mode.value === 'add-window') return 'Тапните по стене, куда поставить окно';
+  if (kitchenProblem.value) return kitchenProblem.value;
   // Подсказка про размеры нужна, пока пользователь не занят объектом:
   // иначе о вводе точного размера он не догадается
   if (editableRoom.value && !selected.value) {
@@ -407,6 +438,7 @@ onBeforeUnmount(() => uninstallTestingApi());
       @undo="scene.undo()"
       @redo="scene.redo()"
       @show-cut="cutOpen = true"
+      @build-kitchen="assembleKitchen"
     />
 
     <CutPlanView

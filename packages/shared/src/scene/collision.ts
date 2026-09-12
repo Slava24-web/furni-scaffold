@@ -25,6 +25,14 @@ export interface Box {
   rotationDeg: number;
   bottomMm: number;
   topMm: number;
+  /**
+   * Высота, на которой на объекте стоят. По умолчанию это его верх.
+   *
+   * Отличается там, где габарит выше рабочей поверхности: у столешницы
+   * в него входит пристенный плинтус, но мойку ставят на плиту. Без
+   * этого числа мойка на столешнице считалась бы пересечением.
+   */
+  surfaceTopMm?: number;
 }
 
 /**
@@ -204,12 +212,21 @@ export function wallToBox(wall: Wall): Box {
   };
 }
 
-/** Пересекаются ли габариты по высоте. */
+/**
+ * Пересекаются ли габариты по высоте.
+ *
+ * Объект, стоящий НА рабочей поверхности другого, пересечением не
+ * считается: так ставят мойку на столешницу и микроволновку на тумбу.
+ */
 export function verticallyOverlapping(
-  a: Pick<Box, 'bottomMm' | 'topMm'>,
-  b: Pick<Box, 'bottomMm' | 'topMm'>,
+  a: Pick<Box, 'bottomMm' | 'topMm' | 'surfaceTopMm'>,
+  b: Pick<Box, 'bottomMm' | 'topMm' | 'surfaceTopMm'>,
   toleranceMm = TOUCH_TOLERANCE_MM,
 ): boolean {
+  const restsOnB = a.bottomMm >= (b.surfaceTopMm ?? b.topMm) - toleranceMm;
+  const restsOnA = b.bottomMm >= (a.surfaceTopMm ?? a.topMm) - toleranceMm;
+  if (restsOnB || restsOnA) return false;
+
   return a.bottomMm < b.topMm - toleranceMm && b.bottomMm < a.topMm - toleranceMm;
 }
 
@@ -284,6 +301,8 @@ export interface ProductSize {
   widthMm: number;
   heightMm: number;
   depthMm: number;
+  /** Высота рабочей поверхности, если она ниже габарита */
+  surfaceHeightMm?: number | undefined;
 }
 
 /**
@@ -303,6 +322,7 @@ export function placementBox(
     rotationDeg: placement.rotationY,
     bottomMm: placement.position.y,
     topMm: placement.position.y + size.heightMm,
+    surfaceTopMm: placement.position.y + (size.surfaceHeightMm ?? size.heightMm),
   };
 }
 
