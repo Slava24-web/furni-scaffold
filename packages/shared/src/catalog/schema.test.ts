@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { CatalogSchema, groupByCategory, type CatalogProduct } from './schema';
+import {
+  CatalogSchema,
+  groupByCategory,
+  groupFloorsByKind,
+  type CatalogProduct,
+  type FloorFinish,
+} from './schema';
 
 const product = (over: Partial<CatalogProduct> = {}) => ({
   sku: 'TEST-KIT-BASE-600',
@@ -157,5 +163,44 @@ describe('материалы в схеме', () => {
       products: [product()],
     };
     expect(CatalogSchema.parse(plain).materials[0]?.textureUrl).toBeUndefined();
+  });
+});
+
+describe('покрытия пола в схеме', () => {
+  const floor = (over: Partial<FloorFinish> = {}) => ({
+    code: 'floor-laminate-oak',
+    name: 'Ламинат «Дуб натуральный»',
+    kind: 'Ламинат',
+    repeatMm: 1200,
+    roughness: 0.7,
+    textureUrl: '/assets/test/textures/floor-laminate-oak.webp',
+    ...over,
+  });
+
+  it('по умолчанию покрытий нет: пол остаётся служебным', () => {
+    expect(CatalogSchema.parse(catalog([product()])).floors).toEqual([]);
+  });
+
+  it('покрытие принимается целиком', () => {
+    const parsed = CatalogSchema.parse({ ...catalog([product()]), floors: [floor()] });
+    expect(parsed.floors[0]?.repeatMm).toBe(1200);
+  });
+
+  it('покрытие без физического масштаба отвергается', () => {
+    // Без repeatMm доска растягивается на всю комнату
+    expect(() =>
+      CatalogSchema.parse({ ...catalog([product()]), floors: [floor({ repeatMm: 0 })] }),
+    ).toThrow();
+  });
+
+  it('покрытия группируются по типу, порядок сохраняется', () => {
+    const groups = groupFloorsByKind([
+      floor({ code: 'a', kind: 'Ламинат' }),
+      floor({ code: 'b', kind: 'Плитка' }),
+      floor({ code: 'c', kind: 'Ламинат' }),
+    ]);
+
+    expect(groups.map((g) => g.kind)).toEqual(['Ламинат', 'Плитка']);
+    expect(groups[0]?.floors.map((f) => f.code)).toEqual(['a', 'c']);
   });
 });

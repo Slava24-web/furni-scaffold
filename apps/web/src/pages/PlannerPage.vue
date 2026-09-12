@@ -23,6 +23,7 @@ import CatalogPanel from '../components/CatalogPanel.vue';
 import RoomToolbar from '../components/RoomToolbar.vue';
 import ObjectInspector from '../components/ObjectInspector.vue';
 import EstimatePanel from '../components/EstimatePanel.vue';
+import FloorPanel from '../components/FloorPanel.vue';
 import DimensionEditor from '../components/DimensionEditor.vue';
 import OpeningInspector from '../components/OpeningInspector.vue';
 import { conflictMessage } from '../lib/conflictMessage';
@@ -383,6 +384,12 @@ onBeforeUnmount(() => uninstallTestingApi());
     <div class="planner__body">
       <div class="planner__sidebar">
         <CatalogPanel :dragging="drag.product.value" @drag-start="drag.start" />
+        <FloorPanel
+          v-if="scene.doc.rooms.length > 0"
+          :groups="catalog.floorGroups"
+          :selected="scene.doc.rooms[0]?.floorMaterialId ?? null"
+          @pick="scene.setFloor"
+        />
         <EstimatePanel :estimate="estimate" />
       </div>
 

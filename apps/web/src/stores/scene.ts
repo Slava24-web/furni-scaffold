@@ -193,6 +193,13 @@ export const useSceneStore = defineStore('scene', () => {
     });
   }
 
+  /** Напольное покрытие помещения. null — служебный серый пол. */
+  function setFloor(code: string | null): void {
+    const [room] = doc.value.rooms;
+    if (!room || room.floorMaterialId === code) return;
+    commit({ ...doc.value, rooms: [{ ...room, floorMaterialId: code }] });
+  }
+
   function clearRooms(): void {
     commit({ ...doc.value, rooms: [] });
   }
@@ -230,6 +237,7 @@ export const useSceneStore = defineStore('scene', () => {
     addOpening,
     updateOpening,
     removeOpening,
+    setFloor,
     clearRooms,
     undo,
     redo,

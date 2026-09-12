@@ -66,6 +66,9 @@ export function useSceneSync(
 
   function syncRooms(v: Viewer, doc: SceneDoc): void {
     const room = builder(v);
+    // Покрытие ставится до сборки: иначе пол успевает мелькнуть серым
+    const floorCode = doc.rooms[0]?.floorMaterialId;
+    room.setFloorFinish(floorCode ? (v.materials.floor(floorCode) ?? null) : null);
     room.build(doc.rooms);
     // Размерные линии пересобираются вместе со стенами: подпись обязана
     // показывать текущий размер, а не тот, что был до правки
@@ -127,6 +130,7 @@ export function useSceneSync(
       if (!v) return;
       // Материалы тенанта нужны раньше объектов: по ним собирается отделка
       v.materials.register(catalog.materials);
+      v.materials.registerFloors(catalog.floors);
       syncRooms(v, doc);
       await syncPlacements(v, doc);
       ready.value = true;

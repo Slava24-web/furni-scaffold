@@ -105,6 +105,52 @@ describe('библиотека материалов', () => {
   });
 });
 
+describe('покрытия пола', () => {
+  const floorSpec = {
+    code: 'floor-laminate-oak',
+    textureUrl: '/floor.webp',
+    repeatMm: 1200,
+    roughness: 0.7,
+  };
+
+  it('неизвестное покрытие материала не даёт', () => {
+    expect(new MaterialLibrary().floor('нет такого')).toBeUndefined();
+  });
+
+  it('материал пола общий: повторный запрос отдаёт тот же', () => {
+    const library = new MaterialLibrary(async () => new Texture());
+    library.registerFloors([floorSpec]);
+
+    expect(library.floor(floorSpec.code)).toBe(library.floor(floorSpec.code));
+  });
+
+  it('масштаб карты считается по физическому размеру квадрата', async () => {
+    const library = new MaterialLibrary(async () => new Texture());
+    library.registerFloors([floorSpec]);
+    const material = library.floor(floorSpec.code)!;
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // Квадрат 1200 мм — примерно 0.83 повтора на метр
+    expect(material.map?.repeat.x).toBeCloseTo(1000 / 1200, 4);
+    expect(material.map?.repeat.y).toBeCloseTo(1000 / 1200, 4);
+  });
+
+  it('цвет базы белый: тон несёт текстура и перемножать его дважды нельзя', () => {
+    const library = new MaterialLibrary(async () => new Texture());
+    library.registerFloors([floorSpec]);
+
+    expect(library.floor(floorSpec.code)!.color.getHex()).toBe(0xffffff);
+  });
+
+  it('материал пола помечен общим, чтобы реестр его не освободил', () => {
+    const library = new MaterialLibrary(async () => new Texture());
+    library.registerFloors([floorSpec]);
+
+    expect(library.floor(floorSpec.code)!.userData['shared']).toBe(true);
+  });
+});
+
 describe('подмена отделки', () => {
   it('меняет материал нужного слота', () => {
     const group = model(['oak', 'white', 'steel']);

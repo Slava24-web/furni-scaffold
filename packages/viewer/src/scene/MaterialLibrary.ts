@@ -1,5 +1,6 @@
 import {
   Color,
+  DoubleSide,
   MeshStandardMaterial,
   RepeatWrapping,
   SRGBColorSpace,
@@ -26,8 +27,25 @@ export interface MaterialSpec {
   textureUrl?: string | undefined;
 }
 
+/**
+ * Покрытие пола.
+ *
+ * `repeatMm` — сторона квадрата текстуры в миллиметрах. Без неё доска
+ * растягивается на всю комнату и превращается в узор непонятного
+ * масштаба: пол — единственная поверхность, где ошибка масштаба видна
+ * сразу.
+ */
+export interface FloorSpec {
+  code: string;
+  textureUrl: string;
+  repeatMm: number;
+  roughness: number;
+}
+
 export class MaterialLibrary {
   private readonly specs = new Map<string, MaterialSpec>();
+  private readonly floorSpecs = new Map<string, FloorSpec>();
+  private readonly floors = new Map<string, MeshStandardMaterial>();
   private readonly materials = new Map<string, MeshStandardMaterial>();
   private readonly textures = new Map<string, Texture>();
 
@@ -37,6 +55,37 @@ export class MaterialLibrary {
 
   register(specs: readonly MaterialSpec[]): void {
     for (const spec of specs) this.specs.set(spec.code, spec);
+  }
+
+  registerFloors(specs: readonly FloorSpec[]): void {
+    for (const spec of specs) this.floorSpecs.set(spec.code, spec);
+  }
+
+  /**
+   * Материал пола по коду покрытия.
+   *
+   * Цвет несёт текстура, поэтому база белая: множитель поверх карты
+   * перемножал бы тон дважды и уводил дуб в оранжевый пластик.
+   */
+  floor(code: string): MeshStandardMaterial | undefined {
+    const existing = this.floors.get(code);
+    if (existing) return existing;
+
+    const spec = this.floorSpecs.get(code);
+    if (!spec) return undefined;
+
+    const material = new MeshStandardMaterial({
+      color: 0xffffff,
+      roughness: spec.roughness,
+      metalness: 0,
+      name: spec.code,
+      side: DoubleSide,
+    });
+    material.userData.shared = true;
+
+    this.floors.set(code, material);
+    void this.attachTexture(material, spec.textureUrl, 1000 / spec.repeatMm);
+    return material;
   }
 
   get known(): string[] {
@@ -70,7 +119,11 @@ export class MaterialLibrary {
     return material;
   }
 
-  private async attachTexture(material: MeshStandardMaterial, url: string): Promise<void> {
+  private async attachTexture(
+    material: MeshStandardMaterial,
+    url: string,
+    repeatPerMetre?: number,
+  ): Promise<void> {
     try {
       const texture = this.textures.get(url) ?? (await this.loadTexture(url));
       texture.colorSpace = SRGBColorSpace;
@@ -79,6 +132,15 @@ export class MaterialLibrary {
       this.textures.set(url, texture);
 
       material.map = texture;
+      // Повтор задаётся на материале, а не на общей текстуре: одна и та
+      // же карта может лежать и на фасаде, и на полу с разным масштабом
+      if (repeatPerMetre !== undefined) {
+        material.map = texture.clone();
+        material.map.needsUpdate = true;
+        material.map.wrapS = RepeatWrapping;
+        material.map.wrapT = RepeatWrapping;
+        material.map.repeat.set(repeatPerMetre, repeatPerMetre);
+      }
       material.needsUpdate = true;
     } catch {
       // Текстура не пришла — материал остаётся одноцветным.
@@ -87,6 +149,11 @@ export class MaterialLibrary {
   }
 
   dispose(): void {
+    for (const material of this.floors.values()) {
+      material.map?.dispose();
+      material.dispose();
+    }
+    this.floors.clear();
     for (const material of this.materials.values()) material.dispose();
     for (const texture of this.textures.values()) texture.dispose();
     this.materials.clear();

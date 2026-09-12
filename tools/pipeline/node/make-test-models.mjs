@@ -26,6 +26,7 @@ import { boundsMm, triangleCount } from './geometry.mjs';
 import { buildDocument, writeGlb } from './gltf.mjs';
 import { renderThumbnail } from './thumbnail.mjs';
 import { TEXTURE_BUILDERS } from './textures.mjs';
+import { FLOOR_FINISHES, floorTexture } from './floors.mjs';
 import { optimizeAsset } from './optimize.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -65,8 +66,26 @@ async function main() {
     textureUrls[key] = `/assets/test/textures/${key}.webp`;
   }
 
+  // Покрытия пола: своя текстура на каждое исполнение. Пол занимает
+  // больше площади, чем вся мебель, и одним тоном тут не обойтись
+  const floors = [];
+  for (const finish of FLOOR_FINISHES) {
+    const png = await floorTexture(ASSET_BUDGETS.maxTextureSize / 2, finish);
+    await writeFile(join(textureDir, `${finish.code}.webp`), await sharp(png).webp({ quality: 84 }).toBuffer());
+    floors.push({
+      code: finish.code,
+      name: finish.name,
+      kind: finish.kind,
+      /** Физический размер квадрата текстуры: без него доска теряет масштаб */
+      repeatMm: finish.repeatMm,
+      roughness: finish.roughness,
+      textureUrl: `/assets/test/textures/${finish.code}.webp`,
+    });
+  }
+
   const manifest = {
     tenant: TEST_TENANT,
+    floors,
     materials: Object.values(MATERIALS).map((material) => ({
       code: material.code,
       name: material.name,

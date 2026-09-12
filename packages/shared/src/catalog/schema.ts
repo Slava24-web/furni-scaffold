@@ -93,12 +93,32 @@ export const CatalogProductSchema = z.object({
   finishes: z.array(FinishSlotSchema).default([]),
 });
 
+/**
+ * Напольное покрытие тенанта.
+ *
+ * Пол занимает больше площади, чем вся мебель вместе взятая, поэтому
+ * исполнение выбирается отдельно от отделки изделий. `repeatMm` — размер
+ * квадрата текстуры в миллиметрах: без него доска растягивается на всю
+ * комнату и превращается в узор непонятного масштаба.
+ */
+export const FloorFinishSchema = z.object({
+  code: z.string().min(1),
+  name: z.string().min(1),
+  /** Тип покрытия: ламинат, паркет, инженерная доска, плитка */
+  kind: z.string().min(1),
+  repeatMm: z.number().int().positive(),
+  roughness: z.number().min(0).max(1).default(0.6),
+  textureUrl: z.string().min(1),
+});
+
 export const CatalogSchema = z.object({
   tenant: z.object({
     slug: z.string().min(1),
     name: z.string().min(1),
   }),
   materials: z.array(CatalogMaterialSchema),
+  /** Покрытия пола. Пусто — пол остаётся служебного цвета */
+  floors: z.array(FloorFinishSchema).default([]),
   products: z.array(CatalogProductSchema).min(1),
 });
 
@@ -106,6 +126,20 @@ export type Catalog = z.infer<typeof CatalogSchema>;
 export type CatalogProduct = z.infer<typeof CatalogProductSchema>;
 export type CatalogMaterial = z.infer<typeof CatalogMaterialSchema>;
 export type FinishSlot = z.infer<typeof FinishSlotSchema>;
+export type FloorFinish = z.infer<typeof FloorFinishSchema>;
+
+/** Группировка покрытий по типу: в магазине их показывают так же. */
+export function groupFloorsByKind(
+  floors: readonly FloorFinish[],
+): { kind: string; floors: FloorFinish[] }[] {
+  const groups = new Map<string, FloorFinish[]>();
+  for (const floor of floors) {
+    const list = groups.get(floor.kind);
+    if (list) list.push(floor);
+    else groups.set(floor.kind, [floor]);
+  }
+  return [...groups].map(([kind, items]) => ({ kind, floors: items }));
+}
 
 /** Группировка для панели каталога. Порядок категорий — как в манифесте. */
 export function groupByCategory(

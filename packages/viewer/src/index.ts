@@ -15,7 +15,12 @@ export {
   type MaterialSource,
   type OpeningFootprint,
 } from './scene/OpeningBuilder';
-export { MaterialLibrary, applyFinishes, type MaterialSpec } from './scene/MaterialLibrary';
+export {
+  MaterialLibrary,
+  applyFinishes,
+  type MaterialSpec,
+  type FloorSpec,
+} from './scene/MaterialLibrary';
 export {
   CameraController,
   DEFAULT_LIMITS,

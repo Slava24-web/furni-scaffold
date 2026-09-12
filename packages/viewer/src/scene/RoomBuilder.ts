@@ -73,6 +73,8 @@ export class RoomBuilder {
 
   private walls: WallMesh[] = [];
   private floorMesh: Mesh | null = null;
+  /** Покрытие пола из каталога. null — служебный серый материал. */
+  private floorFinish: MeshStandardMaterial | null = null;
 
   constructor(private readonly scene: Scene) {
     this.root.name = 'room';
@@ -107,13 +109,29 @@ export class RoomBuilder {
       if (floor) floorGeometries.push(floor);
     }
 
-    this.floorMesh = mergeIntoMesh(floorGeometries, this.floorMaterial, 'floor');
+    this.floorMesh = mergeIntoMesh(
+      floorGeometries,
+      this.floorFinish ?? this.floorMaterial,
+      'floor',
+    );
     if (this.floorMesh) {
       // Чуть ниже нуля: мебель стоит на y = 0, и совпадающие плоскости
       // дают мерцание z-fighting на всей площади пола
       this.floorMesh.position.y = -0.005;
       this.root.add(this.floorMesh);
     }
+  }
+
+  /**
+   * Покрытие пола.
+   *
+   * Материал приходит снаружи и принадлежит библиотеке тенанта: билдер
+   * его не освобождает, иначе смена покрытия оставляла бы предыдущее
+   * без карты у всех, кто ею пользуется.
+   */
+  setFloorFinish(material: MeshStandardMaterial | null): void {
+    this.floorFinish = material;
+    if (this.floorMesh) this.floorMesh.material = material ?? this.floorMaterial;
   }
 
   /**
