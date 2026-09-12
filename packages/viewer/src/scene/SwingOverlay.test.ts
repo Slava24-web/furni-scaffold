@@ -1,7 +1,14 @@
 import { Line, Mesh, Scene } from 'three';
 import { describe, expect, it } from 'vitest';
 import { SwingOverlay } from './SwingOverlay';
-import { createRectangularRoom, randomUUID, swingZones, type Opening, type Room } from '@furni/shared';
+import {
+  createRectangularRoom,
+  drawerZone,
+  randomUUID,
+  swingZones,
+  type Opening,
+  type Room,
+} from '@furni/shared';
 
 function roomWithDoors(count: number): Room {
   const room = createRectangularRoom({ widthMm: 4000, depthMm: 3200 });
@@ -81,5 +88,26 @@ describe('SwingOverlay', () => {
     overlay.dispose();
 
     expect(scene.children).not.toContain(overlay.root);
+  });
+
+  it('зона выдвижения рисуется рядом с секторами дверей', () => {
+    const overlay = new SwingOverlay(new Scene());
+    const zone = drawerZone(
+      { position: { x: 0, y: 0, z: 0 }, rotationY: 0 },
+      { widthMm: 600, depthMm: 560, heightMm: 820, drawerCount: 3, drawerTravelMm: 360 },
+    )!;
+
+    overlay.build(swingZones(roomWithDoors(1)), [zone]);
+
+    // Дверь и ящик дают по контуру и заливке
+    expect(overlay.root.children.filter((child) => child instanceof Line)).toHaveLength(2);
+    expect(overlay.root.children.filter((child) => child instanceof Mesh)).toHaveLength(2);
+  });
+
+  it('без выделения зон выдвижения нет', () => {
+    const overlay = new SwingOverlay(new Scene());
+    overlay.build(swingZones(roomWithDoors(1)));
+
+    expect(overlay.root.children).toHaveLength(2);
   });
 });

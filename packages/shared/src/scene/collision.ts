@@ -228,6 +228,20 @@ export function placementBox(
   };
 }
 
+/**
+ * Зоны выдвижения ящиков вокруг проверяемого объекта.
+ *
+ * Считаются снаружи и передаются готовыми: во время перетаскивания они
+ * не меняются, а пересчёт на каждое движение указателя означал бы обход
+ * всей сцены в горячем пути.
+ */
+export interface DrawerContext {
+  /** Зона самого проверяемого объекта */
+  own?: Box | null;
+  /** Зоны соседей */
+  neighbours?: readonly { instanceId: string; box: Box }[];
+}
+
 export interface ConflictReport {
   /** instanceId объектов, с которыми есть пересечение */
   objectIds: string[];
@@ -237,6 +251,10 @@ export interface ConflictReport {
   outsideRoom: boolean;
   /** id проёмов, открыванию которых объект мешает */
   openingIds: string[];
+  /** instanceId соседей, чьим ящикам объект не даёт выдвинуться */
+  blockedDrawerIds: string[];
+  /** Ящикам самого объекта не хватает места перед фасадом */
+  ownDrawersBlocked: boolean;
 }
 
 export function hasConflicts(report: ConflictReport): boolean {
@@ -244,6 +262,8 @@ export function hasConflicts(report: ConflictReport): boolean {
     report.objectIds.length > 0 ||
     report.wallIds.length > 0 ||
     report.openingIds.length > 0 ||
+    report.blockedDrawerIds.length > 0 ||
+    report.ownDrawersBlocked ||
     report.outsideRoom
   );
 }
@@ -253,6 +273,8 @@ export const EMPTY_CONFLICTS: ConflictReport = {
   wallIds: [],
   outsideRoom: false,
   openingIds: [],
+  blockedDrawerIds: [],
+  ownDrawersBlocked: false,
 };
 
 /**
@@ -272,6 +294,7 @@ export function findConflicts(
   walls: readonly Wall[],
   toleranceMm = TOUCH_TOLERANCE_MM,
   swings: readonly SwingZone[] = [],
+  drawers: DrawerContext = {},
 ): ConflictReport {
   const objectIds: string[] = [];
   for (const other of others) {
@@ -288,7 +311,21 @@ export function findConflicts(
   // поставленный в неё, не даст двери открыться
   const openingIds = blockedSwings(swings, subject);
 
-  return { objectIds, wallIds, outsideRoom, openingIds };
+  // Ящик, которому некуда выехать, — такое же препятствие, как стена,
+  // и мешать могут обе стороны: и объект соседу, и сосед объекту
+  const blockedDrawerIds: string[] = [];
+  for (const zone of drawers.neighbours ?? []) {
+    if (boxesOverlap(subject, zone.box, toleranceMm)) blockedDrawerIds.push(zone.instanceId);
+  }
+
+  const own = drawers.own;
+  const ownDrawersBlocked =
+    own !== undefined &&
+    own !== null &&
+    (others.some((other) => boxesOverlap(own, other.box, toleranceMm)) ||
+      walls.some((wall) => boxesOverlap(own, wallToBox(wall), toleranceMm)));
+
+  return { objectIds, wallIds, outsideRoom, openingIds, blockedDrawerIds, ownDrawersBlocked };
 }
 
 export type OverlayAlignment = 'leftFlush' | 'rightFlush' | 'centred';

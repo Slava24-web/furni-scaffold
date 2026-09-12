@@ -39,6 +39,7 @@ const product = (over: Partial<CatalogProduct> = {}): CatalogProduct => ({
   stackable: false,
   materials: ['oak'],
   drawerCount: 0,
+  drawerTravelMm: 0,
   urlTemplate: '/x/lod{lod}.glb',
   lods: [{ lod: 0, bytes: 1, triangles: 1 }],
   finishes: [facadeSlot],

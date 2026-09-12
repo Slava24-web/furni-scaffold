@@ -68,7 +68,7 @@ const {
 );
 
 // Сцена — проекция документа: комната и объекты собираются отсюда
-useSceneSync(viewer);
+useSceneSync(viewer, selectedId);
 
 onMounted(() => {
   mount();

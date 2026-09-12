@@ -6,6 +6,8 @@ const report = (over: Partial<Parameters<typeof conflictMessage>[0]> = {}) => ({
   wallIds: [],
   outsideRoom: false,
   openingIds: [],
+  blockedDrawerIds: [],
+  ownDrawersBlocked: false,
   ...over,
 });
 
@@ -57,6 +59,15 @@ describe('сообщение о конфликте', () => {
     );
     expect(conflictMessage(report({ openingIds: ['d1', 'd2'] }))).toBe(
       'Объект перекрывает зоны открывания дверей',
+    );
+  });
+
+  it('называет перекрытые ящики соседа и свои', () => {
+    expect(conflictMessage(report({ blockedDrawerIds: ['a'] }))).toBe(
+      'Объект мешает выдвинуть ящики соседа',
+    );
+    expect(conflictMessage(report({ ownDrawersBlocked: true }))).toBe(
+      'Объект не сможет выдвинуть свои ящики',
     );
   });
 });

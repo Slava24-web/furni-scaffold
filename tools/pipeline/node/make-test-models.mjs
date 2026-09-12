@@ -140,6 +140,12 @@ async function main() {
       finishes: finishesFor(allGroups.map((g) => g.material)),
       /** Сколько ящиков можно выдвинуть */
       drawerCount: drawers.length,
+      /**
+       * Ход направляющей: на столько ящик выезжает вперёд. Нужен не
+       * вьюеру (он читает его из узла модели), а проверке коллизий —
+       * ящику должно хватить места перед фасадом.
+       */
+      drawerTravelMm: drawers.reduce((max, drawer) => Math.max(max, drawer.travelMm), 0),
       /** Шаблон под AssetRef.urlTemplate из packages/viewer */
       urlTemplate: `/assets/test/${product.sku}/lod{lod}.glb`,
       thumbnailUrl: `/assets/test/${product.sku}/thumb.png`,

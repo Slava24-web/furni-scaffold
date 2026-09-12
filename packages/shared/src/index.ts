@@ -7,6 +7,7 @@ export * from './scene/openingStyles';
 export * from './scene/openingPlacement';
 export * from './scene/collision';
 export * from './scene/swing';
+export * from './scene/drawerZone';
 export * from './catalog/schema';
 export * from './catalog/estimate';
 export { randomUUID, deterministicUuid } from './scene/uuid';

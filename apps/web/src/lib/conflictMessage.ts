@@ -27,6 +27,18 @@ export function conflictMessage(report: ConflictReport | null | undefined): stri
         : 'перекрывает зоны открывания дверей',
     );
   }
+  if (report.blockedDrawerIds.length > 0) {
+    parts.push(
+      report.blockedDrawerIds.length === 1
+        ? 'мешает выдвинуть ящики соседа'
+        : 'мешает выдвинуть ящики соседей',
+    );
+  }
+  if (report.ownDrawersBlocked) {
+    // Про свои ящики говорим отдельно: причина в том, что стоит ПЕРЕД
+    // объектом, и искать её надо не там, где обычное пересечение
+    parts.push('не сможет выдвинуть свои ящики');
+  }
   if (report.outsideRoom) {
     parts.push('вынесен за пределы комнаты');
   }

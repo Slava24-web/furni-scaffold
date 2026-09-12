@@ -9,10 +9,10 @@ import {
   MeshBasicMaterial,
   type Scene,
 } from 'three';
-import { swingArc, type SwingZone } from '@furni/shared';
+import { boxCorners, swingArc, type Box, type SwingZone } from '@furni/shared';
 
 /**
- * Зоны открывания дверей на полу.
+ * Зоны открывания дверей и выдвижения ящиков на полу.
  *
  * Рисуются как на плане: два радиуса и дуга между ними, залитые
  * полупрозрачным сектором. Без этой подсказки пользователь ставит тумбу
@@ -54,25 +54,44 @@ export class SwingOverlay {
     scene.add(this.root);
   }
 
-  /** Полная пересборка: дверей единицы, инкрементальность не окупается. */
-  build(zones: readonly SwingZone[]): void {
+  /**
+   * Полная пересборка: дверей единицы, инкрементальность не окупается.
+   *
+   * Зоны ящиков передаются отдельно и только для выделенного объекта:
+   * ряд кухни из пяти тумб залил бы прямоугольниками весь пол.
+   */
+  build(zones: readonly SwingZone[], pullouts: readonly Box[] = []): void {
     this.clear();
+
+    for (const box of pullouts) {
+      const corners = boxCorners(box);
+      this.addOutline([...corners, corners[0]!]);
+      this.addFill(corners[0]!, [corners[1]!, corners[2]!, corners[3]!]);
+    }
 
     for (const zone of zones) {
       const arc = swingArc(zone);
       // Контур сектора: от петли по закрытому радиусу, по дуге и обратно
-      const outline = [zone.hinge, ...arc, zone.hinge];
-
-      const line = new Line(lineGeometry(outline), this.lineMaterial);
-      line.frustumCulled = false;
-      this.lines.push(line);
-      this.root.add(line);
-
-      const fill = new Mesh(fanGeometry(zone.hinge, arc), this.fillMaterial);
-      fill.frustumCulled = false;
-      this.fills.push(fill);
-      this.root.add(fill);
+      this.addOutline([zone.hinge, ...arc, zone.hinge]);
+      this.addFill(zone.hinge, arc);
     }
+  }
+
+  private addOutline(points: readonly { x: number; y: number }[]): void {
+    const line = new Line(lineGeometry(points), this.lineMaterial);
+    line.frustumCulled = false;
+    this.lines.push(line);
+    this.root.add(line);
+  }
+
+  private addFill(
+    apex: { x: number; y: number },
+    rim: readonly { x: number; y: number }[],
+  ): void {
+    const fill = new Mesh(fanGeometry(apex, rim), this.fillMaterial);
+    fill.frustumCulled = false;
+    this.fills.push(fill);
+    this.root.add(fill);
   }
 
   setVisible(visible: boolean): void {

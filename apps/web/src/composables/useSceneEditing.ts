@@ -18,6 +18,7 @@ import {
   normalizeAngleDeg,
   placementBox,
   planAngleDeg,
+  drawerZone,
   restingHeightMm,
   supportTopMm,
   swingZones,
@@ -189,6 +190,23 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     return scene.doc.rooms.flatMap((room) => swingZones(room));
   }
 
+  /** Зона выдвижения ящиков одного размещения. Null — ящиков нет. */
+  function zoneOf(placement: Placement): Box | null {
+    const product = catalog.bySku.get(placement.sku);
+    return product ? drawerZone(placement, product) : null;
+  }
+
+  /** Зоны выдвижения соседей: перед ними нельзя ставить объекты. */
+  function neighbourDrawerZones(exceptId: string | null): { instanceId: string; box: Box }[] {
+    const zones: { instanceId: string; box: Box }[] = [];
+    for (const placement of scene.doc.placements) {
+      if (placement.instanceId === exceptId) continue;
+      const box = zoneOf(placement);
+      if (box) zones.push({ instanceId: placement.instanceId, box });
+    }
+    return zones;
+  }
+
   /** Габариты остальных объектов сцены. Товары без каталога пропускаются. */
   function otherBoxes(exceptId: string | null): { id: string; box: Box }[] {
     const boxes: { id: string; box: Box }[] = [];
@@ -211,6 +229,7 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
   let staticBoxes: { id: string; box: Box }[] = [];
   let dragWalls: Wall[] = [];
   let dragSwings: SwingZone[] = [];
+  let dragDrawerZones: { instanceId: string; box: Box }[] = [];
 
   /** Что делает текущий жест: двигает объект или вращает его. */
   let dragKind: 'move' | 'rotate' = 'move';
@@ -285,6 +304,7 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     snapEngine.value.setTargets(targets);
     dragWalls = allWalls();
     dragSwings = allSwings();
+    dragDrawerZones = neighbourDrawerZones(exceptId);
   }
 
   /**
@@ -361,9 +381,25 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     const walls = subject ? dragWalls : allWalls();
     const swings = subject ? dragSwings : allSwings();
 
-    conflicts.value = findConflicts(box, neighbours, walls, undefined, swings);
+    const placement = scene.doc.placements.find((p) => p.instanceId === id);
+    // Зона выдвижения считается по тому же габариту, что и проверка:
+    // во время перетаскивания это позиция под указателем, а не в документе
+    const own = placement
+      ? zoneOf({
+          ...placement,
+          position: subject
+            ? { x: box.centre.x, y: box.bottomMm, z: box.centre.y }
+            : placement.position,
+          rotationY: box.rotationDeg,
+        })
+      : null;
+
+    conflicts.value = findConflicts(box, neighbours, walls, undefined, swings, {
+      own,
+      neighbours: subject ? dragDrawerZones : neighbourDrawerZones(id),
+    });
     v?.selection.setConflict(hasConflicts(conflicts.value));
-    highlightConflicting(conflicts.value.objectIds);
+    highlightConflicting([...conflicts.value.objectIds, ...conflicts.value.blockedDrawerIds]);
     v?.invalidate();
   }
 
@@ -767,7 +803,17 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
       bottomMm: point.y,
       topMm: point.y + product.heightMm,
     };
-    previewConflicts.value = findConflicts(box, otherBoxes(null), allWalls(), undefined, allSwings());
+    previewConflicts.value = findConflicts(
+      box,
+      otherBoxes(null),
+      allWalls(),
+      undefined,
+      allSwings(),
+      {
+        own: drawerZone({ position: { x: point.x, y: point.y, z: point.z }, rotationY: point.rotationY }, product),
+        neighbours: neighbourDrawerZones(null),
+      },
+    );
     v.preview.setConflict(hasConflicts(previewConflicts.value));
     // Виновник подсвечивается и до отпускания: пользователь видит, во что
     // упрётся объект, ещё на подлёте

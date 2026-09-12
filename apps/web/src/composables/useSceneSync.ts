@@ -1,6 +1,7 @@
-import { markRaw, onBeforeUnmount, shallowRef, watch, type ShallowRef } from 'vue';
+import { markRaw, onBeforeUnmount, shallowRef, watch, type Ref, type ShallowRef } from 'vue';
 import { RoomBuilder, applyFinishes, type Viewer } from '@furni/viewer';
 import {
+  drawerZone,
   planDimensions,
   selectedFinish,
   swingZones,
@@ -9,6 +10,7 @@ import {
   type SceneDoc,
 } from '@furni/shared';
 import type { MeshStandardMaterial, Object3D } from 'three';
+import type { Box } from '@furni/shared';
 import { useCatalogStore } from '../stores/catalog';
 import { useSceneStore } from '../stores/scene';
 
@@ -23,7 +25,10 @@ import { useSceneStore } from '../stores/scene';
  * моделей на каждое изменение документа означала бы фриз на каждый шаг
  * отмены.
  */
-export function useSceneSync(viewer: ShallowRef<Viewer | null>): {
+export function useSceneSync(
+  viewer: ShallowRef<Viewer | null>,
+  selectedId?: Ref<string | null>,
+): {
   ready: ShallowRef<boolean>;
 } {
   const scene = useSceneStore();
@@ -48,6 +53,17 @@ export function useSceneSync(viewer: ShallowRef<Viewer | null>): {
     return rooms.value;
   }
 
+  /**
+   * Зона выдвижения показывается только у выделенного объекта: ряд кухни
+   * из пяти тумб залил бы прямоугольниками весь пол.
+   */
+  function selectedPullouts(doc: SceneDoc, instanceId: string | null): Box[] {
+    const placement = doc.placements.find((item) => item.instanceId === instanceId);
+    const product = placement && catalog.bySku.get(placement.sku);
+    const zone = placement && product ? drawerZone(placement, product) : null;
+    return zone ? [zone] : [];
+  }
+
   function syncRooms(v: Viewer, doc: SceneDoc): void {
     const room = builder(v);
     room.build(doc.rooms);
@@ -56,7 +72,10 @@ export function useSceneSync(viewer: ShallowRef<Viewer | null>): {
     v.dimensions.build(doc.rooms.flatMap((item) => planDimensions(item)));
     // Зоны открывания дверей: пользователь должен видеть, куда нельзя
     // ставить мебель, а не узнавать об этом из сообщения о конфликте
-    v.swings.build(doc.rooms.flatMap((item) => swingZones(item)));
+    v.swings.build(
+      doc.rooms.flatMap((item) => swingZones(item)),
+      selectedPullouts(doc, selectedId?.value ?? null),
+    );
     // Двери и окна строятся после материалов тенанта: цвет изделия —
     // та же отделка, что у мебели
     v.openings.build(doc.rooms, v.materials);
@@ -103,7 +122,7 @@ export function useSceneSync(viewer: ShallowRef<Viewer | null>): {
   }
 
   watch(
-    [() => viewer.value, () => scene.doc, () => catalog.products],
+    [() => viewer.value, () => scene.doc, () => catalog.products, () => selectedId?.value],
     async ([v, doc]) => {
       if (!v) return;
       // Материалы тенанта нужны раньше объектов: по ним собирается отделка
