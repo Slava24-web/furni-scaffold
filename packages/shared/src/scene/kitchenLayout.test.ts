@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { KITCHEN_LAYOUTS, buildKitchen } from './kitchenLayout';
 import { createRectangularRoom } from './walls';
 import { boxesOverlap, placementBox } from './collision';
+import { placementProductSize } from './resize';
 import { worldHalfExtents } from './bounds';
 import type { CatalogProduct } from '../catalog/schema';
 
@@ -13,7 +14,17 @@ const product = (
   depthMm: number,
   extra: Partial<CatalogProduct> = {},
 ): CatalogProduct =>
-  ({ sku, name: sku, role, widthMm, heightMm, depthMm, mountHeightMm: 0, ...extra }) as CatalogProduct;
+  ({
+    sku,
+    name: sku,
+    role,
+    widthMm,
+    heightMm,
+    depthMm,
+    mountHeightMm: 0,
+    resize: {},
+    ...extra,
+  }) as CatalogProduct;
 
 const catalog: CatalogProduct[] = [
   product('BASE-800', 'base', 800, 820, 618),
@@ -135,5 +146,103 @@ describe('готовые сценарии кухни', () => {
   it('идентификаторы размещений уникальны', () => {
     const { placements } = buildKitchen('corner', room(), catalog);
     expect(new Set(placements.map((p) => p.instanceId)).size).toBe(placements.length);
+  });
+});
+
+describe('кухня с техникой', () => {
+  const full: CatalogProduct[] = [
+    ...catalog,
+    product('FRIDGE', 'fridge', 600, 2000, 650),
+    product('DISH', 'dishwasher', 600, 820, 570),
+    product('OVEN', 'oven', 596, 595, 550),
+    product('HOOD', 'hood', 600, 900, 500, { mountHeightMm: 1550 }),
+  ];
+
+  const rolesIn = (kind: Parameters<typeof buildKitchen>[0], widthMm = 4200) => {
+    const { placements } = buildKitchen(kind, room(widthMm, 3400), full);
+    return placements.map(
+      (placement) => full.find((item) => item.sku === placement.sku)!.role,
+    );
+  };
+
+  it('в готовой кухне есть и мебель, и техника', () => {
+    const roles = new Set(rolesIn('corner'));
+    expect(roles).toContain('base');
+    expect(roles).toContain('worktop');
+    expect(roles).toContain('sink');
+    expect(roles).toContain('fridge');
+    expect(roles).toContain('dishwasher');
+  });
+
+  it('вытяжка стоит ровно над плитой', () => {
+    const { placements } = buildKitchen('corner', room(4200, 3400), full);
+    const find = (role: CatalogProduct['role']) =>
+      placements.find((p) => full.find((item) => item.sku === p.sku)!.role === role);
+
+    const hob = find('hob')!;
+    const hood = find('hood')!;
+    expect(hood.position.x).toBe(hob.position.x);
+    expect(hood.position.z).toBe(hob.position.z);
+  });
+
+  it('холодильник стоит с краю, а не посреди ряда', () => {
+    const { placements } = buildKitchen('linear', room(4200, 3400), full);
+    const fridge = placements.find(
+      (p) => full.find((item) => item.sku === p.sku)!.role === 'fridge',
+    )!;
+    const bases = placements.filter(
+      (p) => full.find((item) => item.sku === p.sku)!.role === 'base',
+    );
+
+    // Крайний по ряду: дальше него модулей нет
+    const axis = Math.abs(fridge.position.x) > Math.abs(fridge.position.z) ? 'x' : 'z';
+    const beyond = bases.filter(
+      (base) => Math.abs(base.position[axis]) > Math.abs(fridge.position[axis]),
+    );
+    expect(beyond).toHaveLength(0);
+  });
+
+  it('столешница режется высокой техникой, а не проходит сквозь неё', () => {
+    const { placements } = buildKitchen('linear', room(4200, 3400), full);
+    const tops = placements.filter(
+      (p) => full.find((item) => item.sku === p.sku)!.role === 'worktop',
+    );
+    const fridge = placements.find(
+      (p) => full.find((item) => item.sku === p.sku)!.role === 'fridge',
+    )!;
+
+    for (const top of tops) {
+      const half = (top.size.widthMm ?? 2000) / 2;
+      const gap = Math.abs(top.position.x - fridge.position.x) - half - 300;
+      expect(gap).toBeGreaterThanOrEqual(-1);
+    }
+  });
+
+  it('столешница кладётся сплошным куском по заказанной длине', () => {
+    const { placements } = buildKitchen('linear', room(4200, 3400), full);
+    const top = placements.find(
+      (p) => full.find((item) => item.sku === p.sku)!.role === 'worktop',
+    )!;
+
+    // Ширина заказана: стык посреди рабочей поверхности — это шов
+    expect(top.size.widthMm).toBeGreaterThan(2000);
+  });
+
+  it('модули не налезают друг на друга и с техникой', () => {
+    const { placements } = buildKitchen('u-shape', room(4200, 3400), full);
+    const boxes = placements.map((placement) => {
+      const item = full.find((entry) => entry.sku === placement.sku)!;
+      return placementBox(placement, placementProductSize(placement, item));
+    });
+
+    for (let i = 0; i < boxes.length; i++) {
+      for (let j = i + 1; j < boxes.length; j++) {
+        if (!boxesOverlap(boxes[i]!, boxes[j]!)) continue;
+        throw new Error(
+          `${placements[i]!.sku} и ${placements[j]!.sku} пересекаются: ` +
+            `${JSON.stringify(placements[i]!.position)} и ${JSON.stringify(placements[j]!.position)}`,
+        );
+      }
+    }
   });
 });

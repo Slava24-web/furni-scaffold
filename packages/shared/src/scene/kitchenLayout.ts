@@ -74,43 +74,76 @@ function pickByRole(products: readonly CatalogProduct[], role: CatalogProduct['r
   return products.filter((product) => product.role === role).sort(byWidthDesc);
 }
 
-/**
- * Заполнение ряда модулями.
- *
- * Берётся самый широкий модуль, который ещё влезает: так меньше стыков,
- * а остаток в конце ряда закрывается узким. Ряд, куда не влезает ничего,
- * остаётся пустым — это честнее, чем ставить модуль внахлёст.
- */
-function fillRun(
-  run: Run,
-  modules: readonly CatalogProduct[],
-  offsetMm: number,
-  make: (product: CatalogProduct, centre: Vec2, rotationDeg: number) => void,
-): number {
-  if (modules.length === 0) return offsetMm;
+/** Место под модуль в ряду. */
+interface Slot {
+  run: Run;
+  alongMm: number;
+  widthMm: number;
+}
 
-  let cursor = offsetMm;
-  const rotation = facing(run.normal);
+/**
+ * Разбиение ряда на места под модули.
+ *
+ * Берётся самый широкий модуль, который ещё влезает: так меньше стыков.
+ * Остаток в конце ряда добирается позже — растяжением последнего
+ * СВОБОДНОГО места. Тянуть место под технику нельзя: у неё габарит
+ * стандартный.
+ */
+function planSlots(run: Run, modules: readonly CatalogProduct[]): Slot[] {
+  if (modules.length === 0) return [];
+
+  const slots: Slot[] = [];
+  let cursor = 0;
 
   for (let guard = 0; guard < 32; guard++) {
     const rest = run.lengthMm - cursor;
     const product = modules.find((candidate) => candidate.widthMm <= rest);
     if (!product) break;
 
-    const alongMm = cursor + product.widthMm / 2;
-    const outMm = product.depthMm / 2;
-    make(
-      product,
-      {
-        x: run.start.x + run.along.x * alongMm + run.normal.x * outMm,
-        y: run.start.y + run.along.y * alongMm + run.normal.y * outMm,
-      },
-      rotation,
-    );
+    slots.push({ run, alongMm: cursor, widthMm: product.widthMm });
     cursor += product.widthMm;
   }
 
-  return cursor;
+  return slots;
+}
+
+/**
+ * Вырезание участка из отрезков ряда.
+ *
+ * Нужно там, где место занято не модулем: под вытяжкой шкафа быть не
+ * должно, а обрезок короче узкого модуля не нужен вовсе.
+ */
+function cutOut(spans: readonly Slot[], fromMm: number, toMm: number): Slot[] {
+  const result: Slot[] = [];
+
+  for (const span of spans) {
+    const end = span.alongMm + span.widthMm;
+    if (toMm <= span.alongMm || fromMm >= end) {
+      result.push(span);
+      continue;
+    }
+
+    if (fromMm > span.alongMm) {
+      result.push({ run: span.run, alongMm: span.alongMm, widthMm: fromMm - span.alongMm });
+    }
+    if (toMm < end) {
+      result.push({ run: span.run, alongMm: toMm, widthMm: end - toMm });
+    }
+  }
+
+  return result;
+}
+
+/** Центр модуля, стоящего в этом месте ряда. */
+function slotCentre(slot: Slot, depthMm: number): Vec2 {
+  const { run } = slot;
+  const alongMm = slot.alongMm + slot.widthMm / 2;
+  const outMm = depthMm / 2;
+
+  return {
+    x: run.start.x + run.along.x * alongMm + run.normal.x * outMm,
+    y: run.start.y + run.along.y * alongMm + run.normal.y * outMm,
+  };
 }
 
 /**
@@ -203,14 +236,26 @@ export function buildKitchen(
   const bases = pickByRole(products, 'base');
   const walls = pickByRole(products, 'wall');
   const worktops = pickByRole(products, 'worktop');
-  const sink = pickByRole(products, 'sink')[0];
-  const hob = pickByRole(products, 'hob')[0];
+  /**
+   * Техника берётся самая узкая из ряда.
+   *
+   * Стандартный фронт 600 влезает в любую кухню, а Side-by-Side на 900
+   * в маленькой съедает половину ряда. Широкое пусть ставят руками.
+   */
+  const narrowest = (role: CatalogProduct['role']): CatalogProduct | undefined =>
+    pickByRole(products, role).at(-1);
 
   if (bases.length === 0) return { placements: [], problems: ['В каталоге нет нижних модулей'] };
 
   const problems: string[] = [];
   const placements: Placement[] = [];
-  const add = (product: CatalogProduct, centre: Vec2, rotationDeg: number, yMm: number): void => {
+  const add = (
+    product: CatalogProduct,
+    centre: Vec2,
+    rotationDeg: number,
+    yMm: number,
+    size: Placement['size'] = {},
+  ): void => {
     placements.push({
       instanceId: randomUUID(),
       productId: deterministicUuid(product.sku),
@@ -219,57 +264,240 @@ export function buildKitchen(
       rotationY: rotationDeg,
       options: {},
       params: {},
-      size: {},
+      size,
       anchoredToWallId: null,
       locked: false,
     });
   };
 
   const baseDepth = bases[0]!.depthMm;
-  const runs = runsFor(kind, bounds, baseDepth).filter((run) => run.lengthMm >= layout.minRunMm);
+  // Соседний ряд отступает на глубину САМОГО глубокого изделия: холодильник
+  // глубже модулей, и по глубине корпуса ряды сошлись бы углами
+  const cornerDepth = Math.max(baseDepth, narrowest('fridge')?.depthMm ?? 0);
+  const runs = runsFor(kind, bounds, cornerDepth).filter((run) => run.lengthMm >= layout.minRunMm);
   if (runs.length === 0) {
     return { placements: [], problems: ['Помещение слишком мало для этой раскладки'] };
   }
 
-  const worktopSpots: { centre: Vec2; rotation: number }[] = [];
+  const fridge = narrowest('fridge');
+  const dishwasher = narrowest('dishwasher');
+  const oven = narrowest('oven');
+  const sink = narrowest('sink');
+  const hob = narrowest('hob');
+  // Вытяжка подбирается под плиту: узкая над широкой плитой не тянет
+  const hood = hob
+    ? pickByRole(products, 'hood')
+        .slice()
+        .sort(
+          (a, b) => Math.abs(a.widthMm - hob.widthMm) - Math.abs(b.widthMm - hob.widthMm),
+        )[0]
+    : undefined;
 
-  for (const run of runs) {
-    fillRun(run, bases, 0, (product, centre, rotation) => {
-      add(product, centre, rotation, 0);
-      worktopSpots.push({ centre, rotation });
-    });
+  /**
+   * Порядок изделий в главном ряду.
+   *
+   * Мойка ближе к началу, посудомойка сразу за ней — их подключают к
+   * одному сливу. Духовка отдельным местом, плита встаёт над ней.
+   * Холодильник уходит в конец: посреди ряда он разрывает столешницу.
+   */
+  function composeMain(run: Run): Slot[] {
+    const wish: CatalogProduct[] = [bases.at(-1) ?? bases[0]!];
+    if (dishwasher) wish.push(dishwasher);
+    if (oven) wish.push(oven);
 
-    // Столешница накрывает ряд целиком
-    if (worktops.length > 0) {
-      fillRun(run, worktops, 0, (product, centre, rotation) => {
-        add(product, centre, rotation, product.mountHeightMm);
-      });
-    } else {
-      problems.push('В каталоге нет столешниц');
+    const reserveMm = fridge ? fridge.widthMm : 0;
+    const laid: Slot[] = [];
+    let cursor = 0;
+
+    // Место под холодильник держится в резерве, пока ряд набирается:
+    // сам он этим резервом и является, поэтому себе его не прибавляет
+    const put = (product: CatalogProduct, keepReserve = true): boolean => {
+      const reserve = keepReserve ? reserveMm : 0;
+      if (cursor + product.widthMm + reserve > run.lengthMm) return false;
+      laid.push({ run, alongMm: cursor, widthMm: product.widthMm });
+      assigned.set(laid.at(-1)!, product);
+      cursor += product.widthMm;
+      return true;
+    };
+
+    for (const product of wish) put(product);
+
+    // Остаток ряда добирается обычными модулями
+    for (let guard = 0; guard < 32; guard++) {
+      const base = bases.find(
+        (candidate) => cursor + candidate.widthMm + reserveMm <= run.lengthMm,
+      );
+      if (!base) break;
+      put(base);
+    }
+
+    if (fridge && put(fridge, false)) tallSlots.add(laid.at(-1)!);
+
+    return laid;
+  }
+
+  const assigned = new Map<Slot, CatalogProduct>();
+  const tallSlots = new Set<Slot>();
+
+  const slots = runs.map((run, index) =>
+    index === 0 ? composeMain(run) : planSlots(run, bases),
+  );
+  const mainSlots = slots[0] ?? [];
+
+  // Обычные места достаются нижним модулям
+  for (const runSlots of slots) {
+    for (const slot of runSlots) {
+      if (assigned.has(slot)) continue;
+      assigned.set(slot, bases.find((base) => base.widthMm <= slot.widthMm) ?? bases[0]!);
     }
   }
 
-  // Верхний ряд только над главной стеной: навесные шкафы над каждой
-  // стеной делают кухню коробкой без света
-  const [main] = runs;
-  if (main && walls.length > 0) {
-    fillRun(main, walls, 0, (product, centre, rotation) => {
-      add(product, centre, rotation, product.mountHeightMm);
-    });
+  const roleSlot = (role: CatalogProduct['role']): Slot | undefined =>
+    mainSlots.find((slot) => assigned.get(slot)?.role === role);
+
+  // Мойка над первым обычным модулем, плита — над духовкой
+  const sinkSlot = mainSlots.find((slot) => assigned.get(slot)?.role === 'base');
+  const hobSlot = roleSlot('oven') ?? mainSlots.filter((slot) => !tallSlots.has(slot)).at(-1);
+
+  /**
+   * Остаток ряда добирается последним свободным местом.
+   *
+   * Так и собирают кухню по месту — доборным модулем, а не щелью у
+   * стены. Место под технику не тянется: у неё габарит стандартный.
+   */
+  for (const [index, runSlots] of slots.entries()) {
+    const run = runs[index]!;
+    const used = runSlots.reduce((sum, slot) => sum + slot.widthMm, 0);
+    const remainder = run.lengthMm - used;
+    if (remainder <= 0) continue;
+
+    const last = [...runSlots]
+      .reverse()
+      .find((slot) => assigned.get(slot)?.role === 'base');
+    if (!last) continue;
+
+    last.widthMm += remainder;
+    for (const slot of runSlots) {
+      if (slot.alongMm > last.alongMm) slot.alongMm += remainder;
+    }
   }
 
-  // Мойка и плита ставятся на столешницу с разносом: рабочая
-  // поверхность между ними — требование эргономики, а не украшение
-  const top = worktops[0];
-  const worktopTop = top ? top.mountHeightMm + (top.surfaceHeightMm ?? top.heightMm) : 858;
-  const spots = worktopSpots.filter((_, index) => index > 0);
-  if (sink && spots.length > 0) {
-    const spot = spots[Math.floor(spots.length * 0.25)]!;
-    add(sink, spot.centre, spot.rotation, worktopTop);
+  for (const runSlots of slots) {
+    for (const slot of runSlots) {
+      const product = assigned.get(slot)!;
+      const stretched =
+        product.role === 'base' && slot.widthMm !== product.widthMm
+          ? { widthMm: Math.round(slot.widthMm) }
+          : {};
+
+      add(
+        product,
+        slotCentre(slot, product.depthMm),
+        facing(slot.run.normal),
+        product.mountHeightMm,
+        stretched,
+      );
+    }
   }
-  if (hob && spots.length > 2) {
-    const spot = spots[Math.floor(spots.length * 0.75)]!;
-    add(hob, spot.centre, spot.rotation, worktopTop);
+
+  /**
+   * Непрерывные участки ряда без высокой техники.
+   *
+   * По ним кладётся столешница и вешаются верхние шкафы: и то и другое
+   * упирается в холодильник, а не проходит сквозь него.
+   */
+  function freeSpans(runSlots: readonly Slot[], skip: ReadonlySet<Slot> = tallSlots): Slot[] {
+    const spans: Slot[] = [];
+    let current: Slot | null = null;
+
+    for (const slot of runSlots) {
+      if (skip.has(slot)) {
+        current = null;
+        continue;
+      }
+      if (!current) {
+        current = { run: slot.run, alongMm: slot.alongMm, widthMm: slot.widthMm };
+        spans.push(current);
+        continue;
+      }
+      current.widthMm = slot.alongMm + slot.widthMm - current.alongMm;
+    }
+
+    return spans;
+  }
+
+  /**
+   * Столешница кладётся сплошным куском на каждый участок: стык посреди
+   * рабочей поверхности — это шов, куда затекает вода.
+   */
+  const worktop = worktops[0];
+  if (!worktop) problems.push('В каталоге нет столешниц');
+
+  if (worktop) {
+    for (const runSlots of slots) {
+      for (const span of freeSpans(runSlots)) {
+        add(
+          worktop,
+          slotCentre(span, worktop.depthMm),
+          facing(span.run.normal),
+          worktop.mountHeightMm,
+          { widthMm: Math.round(span.widthMm) },
+        );
+      }
+    }
+  }
+
+  /**
+   * Верхний ряд только над главной стеной: шкафы над каждой стеной
+   * делают кухню коробкой без света.
+   *
+   * Место под вытяжку вырезается из ряда по её ШИРИНЕ, а не по ширине
+   * плиты: вытяжка бывает шире, и шкаф рядом с ней иначе встаёт в неё.
+   */
+  const upperSpans =
+    mainSlots.length === 0
+      ? []
+      : hood && hobSlot
+        ? cutOut(
+            freeSpans(mainSlots),
+            hobSlot.alongMm + hobSlot.widthMm / 2 - hood.widthMm / 2,
+            hobSlot.alongMm + hobSlot.widthMm / 2 + hood.widthMm / 2,
+          )
+        : freeSpans(mainSlots);
+
+  if (walls.length > 0) {
+    for (const span of upperSpans) {
+      const sub: Run = {
+        ...span.run,
+        start: {
+          x: span.run.start.x + span.run.along.x * span.alongMm,
+          y: span.run.start.y + span.run.along.y * span.alongMm,
+        },
+        lengthMm: span.widthMm,
+      };
+
+      for (const slot of planSlots(sub, walls)) {
+        const product = walls.find((item) => item.widthMm <= slot.widthMm) ?? walls[0]!;
+        add(product, slotCentre(slot, product.depthMm), facing(sub.normal), product.mountHeightMm, {
+          widthMm: Math.round(slot.widthMm),
+        });
+      }
+    }
+  }
+
+  const surfaceMm = worktop
+    ? worktop.mountHeightMm + (worktop.surfaceHeightMm ?? worktop.heightMm)
+    : 858;
+
+  if (sink && sinkSlot) {
+    add(sink, slotCentre(sinkSlot, baseDepth), facing(sinkSlot.run.normal), surfaceMm);
+  }
+  if (hob && hobSlot) {
+    add(hob, slotCentre(hobSlot, baseDepth), facing(hobSlot.run.normal), surfaceMm);
+  }
+  // Вытяжка строго над плитой: смещённая не тянет, и центр у них общий
+  if (hood && hobSlot) {
+    add(hood, slotCentre(hobSlot, baseDepth), facing(hobSlot.run.normal), hood.mountHeightMm);
   }
 
   return { placements, problems };
