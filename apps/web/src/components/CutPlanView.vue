@@ -69,6 +69,42 @@ function fill(code: string): string {
 function fits(widthMm: number, heightMm: number): boolean {
   return widthMm >= 260 && heightMm >= 150;
 }
+
+/** Поле вокруг листа под выносные размеры. */
+const MARGIN_MM = 320;
+
+/**
+ * Размерные линии по краям листа.
+ *
+ * Раскрой читают с линейкой в руках: подписи внутри детали говорят, что
+ * это за деталь, а размерные линии по краю — где именно её резать.
+ * Строятся по границам деталей, а не по каждой отдельно: у деталей,
+ * выстроенных в ряд, границы общие, и десять одинаковых стрелок вместо
+ * одной только мешают.
+ */
+function edges(values: readonly { from: number; to: number }[]): { from: number; to: number }[] {
+  const bounds = new Set<number>();
+  for (const value of values) {
+    bounds.add(Math.round(value.from));
+    bounds.add(Math.round(value.to));
+  }
+
+  const sorted = [...bounds].sort((a, b) => a - b);
+  const spans: { from: number; to: number }[] = [];
+  for (let i = 1; i < sorted.length; i++) {
+    spans.push({ from: sorted[i - 1]!, to: sorted[i]! });
+  }
+  // Слишком узкие промежутки — это пропилы, их не подписывают
+  return spans.filter((span) => span.to - span.from >= 60);
+}
+
+function horizontalBands(sheet: { parts: readonly { xMm: number; widthMm: number }[] }) {
+  return edges(sheet.parts.map((placed) => ({ from: placed.xMm, to: placed.xMm + placed.widthMm })));
+}
+
+function verticalBands(sheet: { parts: readonly { yMm: number; heightMm: number }[] }) {
+  return edges(sheet.parts.map((placed) => ({ from: placed.yMm, to: placed.yMm + placed.heightMm })));
+}
 </script>
 
 <template>
@@ -105,10 +141,23 @@ function fits(widthMm: number, heightMm: number): boolean {
 
         <svg
           class="sheet__plan"
-          :viewBox="`0 0 ${SHEET_WIDTH_MM} ${SHEET_HEIGHT_MM}`"
+          :viewBox="`${-MARGIN_MM} ${-MARGIN_MM} ${SHEET_WIDTH_MM + MARGIN_MM * 2} ${SHEET_HEIGHT_MM + MARGIN_MM * 2}`"
           role="img"
           :aria-label="`Лист ${sheet.index}`"
         >
+          <defs>
+            <marker
+              :id="`tick-${sheet.material}-${sheet.thicknessMm}-${sheet.index}`"
+              markerWidth="10"
+              markerHeight="10"
+              refX="5"
+              refY="5"
+              orient="auto"
+            >
+              <path d="M 9 2 L 2 5 L 9 8 z" fill="#5a6270" />
+            </marker>
+          </defs>
+
           <rect
             :width="SHEET_WIDTH_MM"
             :height="SHEET_HEIGHT_MM"
@@ -116,6 +165,38 @@ function fits(widthMm: number, heightMm: number): boolean {
             stroke="#c8cdd6"
             stroke-width="6"
           />
+
+          <!-- Габарит листа: внешние линии со стрелками -->
+          <g class="dim">
+            <line
+              :x1="0"
+              :y1="-MARGIN_MM + 110"
+              :x2="SHEET_WIDTH_MM"
+              :y2="-MARGIN_MM + 110"
+              :marker-start="`url(#tick-${sheet.material}-${sheet.thicknessMm}-${sheet.index})`"
+              :marker-end="`url(#tick-${sheet.material}-${sheet.thicknessMm}-${sheet.index})`"
+            />
+            <text :x="SHEET_WIDTH_MM / 2" :y="-MARGIN_MM + 70" text-anchor="middle">
+              {{ SHEET_WIDTH_MM }}
+            </text>
+            <line
+              :x1="-MARGIN_MM + 110"
+              :y1="0"
+              :x2="-MARGIN_MM + 110"
+              :y2="SHEET_HEIGHT_MM"
+              :marker-start="`url(#tick-${sheet.material}-${sheet.thicknessMm}-${sheet.index})`"
+              :marker-end="`url(#tick-${sheet.material}-${sheet.thicknessMm}-${sheet.index})`"
+            />
+            <text
+              :x="-MARGIN_MM + 70"
+              :y="SHEET_HEIGHT_MM / 2"
+              text-anchor="middle"
+              :transform="`rotate(-90 ${-MARGIN_MM + 70} ${SHEET_HEIGHT_MM / 2})`"
+            >
+              {{ SHEET_HEIGHT_MM }}
+            </text>
+          </g>
+
           <g :transform="`translate(${TRIM_MM} ${TRIM_MM})`">
             <g v-for="(placed, index) in sheet.parts" :key="index">
               <rect
@@ -140,6 +221,42 @@ function fits(widthMm: number, heightMm: number): boolean {
                   {{ placed.part.widthMm }}×{{ placed.part.heightMm }}
                 </tspan>
               </text>
+            </g>
+
+            <!-- Размеры по краям: где именно резать лист -->
+            <g class="dim">
+              <g v-for="band in horizontalBands(sheet)" :key="`h${band.from}`">
+                <line
+                  :x1="band.from"
+                  :y1="-60"
+                  :x2="band.to"
+                  :y2="-60"
+                  :marker-start="`url(#tick-${sheet.material}-${sheet.thicknessMm}-${sheet.index})`"
+                  :marker-end="`url(#tick-${sheet.material}-${sheet.thicknessMm}-${sheet.index})`"
+                />
+                <text :x="(band.from + band.to) / 2" :y="-80" text-anchor="middle">
+                  {{ band.to - band.from }}
+                </text>
+              </g>
+
+              <g v-for="band in verticalBands(sheet)" :key="`v${band.from}`">
+                <line
+                  :x1="-60"
+                  :y1="band.from"
+                  :x2="-60"
+                  :y2="band.to"
+                  :marker-start="`url(#tick-${sheet.material}-${sheet.thicknessMm}-${sheet.index})`"
+                  :marker-end="`url(#tick-${sheet.material}-${sheet.thicknessMm}-${sheet.index})`"
+                />
+                <text
+                  :x="-80"
+                  :y="(band.from + band.to) / 2"
+                  text-anchor="middle"
+                  :transform="`rotate(-90 ${-80} ${(band.from + band.to) / 2})`"
+                >
+                  {{ band.to - band.from }}
+                </text>
+              </g>
             </g>
           </g>
         </svg>
@@ -248,6 +365,15 @@ function fits(widthMm: number, heightMm: number): boolean {
   width: 100%;
   height: auto;
   max-width: 900px;
+}
+.dim line {
+  stroke: #5a6270;
+  stroke-width: 4;
+}
+.dim text {
+  font-size: 62px;
+  fill: #5a6270;
+  font-variant-numeric: tabular-nums;
 }
 .parts__title {
   margin: 0 0 7px;
