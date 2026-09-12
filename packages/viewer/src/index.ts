@@ -7,6 +7,7 @@ export { upwardSurfaceHeightMm } from './core/surface';
 export { RotationGizmo } from './interaction/RotationGizmo';
 export { RoomBuilder } from './scene/RoomBuilder';
 export { PlacementPreview } from './scene/PlacementPreview';
+export { DimensionOverlay, type DimensionLabelFactory } from './scene/DimensionOverlay';
 export { MaterialLibrary, applyFinishes, type MaterialSpec } from './scene/MaterialLibrary';
 export {
   CameraController,

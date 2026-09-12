@@ -2,6 +2,7 @@ export * from './budgets';
 export * from './scene/schema';
 export * from './scene/migrate';
 export * from './scene/walls';
+export * from './scene/dimensions';
 export * from './scene/collision';
 export * from './catalog/schema';
 export * from './catalog/estimate';

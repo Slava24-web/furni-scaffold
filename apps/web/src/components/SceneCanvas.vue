@@ -4,7 +4,7 @@ import { useViewer } from '../composables/useViewer';
 import { useSceneEditing } from '../composables/useSceneEditing';
 import { useSceneStore } from '../stores/scene';
 import { useSceneSync } from '../composables/useSceneSync';
-import type { PlannerMode, FloorPoint } from '../composables/useSceneEditing';
+import type { PlannerMode, FloorPoint, DimensionHit } from '../composables/useSceneEditing';
 import type { DeviceTier } from '@furni/shared';
 
 // `| undefined` обязателен при exactOptionalPropertyTypes: родитель
@@ -14,7 +14,11 @@ const props = defineProps<{
   mode?: PlannerMode;
 }>();
 
-const emit = defineEmits<{ floorTap: [FloorPoint]; floorDoubleTap: [] }>();
+const emit = defineEmits<{
+  floorTap: [FloorPoint];
+  floorDoubleTap: [];
+  dimensionTap: [DimensionHit | null];
+}>();
 
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 const containerRef = ref<HTMLElement | null>(null);
@@ -55,6 +59,7 @@ const {
     mode,
     onFloorTap: (point) => emit('floorTap', point),
     onFloorDoubleTap: () => emit('floorDoubleTap'),
+    onDimensionTap: (hit) => emit('dimensionTap', hit),
   },
 );
 

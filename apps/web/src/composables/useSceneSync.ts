@@ -1,6 +1,12 @@
 import { markRaw, onBeforeUnmount, shallowRef, watch, type ShallowRef } from 'vue';
 import { RoomBuilder, applyFinishes, type Viewer } from '@furni/viewer';
-import { selectedFinish, type CatalogProduct, type Placement, type SceneDoc } from '@furni/shared';
+import {
+  roomDimensions,
+  selectedFinish,
+  type CatalogProduct,
+  type Placement,
+  type SceneDoc,
+} from '@furni/shared';
 import type { MeshStandardMaterial, Object3D } from 'three';
 import { useCatalogStore } from '../stores/catalog';
 import { useSceneStore } from '../stores/scene';
@@ -44,6 +50,9 @@ export function useSceneSync(viewer: ShallowRef<Viewer | null>): {
   function syncRooms(v: Viewer, doc: SceneDoc): void {
     const room = builder(v);
     room.build(doc.rooms);
+    // Размерные линии пересобираются вместе со стенами: подпись обязана
+    // показывать текущий размер, а не тот, что был до правки
+    v.dimensions.build(doc.rooms.flatMap((item) => roomDimensions(item)));
     // Опорная сетка нужна на пустой сцене; в готовом помещении она
     // только спорит с полом
     v.environment.setGridVisible(room.isEmpty);

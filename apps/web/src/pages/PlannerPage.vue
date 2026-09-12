@@ -7,6 +7,8 @@ import {
   placementPriceCents,
   projectOntoWall,
   randomUUID,
+  rectangularExtent,
+  resizeRoomWall,
   wallLengthMm,
   type CatalogProduct,
   type DeviceTier,
@@ -19,13 +21,14 @@ import CatalogPanel from '../components/CatalogPanel.vue';
 import RoomToolbar from '../components/RoomToolbar.vue';
 import ObjectInspector from '../components/ObjectInspector.vue';
 import EstimatePanel from '../components/EstimatePanel.vue';
+import DimensionEditor from '../components/DimensionEditor.vue';
 import { conflictMessage } from '../lib/conflictMessage';
 import { useCatalogDrag } from '../composables/useCatalogDrag';
 import { useWallDrawing } from '../composables/useWallDrawing';
 import { installTestingApi, uninstallTestingApi } from '../dev/testingApi';
 import { useCatalogStore } from '../stores/catalog';
 import { useSceneStore } from '../stores/scene';
-import type { FloorPoint, PlannerMode } from '../composables/useSceneEditing';
+import type { DimensionHit, FloorPoint, PlannerMode } from '../composables/useSceneEditing';
 
 const route = useRoute();
 const scene = useSceneStore();
@@ -142,6 +145,55 @@ function insertOpening(point: FloorPoint, kind: 'door' | 'window'): void {
   mode.value = 'select';
 }
 
+/**
+ * Правка размера помещения по размерной линии.
+ *
+ * Координаты тапа переводятся в систему области сцены: поле ввода лежит
+ * в ней, а жест приходит в клиентских координатах окна.
+ */
+const editedDimension = ref<{ wallId: string; valueMm: number; x: number; y: number } | null>(null);
+
+function onDimensionTap(hit: DimensionHit | null): void {
+  const rect = sceneRect();
+  if (!hit || !rect) {
+    editedDimension.value = null;
+    return;
+  }
+  editedDimension.value = {
+    wallId: hit.wallId,
+    valueMm: hit.clearLengthMm,
+    x: hit.clientX - rect.left,
+    y: hit.clientY - rect.top,
+  };
+}
+
+function applyDimension(clearLengthMm: number): void {
+  const edited = editedDimension.value;
+  const [room] = scene.doc.rooms;
+  editedDimension.value = null;
+  if (!edited || !room) return;
+
+  const next = resizeRoomWall(room, edited.wallId, clearLengthMm);
+  // Отвергнутый размер не должен попадать в историю отмен пустым шагом
+  if (next === room) return;
+
+  scene.setRoom(next);
+  // Кадрирование по новым габаритам: выросшая стена уезжает за край
+  // экрана, и пользователь не видит результата своего же ввода
+  const extent = rectangularExtent(next);
+  if (!extent) return;
+  canvas.value?.focusArea(
+    { x: (extent.minX + extent.maxX) / 2, z: (extent.minZ + extent.maxZ) / 2 },
+    Math.max(extent.maxX - extent.minX, extent.maxZ - extent.minZ) * 0.75,
+  );
+}
+
+/** Есть ли помещение, размеры которого можно править. */
+const editableRoom = computed(() => {
+  const [room] = scene.doc.rooms;
+  return room !== undefined && rectangularExtent(room) !== null;
+});
+
 /** Размещение выделенного объекта: по нему рисуется панель свойств. */
 const selected = computed(() => {
   const id = canvas.value?.selectedId;
@@ -204,6 +256,11 @@ const hint = computed(() => {
   }
   if (mode.value === 'add-door') return 'Тапните по стене, куда поставить дверь';
   if (mode.value === 'add-window') return 'Тапните по стене, куда поставить окно';
+  // Подсказка про размеры нужна, пока пользователь не занят объектом:
+  // иначе о вводе точного размера он не догадается
+  if (editableRoom.value && !selected.value) {
+    return 'Тапните по размеру на полу, чтобы задать его точно';
+  }
   return null;
 });
 
@@ -243,6 +300,16 @@ onBeforeUnmount(() => uninstallTestingApi());
           :mode="mode"
           @floor-tap="onFloorTap"
           @floor-double-tap="finishDrawing"
+          @dimension-tap="onDimensionTap"
+        />
+        <DimensionEditor
+          v-if="editedDimension"
+          :key="editedDimension.wallId"
+          :value-mm="editedDimension.valueMm"
+          :x="editedDimension.x"
+          :y="editedDimension.y"
+          @apply="applyDimension"
+          @cancel="editedDimension = null"
         />
         <ObjectInspector
           v-if="selected"

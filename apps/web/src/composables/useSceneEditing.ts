@@ -43,6 +43,14 @@ export interface FloorPoint {
   z: number;
 }
 
+/** Тап по размерной линии: стена, её текущий размер и место для поля ввода. */
+export interface DimensionHit {
+  wallId: string;
+  clearLengthMm: number;
+  clientX: number;
+  clientY: number;
+}
+
 export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
   onCommit: (instanceId: string, placement: Partial<Placement>) => void;
   /** Текущий режим. По умолчанию выделение объектов. */
@@ -51,6 +59,8 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
   onFloorTap?: (point: FloorPoint) => void;
   /** Двойной тап в режиме планировки: завершение контура. */
   onFloorDoubleTap?: () => void;
+  /** Тап по размерной линии; null — тап мимо неё, поле ввода пора закрыть. */
+  onDimensionTap?: (hit: DimensionHit | null) => void;
 }) {
   const scene = useSceneStore();
   const catalog = useCatalogStore();
@@ -386,6 +396,14 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
           if (point) options.onFloorTap?.(point);
           break;
         }
+        // Размер проверяется раньше объектов: плашка нарисована поверх
+        // мебели, и тап по видимой подписи должен попадать в неё
+        const dimension = v.pickDimension(toNdc(e.point));
+        options.onDimensionTap?.(
+          dimension ? { ...dimension, clientX: e.point.x, clientY: e.point.y } : null,
+        );
+        if (dimension) break;
+
         select(v.pick(toNdc(e.point))?.instanceId ?? null);
         break;
       }

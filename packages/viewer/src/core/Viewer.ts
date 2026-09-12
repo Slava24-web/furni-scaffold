@@ -15,6 +15,7 @@ import { upwardSurfaceHeightMm } from './surface';
 import { RotationGizmo } from '../interaction/RotationGizmo';
 import { PlacementPreview } from '../scene/PlacementPreview';
 import { MaterialLibrary } from '../scene/MaterialLibrary';
+import { DimensionOverlay } from '../scene/DimensionOverlay';
 import type { Object3D } from 'three';
 import type { RegisteredInstance } from './SceneRegistry';
 import { AssetLoader } from '../loading/AssetLoader';
@@ -49,6 +50,8 @@ export class Viewer {
   readonly conflicts: ConflictHighlighter;
   readonly rotation: RotationGizmo;
   readonly preview: PlacementPreview;
+  /** Размерные линии помещения */
+  readonly dimensions: DimensionOverlay;
   /** Материалы тенанта для смены отделки */
   readonly materials = new MaterialLibrary();
   readonly quality: QualityManager;
@@ -94,6 +97,7 @@ export class Viewer {
     this.conflicts = new ConflictHighlighter(this.scene);
     this.rotation = new RotationGizmo(this.scene);
     this.preview = new PlacementPreview(this.scene);
+    this.dimensions = new DimensionOverlay(this.scene);
     this.telemetry = new Telemetry();
     this.quality = new QualityManager(this.renderer, this.telemetry, options.forceTier);
     // Загрузчик держит кэш моделей и зависит от бюджета видеопамяти
@@ -153,6 +157,24 @@ export class Viewer {
       },
     );
     return height ?? 0;
+  }
+
+  /**
+   * Размерная линия под экранной точкой.
+   *
+   * Проверяется раньше объектов каталога: подпись лежит поверх мебели,
+   * и тап по видимой плашке обязан попасть именно в неё.
+   */
+  pickDimension(ndc: Vector2): { wallId: string; clearLengthMm: number } | null {
+    const targets = this.dimensions.targets;
+    if (targets.length === 0 || !this.dimensions.visible) return null;
+
+    this.raycaster.setFromCamera(ndc, this.camera);
+    for (const hit of this.raycaster.intersectObjects(targets, false)) {
+      const found = this.dimensions.resolve(hit.object);
+      if (found) return found;
+    }
+    return null;
   }
 
   /**
@@ -246,6 +268,7 @@ export class Viewer {
     this.conflicts.dispose();
     this.rotation.dispose();
     this.preview.dispose();
+    this.dimensions.dispose();
     this.materials.dispose();
     this.environment.dispose();
     this.renderer.dispose();
