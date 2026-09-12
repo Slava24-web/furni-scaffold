@@ -25,6 +25,7 @@ import ObjectInspector from '../components/ObjectInspector.vue';
 import EstimatePanel from '../components/EstimatePanel.vue';
 import FloorPanel from '../components/FloorPanel.vue';
 import CutPlanView from '../components/CutPlanView.vue';
+import LeadForm from '../components/LeadForm.vue';
 import DimensionEditor from '../components/DimensionEditor.vue';
 import OpeningInspector from '../components/OpeningInspector.vue';
 import { conflictMessage } from '../lib/conflictMessage';
@@ -42,6 +43,8 @@ const canvas = ref<InstanceType<typeof SceneCanvas> | null>(null);
 const mode = ref<PlannerMode>('select');
 /** Карта раскроя поверх сцены: отдельная страница увела бы от планировки. */
 const cutOpen = ref(false);
+/** Форма заявки: показывается поверх сцены, планировку не закрывает. */
+const leadOpen = ref(false);
 
 const TIERS: readonly DeviceTier[] = ['low', 'mid', 'high', 'desktop'];
 
@@ -402,7 +405,7 @@ onBeforeUnmount(() => uninstallTestingApi());
           :selected="scene.doc.rooms[0]?.floorMaterialId ?? null"
           @pick="scene.setFloor"
         />
-        <EstimatePanel :estimate="estimate" />
+        <EstimatePanel :estimate="estimate" @order="leadOpen = true" />
       </div>
 
       <div class="planner__scene" :class="{ 'is-drop-target': drag.overScene.value }">
@@ -441,6 +444,13 @@ onBeforeUnmount(() => uninstallTestingApi());
           :conflicts="canvas?.conflicts"
           @update="updateSelected"
           @remove="deleteSelected"
+        />
+
+        <LeadForm
+          v-if="leadOpen"
+          :doc="scene.doc"
+          :client-total-cents="estimate.totalCents"
+          @close="leadOpen = false"
         />
 
         <p v-if="conflict" class="planner__hint planner__hint--conflict">{{ conflict }}</p>

@@ -12,6 +12,7 @@ import { formatPrice } from '../lib/money';
  * в панели, иначе пользователь примет предварительную цену за итоговую.
  */
 const props = defineProps<{ estimate: SceneEstimate }>();
+const emit = defineEmits<{ order: [] }>();
 
 const expanded = ref(false);
 </script>
@@ -55,6 +56,15 @@ const expanded = ref(false);
         Предварительный расчёт. Итоговая цена считается на сервере по правилам
         магазина и может отличаться.
       </p>
+
+      <button
+        type="button"
+        class="estimate__order"
+        :disabled="props.estimate.positions === 0"
+        @click="emit('order')"
+      >
+        Оформить заявку
+      </button>
     </div>
   </section>
 </template>
@@ -64,6 +74,22 @@ const expanded = ref(false);
   flex: none;
   border-top: 1px solid #e5e7ec;
   background: #fff;
+}
+.estimate__order {
+  width: calc(100% - 24px);
+  margin: 0 12px 12px;
+  padding: 8px 12px;
+  border: 1px solid #2f6fed;
+  border-radius: 8px;
+  background: #2f6fed;
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.estimate__order:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 .estimate__summary {
   width: 100%;

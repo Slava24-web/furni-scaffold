@@ -13,6 +13,7 @@ import { randomUUID } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PrismaClient } from '@prisma/client';
+import { deterministicUuid } from '@furni/shared';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const MANIFEST = join(here, '../../../apps/web/public/assets/test/catalog.json');
@@ -134,6 +135,11 @@ async function main() {
       for (const item of manifest.products) {
         const product = await tx.product.create({
           data: {
+            // Идентификатор выводится из артикула той же функцией, что и
+            // на клиенте: сцена ссылается на товар до всякого обращения
+            // к API, и случайный uuid делал бы серверный расчёт цены
+            // невозможным
+            id: deterministicUuid(item.sku),
             tenantId,
             sku: item.sku,
             name: item.name,

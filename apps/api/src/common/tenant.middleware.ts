@@ -21,7 +21,7 @@ declare module 'express' {
 export class TenantMiddleware implements NestMiddleware {
   constructor(private readonly prisma: PrismaService) {}
 
-  async use(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async use(req: Request, _res: Response, next: NextFunction): Promise<void> {
     const slug = req.header('x-tenant-slug');
     if (!slug) throw new UnauthorizedException('Не указан тенант');
 
@@ -34,13 +34,13 @@ export class TenantMiddleware implements NestMiddleware {
     `;
     if (!tenant) throw new UnauthorizedException('Тенант не найден');
 
-    // Защита виджета от встраивания на чужих доменах (ТЗ 11.2)
+    // Защита виджета от встраивания на чужих доменах (ТЗ 11.2).
+    // Заголовки CORS ставит сам Nest: два разных Access-Control-Allow-Origin
+    // в ответе браузер отвергает целиком
     const origin = req.header('origin');
     if (origin && tenant.allowed_origins.length > 0) {
       const allowed = tenant.allowed_origins.some((o) => originMatches(origin, o));
       if (!allowed) throw new UnauthorizedException('Домен не разрешён для этого тенанта');
-      res.setHeader('Access-Control-Allow-Origin', origin);
-      res.setHeader('Vary', 'Origin');
     }
 
     req.tenantId = tenant.id;

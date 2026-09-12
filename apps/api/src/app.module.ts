@@ -7,6 +7,10 @@ import { TenantMiddleware } from './common/tenant.middleware';
 import { ScenesController } from './modules/scenes/scenes.controller';
 import { ScenesService } from './modules/scenes/scenes.service';
 import { PricingService } from './modules/pricing/pricing.service';
+import { QuoteController } from './modules/quote/quote.controller';
+import { QuoteService } from './modules/quote/quote.service';
+import { LeadsController } from './modules/leads/leads.controller';
+import { LeadsService } from './modules/leads/leads.service';
 
 @Module({
   imports: [
@@ -14,11 +18,13 @@ import { PricingService } from './modules/pricing/pricing.service';
     // Защита квот от абуза: создание сцен и расчёт цены дороги (ТЗ 12)
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 120 }]),
   ],
-  controllers: [ScenesController],
+  controllers: [ScenesController, QuoteController, LeadsController],
   providers: [
     PrismaService,
     ScenesService,
     PricingService,
+    QuoteService,
+    LeadsService,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })
