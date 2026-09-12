@@ -12,6 +12,7 @@ import {
 import {
   EMPTY_CONFLICTS,
   clampToRoom,
+  placementProductSize,
   resolveOverlaps,
   roomBounds,
   findConflicts,
@@ -265,7 +266,10 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
       if (placement.instanceId === exceptId) continue;
       const product = catalog.bySku.get(placement.sku);
       if (!product) continue;
-      boxes.push({ id: placement.instanceId, box: placementBox(placement, product) });
+      boxes.push({
+        id: placement.instanceId,
+        box: placementBox(placement, placementProductSize(placement, product)),
+      });
     }
     return boxes;
   }
@@ -471,7 +475,9 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
   function documentBox(instanceId: string): Box | null {
     const placement = scene.doc.placements.find((p) => p.instanceId === instanceId);
     const product = placement && catalog.bySku.get(placement.sku);
-    return placement && product ? placementBox(placement, product) : null;
+    return placement && product
+      ? placementBox(placement, placementProductSize(placement, product))
+      : null;
   }
 
   /** Габарит объекта по его текущему положению в сцене. */
@@ -483,13 +489,15 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     if (!instance || !product) return null;
 
     const bottomMm = instance.root.position.y * 1000;
+    const size = placementProductSize(placement, product);
     return {
       centre: { x: instance.root.position.x * 1000, y: instance.root.position.z * 1000 },
-      halfWidthMm: product.widthMm / 2,
-      halfDepthMm: product.depthMm / 2,
+      halfWidthMm: size.widthMm / 2,
+      halfDepthMm: size.depthMm / 2,
       rotationDeg: (instance.root.rotation.y * 180) / Math.PI,
       bottomMm,
-      topMm: bottomMm + product.heightMm,
+      topMm: bottomMm + size.heightMm,
+      surfaceTopMm: bottomMm + size.surfaceHeightMm,
     };
   }
 
@@ -598,7 +606,13 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     const instance = v.registry.get(selectedId.value);
     if (!instance || instance.locked) return;
 
-    const product = catalog.bySku.get(selectedPlacement()?.sku ?? '');
+    const dragged = selectedPlacement();
+    const catalogProduct = catalog.bySku.get(dragged?.sku ?? '');
+    // Размер берётся заказанный: растянутый корпус занимает больше места
+    const product =
+      dragged && catalogProduct
+        ? { ...catalogProduct, ...placementProductSize(dragged, catalogProduct) }
+        : catalogProduct;
     // Высота берётся из того, во что целится указатель. Считается ПЕРВОЙ:
     // от неё зависит и плоскость, в которой ищется позиция, и выбор между
     // стыковкой сбоку и выравниванием поверх соседа. Сам перетаскиваемый

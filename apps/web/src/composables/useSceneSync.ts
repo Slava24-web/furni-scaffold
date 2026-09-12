@@ -4,6 +4,7 @@ import {
   drawerZone,
   planDimensions,
   selectedFinish,
+  sizeFactors,
   swingZones,
   type CatalogProduct,
   type Placement,
@@ -101,6 +102,7 @@ export function useSceneSync(
       const existing = v.registry.get(placement.instanceId);
       if (existing) {
         applyTransform(existing.root, placement);
+        if (product) applyScale(existing.root, placement, product);
         if (product) applyFinish(v, existing.root, product, placement);
         // Закрепление живёт в документе, а проверяют его жесты по реестру
         existing.locked = placement.locked;
@@ -117,6 +119,7 @@ export function useSceneSync(
       if (token !== generation || v.registry.get(placement.instanceId)) continue;
 
       applyTransform(group, placement);
+      applyScale(group, placement, product);
       applyFinish(v, group, product, placement);
       v.registry.add(placement.instanceId, placement.sku, group).locked = placement.locked;
     }
@@ -151,6 +154,20 @@ export function useSceneSync(
 function applyTransform(root: { position: { set(x: number, y: number, z: number): void }; rotation: { y: number } }, placement: Placement): void {
   root.position.set(placement.position.x / 1000, placement.position.y / 1000, placement.position.z / 1000);
   root.rotation.y = (placement.rotationY * Math.PI) / 180;
+}
+
+/**
+ * Заказанный размер как масштаб модели.
+ *
+ * Тянуть готовый GLB — компромисс: вместе с корпусом растягивается и
+ * профиль ручки. Пересобирать модель на каждый миллиметр было бы честнее,
+ * но она приходит из пайплайна готовой, а показать заказанный размер
+ * надо сейчас. В раскрой при этом уходят ЧЕСТНЫЕ размеры деталей — там
+ * масштаб считается по осям, а не по картинке.
+ */
+function applyScale(root: Object3D, placement: Placement, product: CatalogProduct): void {
+  const factors = sizeFactors(placement, product);
+  root.scale.set(factors.width, factors.height, factors.depth);
 }
 
 /**

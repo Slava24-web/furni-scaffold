@@ -4,6 +4,7 @@ import {
   PlacementSchema,
   deterministicUuid,
   emptySceneDoc,
+  placementProductSize,
   randomUUID,
   settlePlacements,
   type CatalogProduct,
@@ -63,7 +64,9 @@ export const useSceneStore = defineStore('scene', () => {
         {
           instanceId: placement.instanceId,
           placement,
-          size: product,
+          // Размер заказанный, а не каталожный: растянутый шкаф и опора
+          // выше, и осадка считается по нему
+          size: placementProductSize(placement, product),
           mountHeightMm: product.mountHeightMm,
           stackable: product.stackable,
         },

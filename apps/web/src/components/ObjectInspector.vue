@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import {
+  axisLimits,
+  isResizable,
+  placementSize,
   selectedFinish,
   type CatalogMaterial,
   type CatalogProduct,
@@ -62,11 +65,43 @@ function pickFinish(slot: FinishSlot, code: string): void {
   emit('update', { options: { ...props.placement.options, [slot.code]: code } });
 }
 
+/** Заказанный размер: он же показывается в шапке. */
 const size = computed(() =>
-  props.product
-    ? `${props.product.widthMm} × ${props.product.heightMm} × ${props.product.depthMm} мм`
+  props.product ? placementSize(props.placement, props.product) : null,
+);
+
+const sizeLabel = computed(() =>
+  size.value
+    ? `${size.value.widthMm} × ${size.value.heightMm} × ${size.value.depthMm} мм`
     : 'габарит неизвестен',
 );
+
+const stretchable = computed(() => (props.product ? isResizable(props.product) : false));
+
+/** Отличается ли заказанный размер от каталожного. */
+const customSize = computed(() => Object.keys(props.placement.size ?? {}).length > 0);
+
+/** Пределы оси; null — ось не тянется, поля быть не должно. */
+function limits(axis: 'widthMm' | 'heightMm') {
+  return props.product ? axisLimits(props.product, axis) : null;
+}
+
+/**
+ * Заказ размера.
+ *
+ * Пустое поле возвращает каталожный размер, а не ноль: так снимают
+ * заказанный размер, не набирая его обратно вручную.
+ */
+function setSize(axis: 'widthMm' | 'heightMm', raw: string): void {
+  const next = { ...props.placement.size };
+  const value = Number(raw);
+
+  if (raw.trim() === '') delete next[axis];
+  else if (Number.isFinite(value) && value > 0) next[axis] = Math.round(value);
+  else return;
+
+  emit('update', { size: next });
+}
 
 /** Поле координаты: пустой ввод не должен обнулять положение. */
 function movePart(axis: 'x' | 'y' | 'z', raw: string): void {
@@ -106,7 +141,7 @@ function normalize(deg: number): number {
       />
       <span class="inspector__titles">
         <span class="inspector__name">{{ props.product?.name ?? props.placement.sku }}</span>
-        <span class="inspector__size">{{ size }}</span>
+        <span class="inspector__size">{{ sizeLabel }}</span>
       </span>
     </header>
 
@@ -138,9 +173,43 @@ function normalize(deg: number): number {
       </ul>
     </section>
 
+    <!-- Размеры правятся только там, где изделие тянется: у техники
+         габарит стандартный, и поле ввода обещало бы невозможное -->
+    <div v-if="stretchable" class="fields">
+      <label v-if="limits('widthMm')" class="field">
+        <span class="field__label">Ширина, мм</span>
+        <input
+          type="number"
+          :min="limits('widthMm')!.minMm"
+          :max="limits('widthMm')!.maxMm"
+          step="10"
+          :value="size?.widthMm"
+          @change="setSize('widthMm', ($event.target as HTMLInputElement).value)"
+        />
+      </label>
+      <label v-if="limits('heightMm')" class="field">
+        <span class="field__label">Высота изделия, мм</span>
+        <input
+          type="number"
+          :min="limits('heightMm')!.minMm"
+          :max="limits('heightMm')!.maxMm"
+          step="10"
+          :value="size?.heightMm"
+          @change="setSize('heightMm', ($event.target as HTMLInputElement).value)"
+        />
+      </label>
+    </div>
+
     <p class="price">
       <span>Цена позиции</span>
       <strong>{{ formatPrice(props.priceCents) }}</strong>
+    </p>
+
+    <!-- Цену за нестандартный габарит считает магазин: правило пересчёта
+         живёт в его прайсе, а не в браузере -->
+    <p v-if="customSize" class="inspector__note">
+      Цена показана за каталожный размер. Заказ по вашим габаритам магазин
+      пересчитает при подтверждении.
     </p>
 
     <div class="fields">
@@ -249,6 +318,12 @@ function normalize(deg: number): number {
   font-size: 11px;
   color: #8a909b;
   font-variant-numeric: tabular-nums;
+}
+.inspector__note {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.35;
+  color: #8a909b;
 }
 .inspector__tip {
   margin: 0;

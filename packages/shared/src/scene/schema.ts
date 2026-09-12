@@ -72,6 +72,21 @@ export const PlacementSchema = z.object({
   rotationY: z.number().min(-360).max(360).default(0),
   options: OptionSelectionSchema.default({}),
   params: ParamValuesSchema.default({}),
+  /**
+   * Заказанные габариты, если изделие тянется.
+   *
+   * Хранится только то, что отличается от каталожного: пустой объект
+   * означает «как в каталоге», а не «ноль». Мебель на заказ пилят под
+   * место, и планировщик, который этого не умеет, показывает не ту
+   * кухню, которую привезут.
+   */
+  size: z
+    .object({
+      widthMm: z.number().int().positive().optional(),
+      heightMm: z.number().int().positive().optional(),
+      depthMm: z.number().int().positive().optional(),
+    })
+    .default({}),
   /** Привязка к стене — для пересчёта при изменении планировки */
   anchoredToWallId: z.string().uuid().nullable().default(null),
   locked: z.boolean().default(false),

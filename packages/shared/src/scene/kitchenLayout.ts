@@ -219,6 +219,7 @@ export function buildKitchen(
       rotationY: rotationDeg,
       options: {},
       params: {},
+      size: {},
       anchoredToWallId: null,
       locked: false,
     });

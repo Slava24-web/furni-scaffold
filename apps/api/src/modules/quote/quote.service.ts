@@ -59,7 +59,9 @@ export class QuoteService {
         const price = await this.pricing.quote(tenantId, {
           productId: placement.productId,
           options: placement.options,
-          params: placement.params,
+          // Заказанный размер уходит в параметры правил: мебель на заказ
+          // считают от габарита, и без него правило цены слепо
+          params: withOrderedSize(placement),
         });
         currency = price.currency;
         lines.push({
@@ -86,4 +88,19 @@ export class QuoteService {
       valid: unknown.length === 0 && lines.every((line) => line.violations.length === 0),
     };
   }
+}
+
+/**
+ * Параметры правил вместе с заказанным габаритом.
+ *
+ * Мебель на заказ считают от размера, и без него правило цены слепо.
+ * Незаданные оси не попадают: правило должно отличать «заказали 900» от
+ * «размер каталожный».
+ */
+function withOrderedSize(placement: Placement): Record<string, number> {
+  const params: Record<string, number> = { ...placement.params };
+  for (const [axis, value] of Object.entries(placement.size ?? {})) {
+    if (typeof value === 'number') params[axis] = value;
+  }
+  return params;
 }

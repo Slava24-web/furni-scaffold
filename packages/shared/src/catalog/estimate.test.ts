@@ -42,6 +42,7 @@ const product = (over: Partial<CatalogProduct> = {}): CatalogProduct => ({
   drawerTravelMm: 0,
   panels: [],
   role: 'base',
+  resize: {},
   urlTemplate: '/x/lod{lod}.glb',
   lods: [{ lod: 0, bytes: 1, triangles: 1 }],
   finishes: [facadeSlot],
@@ -56,6 +57,7 @@ const placement = (sku: string, options: Placement['options'] = {}): Placement =
   rotationY: 0,
   options,
   params: {},
+  size: {},
   anchoredToWallId: null,
   locked: false,
 });

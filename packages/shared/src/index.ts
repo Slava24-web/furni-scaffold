@@ -4,6 +4,7 @@ export * from './scene/migrate';
 export * from './scene/walls';
 export * from './scene/dimensions';
 export * from './scene/bounds';
+export * from './scene/resize';
 export * from './scene/kitchenLayout';
 export * from './scene/openingStyles';
 export * from './scene/openingPlacement';

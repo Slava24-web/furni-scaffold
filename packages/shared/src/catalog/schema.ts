@@ -46,6 +46,12 @@ export const PanelSpecSchema = z.object({
   kind: z
     .enum(['side', 'bottom', 'top', 'back', 'shelf', 'facade', 'drawer-box', 'other'])
     .default('other'),
+  /**
+   * Каким осям изделия отвечают стороны детали: ширина-высота,
+   * ширина-глубина или глубина-высота. Нужно раскрою растянутого
+   * изделия — стороны тянутся разными множителями.
+   */
+  axes: z.enum(['wh', 'wd', 'dh']).default('wh'),
   material: z.string().min(1),
   widthMm: z.number().int().positive(),
   heightMm: z.number().int().positive(),
@@ -138,6 +144,23 @@ export const CatalogProductSchema = z.object({
    * повисает над столешницей.
    */
   surfaceHeightMm: z.number().int().positive().optional(),
+  /**
+   * Пределы, в которых изделие тянется.
+   *
+   * Ось без пределов не тянется вовсе: холодильник стандартной ширины,
+   * и растянутый на 900 он перестанет быть тем товаром, который есть
+   * на складе.
+   */
+  resize: z
+    .object({
+      minWidthMm: z.number().int().positive().optional(),
+      maxWidthMm: z.number().int().positive().optional(),
+      minHeightMm: z.number().int().positive().optional(),
+      maxHeightMm: z.number().int().positive().optional(),
+      minDepthMm: z.number().int().positive().optional(),
+      maxDepthMm: z.number().int().positive().optional(),
+    })
+    .default({}),
   drawerCount: z.number().int().min(0).default(0),
   /**
    * Ход направляющей: на столько ящик выезжает вперёд.

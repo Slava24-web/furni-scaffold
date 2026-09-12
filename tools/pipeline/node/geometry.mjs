@@ -61,6 +61,14 @@ export function markPanel(geometry, name, widthMm, heightMm, thicknessMm, option
     name,
     /** Вид детали: по нему считается фурнитура, а не по названию */
     kind: options.kind ?? 'other',
+    /**
+     * Каким осям изделия отвечают стороны детали.
+     *
+     * Нужно раскрою растянутого изделия: у боковины по высоте идёт
+     * высота корпуса, а по ширине — его глубина, и тянуть их надо
+     * разными множителями.
+     */
+    axes: options.axes ?? 'wh',
     widthMm: width,
     heightMm: height,
     thicknessMm: Math.round(thicknessMm),

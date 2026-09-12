@@ -313,6 +313,7 @@ function sofa() {
 const FURNITURE = [
   {
     sku: 'TEST-WRD-1200',
+    resize: { minWidthMm: 600, maxWidthMm: 2400, minHeightMm: 1800, maxHeightMm: 2600 },
     role: 'furniture',
     name: 'Шкаф «Орион» 1200',
     category: 'Шкафы',
@@ -322,6 +323,7 @@ const FURNITURE = [
   },
   {
     sku: 'TEST-SBD-1200',
+    resize: { minWidthMm: 600, maxWidthMm: 2000 },
     role: 'furniture',
     name: 'Комод «Орион» 1200',
     category: 'Комоды',
@@ -332,6 +334,7 @@ const FURNITURE = [
   },
   {
     sku: 'TEST-TBL-1400',
+    resize: { minWidthMm: 800, maxWidthMm: 2400 },
     role: 'furniture',
     name: 'Стол «Норд» 1400',
     category: 'Столы',

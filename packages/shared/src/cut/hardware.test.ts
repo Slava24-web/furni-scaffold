@@ -7,6 +7,7 @@ import type { Placement } from '../scene/schema';
 const part = (over: Partial<CutPart> = {}): CutPart => ({
   name: 'Боковина',
   kind: 'side',
+  axes: 'dh',
   material: 'white',
   widthMm: 560,
   heightMm: 720,
@@ -22,6 +23,7 @@ const part = (over: Partial<CutPart> = {}): CutPart => ({
 const panel = (over: Partial<PanelSpec> = {}): PanelSpec => ({
   name: 'Фасад',
   kind: 'facade',
+  axes: 'wh',
   material: 'oak',
   widthMm: 596,
   heightMm: 716,

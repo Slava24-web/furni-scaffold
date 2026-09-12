@@ -16,6 +16,7 @@ import type { Placement } from '../scene/schema';
 const part = (over: Partial<CutPart> = {}): CutPart => ({
   name: 'Боковина',
   kind: 'side',
+  axes: 'dh',
   edgeLengthMm: 720,
   edgeThicknessMm: 2,
   material: 'white',
@@ -200,8 +201,12 @@ describe('детали сцены', () => {
     ({
       sku: 'TEST-KIT-BASE-600',
       name: 'Нижний шкаф 600',
+      widthMm: 600,
+      heightMm: 820,
+      depthMm: 560,
+      resize: {},
       panels: [
-        { name: 'Боковина', kind: 'side', material: 'white', widthMm: 560, heightMm: 720, thicknessMm: 18, grain: false, edgeLengthMm: 0, edgeThicknessMm: 0 },
+        { name: 'Боковина', kind: 'side', axes: 'wh', material: 'white', widthMm: 560, heightMm: 720, thicknessMm: 18, grain: false, edgeLengthMm: 0, edgeThicknessMm: 0 },
       ],
       finishes: [],
       ...over,
@@ -242,8 +247,8 @@ describe('детали сцены', () => {
         'TEST-KIT-BASE-600',
         product({
           panels: [
-            { name: 'Боковина', kind: 'side', material: 'white', widthMm: 560, heightMm: 720, thicknessMm: 18, grain: false, edgeLengthMm: 0, edgeThicknessMm: 0 },
-            { name: 'Фасад', kind: 'facade', material: 'oak', widthMm: 592, heightMm: 712, thicknessMm: 18, grain: true, edgeLengthMm: 0, edgeThicknessMm: 0 },
+            { name: 'Боковина', kind: 'side', axes: 'wh', material: 'white', widthMm: 560, heightMm: 720, thicknessMm: 18, grain: false, edgeLengthMm: 0, edgeThicknessMm: 0 },
+            { name: 'Фасад', kind: 'facade', axes: 'wh', material: 'oak', widthMm: 592, heightMm: 712, thicknessMm: 18, grain: true, edgeLengthMm: 0, edgeThicknessMm: 0 },
           ],
           finishes: [
             { code: 'facade', label: 'Фасад', slotMaterial: 'oak', options: ['oak', 'graphite'] },
@@ -263,7 +268,7 @@ describe('детали сцены', () => {
         'TEST-KIT-BASE-600',
         product({
           panels: [
-            { name: 'Фасад', kind: 'facade', material: 'oak', widthMm: 592, heightMm: 712, thicknessMm: 18, grain: true, edgeLengthMm: 0, edgeThicknessMm: 0 },
+            { name: 'Фасад', kind: 'facade', axes: 'wh', material: 'oak', widthMm: 592, heightMm: 712, thicknessMm: 18, grain: true, edgeLengthMm: 0, edgeThicknessMm: 0 },
           ],
           finishes: [
             { code: 'facade', label: 'Фасад', slotMaterial: 'oak', options: ['oak', 'graphite'] },
@@ -281,7 +286,7 @@ describe('детали сцены', () => {
         'TEST-KIT-BASE-600',
         product({
           panels: [
-            { name: 'Фасад', kind: 'facade', material: 'oak', widthMm: 592, heightMm: 712, thicknessMm: 18, grain: true, edgeLengthMm: 0, edgeThicknessMm: 0 },
+            { name: 'Фасад', kind: 'facade', axes: 'wh', material: 'oak', widthMm: 592, heightMm: 712, thicknessMm: 18, grain: true, edgeLengthMm: 0, edgeThicknessMm: 0 },
           ],
           finishes: [
             { code: 'facade', label: 'Фасад', slotMaterial: 'oak', options: ['oak', 'graphite'] },
@@ -296,5 +301,89 @@ describe('детали сцены', () => {
     );
 
     expect(plan.sheets).toHaveLength(2);
+  });
+});
+describe('раскрой растянутого изделия', () => {
+  const stretchable = {
+    sku: 'BASE',
+    name: 'Шкаф',
+    widthMm: 600,
+    heightMm: 820,
+    depthMm: 560,
+    resize: { minWidthMm: 300, maxWidthMm: 1000 },
+    finishes: [],
+    panels: [
+      {
+        name: 'Боковина',
+        kind: 'side' as const,
+        axes: 'dh' as const,
+        material: 'white',
+        widthMm: 560,
+        heightMm: 820,
+        thicknessMm: 18,
+        grain: false,
+        edgeLengthMm: 820,
+        edgeThicknessMm: 2,
+      },
+      {
+        name: 'Дно',
+        kind: 'bottom' as const,
+        axes: 'wd' as const,
+        material: 'white',
+        widthMm: 564,
+        heightMm: 560,
+        thicknessMm: 18,
+        grain: false,
+        edgeLengthMm: 564,
+        edgeThicknessMm: 2,
+      },
+    ],
+  } as unknown as CatalogProduct;
+
+  const products = new Map([['BASE', stretchable]]);
+  const at = (widthMm?: number): Placement =>
+    ({
+      instanceId: 'i1',
+      sku: 'BASE',
+      position: { x: 0, y: 0, z: 0 },
+      rotationY: 0,
+      options: {},
+      size: widthMm === undefined ? {} : { widthMm },
+    }) as Placement;
+
+  it('деталь по ширине корпуса тянется вместе с ним', () => {
+    const parts = sceneParts([at(900)], products);
+    const bottom = parts.find((part) => part.kind === 'bottom')!;
+
+    expect(bottom.widthMm).toBe(Math.round(564 * 1.5));
+  });
+
+  it('деталь по глубине и высоте не трогается при растяжении по ширине', () => {
+    const parts = sceneParts([at(900)], products);
+    const side = parts.find((part) => part.kind === 'side')!;
+
+    // У боковины стороны — глубина и высота, а тянули ширину
+    expect(side.widthMm).toBe(560);
+    expect(side.heightMm).toBe(820);
+  });
+
+  it('кромка тянется вместе с деталью', () => {
+    const parts = sceneParts([at(900)], products);
+    const bottom = parts.find((part) => part.kind === 'bottom')!;
+
+    expect(bottom.edgeLengthMm).toBeGreaterThan(564);
+  });
+
+  it('размер вне пределов прижимается к ним, а не отбрасывается', () => {
+    const parts = sceneParts([at(9000)], products);
+    const bottom = parts.find((part) => part.kind === 'bottom')!;
+
+    // Максимум 1000 при каталожных 600 — множитель 1.667
+    expect(bottom.widthMm).toBe(Math.round((564 * 1000) / 600));
+  });
+
+  it('без заказанного размера деталь остаётся каталожной', () => {
+    const parts = sceneParts([at()], products);
+    expect(parts.find((part) => part.kind === 'bottom')!.widthMm).toBe(564);
   });
 });

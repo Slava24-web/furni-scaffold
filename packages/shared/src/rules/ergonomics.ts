@@ -1,5 +1,6 @@
 import { boxAxes, placementBox, type Box } from '../scene/collision';
 import type { CatalogProduct } from '../catalog/schema';
+import { placementProductSize } from '../scene/resize';
 import type { Placement } from '../scene/schema';
 import type { Vec2 } from '../scene/walls';
 
@@ -76,7 +77,7 @@ export function checkErgonomics(
   for (const placement of placements) {
     const product = products.get(placement.sku);
     if (!product) continue;
-    const box = placementBox(placement, product);
+    const box = placementBox(placement, placementProductSize(placement, product));
     items.push({
       instanceId: placement.instanceId,
       role: product.role,

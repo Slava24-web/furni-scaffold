@@ -311,6 +311,7 @@ function handle(spanMm) {
 export const KITCHEN_PRODUCTS = [
   {
     sku: 'TEST-KIT-BASE-600',
+    resize: { minWidthMm: 300, maxWidthMm: 1000 },
     role: 'base',
     name: 'Кухня: нижний шкаф 600',
     category: 'Кухня / Нижние модули',
@@ -321,6 +322,7 @@ export const KITCHEN_PRODUCTS = [
   },
   {
     sku: 'TEST-KIT-BASE-800',
+    resize: { minWidthMm: 400, maxWidthMm: 1200 },
     role: 'base',
     name: 'Кухня: нижний шкаф 800',
     category: 'Кухня / Нижние модули',
@@ -331,6 +333,7 @@ export const KITCHEN_PRODUCTS = [
   },
   {
     sku: 'TEST-KIT-DRW-600',
+    resize: { minWidthMm: 400, maxWidthMm: 900 },
     role: 'base',
     name: 'Кухня: нижний шкаф с ящиками 600',
     category: 'Кухня / Нижние модули',
@@ -342,6 +345,7 @@ export const KITCHEN_PRODUCTS = [
   },
   {
     sku: 'TEST-KIT-WALL-600',
+    resize: { minWidthMm: 300, maxWidthMm: 1000, minHeightMm: 500, maxHeightMm: 920 },
     role: 'wall',
     name: 'Кухня: верхний шкаф 600',
     category: 'Кухня / Верхние модули',
@@ -352,6 +356,7 @@ export const KITCHEN_PRODUCTS = [
   },
   {
     sku: 'TEST-KIT-WALL-800',
+    resize: { minWidthMm: 400, maxWidthMm: 1200, minHeightMm: 500, maxHeightMm: 920 },
     role: 'wall',
     name: 'Кухня: верхний шкаф 800',
     category: 'Кухня / Верхние модули',
@@ -362,6 +367,7 @@ export const KITCHEN_PRODUCTS = [
   },
   {
     sku: 'TEST-KIT-TALL-600',
+    resize: { minWidthMm: 400, maxWidthMm: 900, minHeightMm: 1800, maxHeightMm: 2400 },
     role: 'tall',
     name: 'Кухня: пенал 600',
     category: 'Кухня / Нижние модули',
@@ -372,6 +378,7 @@ export const KITCHEN_PRODUCTS = [
   },
   {
     sku: 'TEST-KIT-TOP-1200',
+    resize: { minWidthMm: 400, maxWidthMm: 3000 },
     role: 'worktop',
     // Пристенный плинтус входит в габарит, но класть на него ничего
     // нельзя: рабочая поверхность — сама плита
@@ -385,6 +392,7 @@ export const KITCHEN_PRODUCTS = [
   },
   {
     sku: 'TEST-KIT-TOP-2000',
+    resize: { minWidthMm: 600, maxWidthMm: 4000 },
     role: 'worktop',
     surfaceHeightMm: WORKTOP_THICKNESS,
     name: 'Кухня: столешница 2000',

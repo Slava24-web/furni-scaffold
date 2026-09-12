@@ -52,7 +52,7 @@ export function carcassPanels(widthMm, heightMm, depthMm, options = {}) {
         heightMm,
         thickness,
         // Кромкуется только передний торец: остальные внутри корпуса
-        { kind: 'side', edgeLengthMm: heightMm, edgeThicknessMm: EDGE_THICKNESS },
+        { kind: 'side', axes: 'dh', edgeLengthMm: heightMm, edgeThicknessMm: EDGE_THICKNESS },
       ),
     );
   }
@@ -64,7 +64,7 @@ export function carcassPanels(widthMm, heightMm, depthMm, options = {}) {
       innerWidth,
       depthMm,
       thickness,
-      { kind: 'bottom', edgeLengthMm: innerWidth, edgeThicknessMm: EDGE_THICKNESS },
+      { kind: 'bottom', axes: 'wd', edgeLengthMm: innerWidth, edgeThicknessMm: EDGE_THICKNESS },
     ),
   );
 
@@ -76,7 +76,7 @@ export function carcassPanels(widthMm, heightMm, depthMm, options = {}) {
         innerWidth,
         depthMm,
         thickness,
-        { kind: 'top', edgeLengthMm: innerWidth, edgeThicknessMm: EDGE_THICKNESS },
+        { kind: 'top', axes: 'wd', edgeLengthMm: innerWidth, edgeThicknessMm: EDGE_THICKNESS },
       ),
     );
   }
@@ -95,7 +95,7 @@ export function carcassPanels(widthMm, heightMm, depthMm, options = {}) {
         heightMm - thickness * 2,
         BACK_THICKNESS,
         // ХДФ уходит в паз: кромка ему не нужна
-        { kind: 'back' },
+        { kind: 'back', axes: 'wh' },
       ),
     );
   }
@@ -110,7 +110,7 @@ export function carcassPanels(widthMm, heightMm, depthMm, options = {}) {
         innerWidth,
         depthMm - 30,
         thickness,
-        { kind: 'shelf', edgeLengthMm: innerWidth, edgeThicknessMm: EDGE_THICKNESS },
+        { kind: 'shelf', axes: 'wd', edgeLengthMm: innerWidth, edgeThicknessMm: EDGE_THICKNESS },
       ),
     );
   }
@@ -143,7 +143,7 @@ export function openBoxPanels(widthMm, heightMm, depthMm, options = {}) {
       widthMm - thickness * 2,
       heightMm,
       thickness,
-      { kind: 'drawer-box' },
+      { kind: 'drawer-box', axes: 'wh' },
     ),
   );
 

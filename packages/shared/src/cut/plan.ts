@@ -1,5 +1,6 @@
 import type { CatalogProduct, PanelSpec } from '../catalog/schema';
 import { selectedFinish } from '../catalog/estimate';
+import { sizeFactors } from '../scene/resize';
 import type { Placement } from '../scene/schema';
 
 /**
@@ -98,9 +99,14 @@ export function sceneParts(
       chosen.set(slot.slotMaterial, selectedFinish(slot.code, slot, placement.options));
     }
 
+    // Растянутое изделие пилят из больших деталей: множители по осям
+    // те же, что у самого корпуса
+    const factors = sizeFactors(placement, product);
+
     for (const panel of product.panels) {
       parts.push({
         ...panel,
+        ...stretch(panel, factors),
         material: chosen.get(panel.material) ?? panel.material,
         sku: product.sku,
         productName: product.name,
@@ -109,6 +115,31 @@ export function sceneParts(
   }
 
   return parts;
+}
+
+/**
+ * Размеры детали растянутого изделия.
+ *
+ * Стороны детали отвечают разным осям корпуса: у боковины по высоте
+ * идёт высота, а по ширине — глубина. Тянуть их одним множителем
+ * значит выдать в цех деталь не того размера.
+ *
+ * Кромка тянется вместе с деталью: её длина считается по тем же
+ * сторонам.
+ */
+function stretch(
+  panel: PanelSpec,
+  factors: { width: number; height: number; depth: number },
+): Pick<PanelSpec, 'widthMm' | 'heightMm' | 'edgeLengthMm'> {
+  const alongWidth = panel.axes === 'dh' ? factors.depth : factors.width;
+  const alongHeight = panel.axes === 'wd' ? factors.depth : factors.height;
+  const edgeFactor = (alongWidth + alongHeight) / 2;
+
+  return {
+    widthMm: Math.round(panel.widthMm * alongWidth),
+    heightMm: Math.round(panel.heightMm * alongHeight),
+    edgeLengthMm: Math.round(panel.edgeLengthMm * edgeFactor),
+  };
 }
 
 /** Ключ группы: свой лист на каждый материал и толщину. */
