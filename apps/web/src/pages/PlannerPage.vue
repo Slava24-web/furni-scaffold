@@ -6,11 +6,14 @@ import {
   createRectangularRoom,
   defaultStyle,
   checkErgonomics,
+  checkServices,
   estimateScene,
   placementPriceCents,
   planDimensions,
   planOpening,
   resizeOpening,
+  serviceInfo,
+  snapToWall,
   randomUUID,
   rectangularExtent,
   resizeRoomWall,
@@ -40,12 +43,13 @@ import { conflictMessage } from '../lib/conflictMessage';
  */
 const CutPlanView = defineAsyncComponent(() => import('../components/CutPlanView.vue'));
 const LeadForm = defineAsyncComponent(() => import('../components/LeadForm.vue'));
+const PlanView = defineAsyncComponent(() => import('../components/PlanView.vue'));
 import { useCatalogDrag } from '../composables/useCatalogDrag';
 import { useWallDrawing } from '../composables/useWallDrawing';
 import { installTestingApi, uninstallTestingApi } from '../dev/testingApi';
 import { useCatalogStore } from '../stores/catalog';
 import { useSceneStore } from '../stores/scene';
-import type { KitchenLayoutKind } from '@furni/shared';
+import type { KitchenLayoutKind, ServicePointKind } from '@furni/shared';
 import type { DimensionHit, FloorPoint, PlannerMode } from '../composables/useSceneEditing';
 
 const route = useRoute();
@@ -55,6 +59,8 @@ const canvas = ref<InstanceType<typeof SceneCanvas> | null>(null);
 const mode = ref<PlannerMode>('select');
 /** Карта раскроя поверх сцены: отдельная страница увела бы от планировки. */
 const cutOpen = ref(false);
+/** План сверху: отдельная страница для замерщика и монтажника. */
+const planOpen = ref(false);
 /** Форма заявки: показывается поверх сцены, планировку не закрывает. */
 const leadOpen = ref(false);
 
@@ -176,7 +182,47 @@ function onAim(point: FloorPoint | null): void {
   viewer.invalidate();
 }
 
+/**
+ * Разметка инженерии.
+ *
+ * Вид точки выбирается в панели и остаётся выбранным: розетки ставят
+ * пачкой, и переключаться на каждую значит удвоить число нажатий.
+ */
+const serviceKind = ref<ServicePointKind>('socket');
+
+function pickServiceKind(kind: ServicePointKind): void {
+  // Повторное нажатие на активный вид выходит из режима разметки
+  if (mode.value === 'add-service' && serviceKind.value === kind) {
+    mode.value = 'select';
+    return;
+  }
+  serviceKind.value = kind;
+  mode.value = 'add-service';
+}
+
+/** Точка ставится на ближайшую стену: инженерия живёт на стенах. */
+function addService(point: FloorPoint): void {
+  const [room] = scene.doc.rooms;
+  if (!room) return;
+
+  const info = serviceInfo(serviceKind.value);
+  const snapped = snapToWall(room, { x: point.x, y: point.z });
+
+  scene.addService({
+    id: randomUUID(),
+    kind: serviceKind.value,
+    position: { x: Math.round(snapped.position.x), y: Math.round(snapped.position.y) },
+    heightMm: info.heightMm,
+    wallId: snapped.wallId,
+    note: '',
+  });
+}
+
 function onFloorTap(point: FloorPoint): void {
+  if (mode.value === 'add-service') {
+    addService(point);
+    return;
+  }
   if (mode.value === 'draw-wall') {
     if (drawing.addPoint(point)) mode.value = 'select';
     return;
@@ -362,7 +408,12 @@ const selected = computed(() => {
  * Считаются на каждое изменение документа, а не по кнопке: правило,
  * о котором надо вспомнить и нажать, не работает.
  */
-const ergonomics = computed(() => checkErgonomics(scene.doc.placements, catalog.bySku));
+const ergonomics = computed(() => [
+  ...checkErgonomics(scene.doc.placements, catalog.bySku),
+  // Подключения проверяются вместе с эргономикой: и то и другое
+  // всплывает на монтаже, когда кухня уже привезена
+  ...checkServices(scene.doc.placements, catalog.bySku, scene.doc.services),
+]);
 
 /** Предварительная смета: считается на клиенте, итог — за сервером. */
 const estimate = computed(() =>
@@ -431,6 +482,9 @@ const hint = computed(() => {
   }
   if (mode.value === 'add-door') return 'Тапните по стене, куда поставить дверь';
   if (mode.value === 'add-window') return 'Тапните по стене, куда поставить окно';
+  if (mode.value === 'add-service') {
+    return `Тапните по стене: ${serviceInfo(serviceKind.value).name.toLowerCase()}. Тап по метке удаляет её`;
+  }
   if (kitchenProblem.value) return kitchenProblem.value;
   // Подсказка про размеры нужна, пока пользователь не занят объектом:
   // иначе о вводе точного размера он не догадается
@@ -452,6 +506,7 @@ onBeforeUnmount(() => uninstallTestingApi());
   <main class="planner">
     <RoomToolbar
       :mode="mode"
+      :service-kind="serviceKind"
       :drawing-active="drawing.active.value"
       :can-undo="scene.undoStack.length > 0"
       :can-redo="scene.redoStack.length > 0"
@@ -462,7 +517,16 @@ onBeforeUnmount(() => uninstallTestingApi());
       @undo="scene.undo()"
       @redo="scene.redo()"
       @show-cut="cutOpen = true"
+      @show-plan="planOpen = true"
       @build-kitchen="assembleKitchen"
+      @pick-service="pickServiceKind"
+    />
+
+    <PlanView
+      v-if="planOpen"
+      :doc="scene.doc"
+      :products="catalog.bySku"
+      @close="planOpen = false"
     />
 
     <CutPlanView
@@ -496,6 +560,7 @@ onBeforeUnmount(() => uninstallTestingApi());
           @dimension-tap="onDimensionTap"
           @aim="onAim"
           @opening-tap="onOpeningTap"
+          @service-tap="scene.removeService"
         />
         <DimensionEditor
           v-if="editedDimension"

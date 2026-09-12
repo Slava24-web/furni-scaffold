@@ -11,6 +11,7 @@ export { RoomBuilder } from './scene/RoomBuilder';
 export { PlacementPreview } from './scene/PlacementPreview';
 export { DimensionOverlay, type DimensionLabelFactory } from './scene/DimensionOverlay';
 export { SwingOverlay } from './scene/SwingOverlay';
+export { ServiceOverlay } from './scene/ServiceOverlay';
 export {
   OpeningBuilder,
   type MaterialSource,

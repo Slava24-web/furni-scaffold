@@ -1,10 +1,17 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import { KITCHEN_LAYOUTS, type KitchenLayoutKind } from '@furni/shared';
+import {
+  KITCHEN_LAYOUTS,
+  SERVICE_KINDS,
+  type KitchenLayoutKind,
+  type ServicePointKind,
+} from '@furni/shared';
 import type { PlannerMode } from '../composables/useSceneEditing';
 
 const props = defineProps<{
   mode: PlannerMode;
+  /** Какой вид инженерии ставится тапом */
+  serviceKind: ServicePointKind;
   drawingActive: boolean;
   canUndo: boolean;
   canRedo: boolean;
@@ -18,7 +25,9 @@ const emit = defineEmits<{
   undo: [];
   redo: [];
   showCut: [];
+  showPlan: [];
   buildKitchen: [KitchenLayoutKind];
+  pickService: [ServicePointKind];
 }>();
 
 const widthMm = ref(4000);
@@ -74,7 +83,21 @@ function toggleMode(mode: PlannerMode): void {
         Окно
       </button>
       <button type="button" @click="emit('clearRooms')">Убрать планировку</button>
+      <button type="button" @click="emit('showPlan')">План</button>
       <button type="button" @click="emit('showCut')">Раскрой</button>
+    </div>
+
+    <div class="toolbar__group">
+      <span class="toolbar__label">Инженерия</span>
+      <button
+        v-for="service in SERVICE_KINDS"
+        :key="service.kind"
+        type="button"
+        :class="{ 'is-active': props.mode === 'add-service' && props.serviceKind === service.kind }"
+        @click="emit('pickService', service.kind)"
+      >
+        {{ service.name }}
+      </button>
     </div>
 
     <div class="toolbar__group">

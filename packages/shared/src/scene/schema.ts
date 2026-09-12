@@ -48,6 +48,28 @@ export const OpeningSchema = z.object({
   options: z.record(z.string(), z.string()).default({}),
 });
 
+/**
+ * Инженерная точка: розетка, вывод воды, слив, вентканал, газ.
+ *
+ * Половина переделок на монтаже — из-за них: мойку нельзя поставить
+ * вдали от стояка, вытяжку — вдали от канала, а посудомойке нужны сразу
+ * вода, слив и розетка. Планировщик, который о них молчит, рисует
+ * кухню, которую нельзя подключить.
+ */
+export const ServiceKind = z.enum(['socket', 'switch', 'water', 'drain', 'vent', 'gas']);
+
+export const ServicePointSchema = z.object({
+  id: z.string().uuid(),
+  kind: ServiceKind,
+  /** Точка в плане, миллиметры */
+  position: Vec2Mm,
+  /** Высота от пола: розетка над столешницей и розетка у пола — разное */
+  heightMm: z.number().int().min(0).max(4000).default(300),
+  /** Стена, к которой привязана точка. null — стоит сама по себе */
+  wallId: z.string().uuid().nullable().default(null),
+  note: z.string().max(200).default(''),
+});
+
 export const RoomSchema = z.object({
   id: z.string().uuid(),
   name: z.string().max(120).default('Комната'),
@@ -96,6 +118,8 @@ export const SceneDocSchema = z.object({
   version: z.literal(SCENE_DOC_VERSION),
   units: z.literal('mm'),
   rooms: z.array(RoomSchema).max(16),
+  /** Инженерные точки помещения: розетки, вода, вентиляция */
+  services: z.array(ServicePointSchema).max(200).default([]),
   placements: z.array(PlacementSchema).max(300),
   camera: z
     .object({
@@ -119,6 +143,8 @@ export type Placement = z.infer<typeof PlacementSchema>;
 export type Wall = z.infer<typeof WallSchema>;
 export type Opening = z.infer<typeof OpeningSchema>;
 export type Room = z.infer<typeof RoomSchema>;
+export type ServicePoint = z.infer<typeof ServicePointSchema>;
+export type ServicePointKind = z.infer<typeof ServiceKind>;
 
 export function emptySceneDoc(): SceneDoc {
   return SceneDocSchema.parse({

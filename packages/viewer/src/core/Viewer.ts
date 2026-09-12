@@ -20,6 +20,7 @@ import { MaterialLibrary } from '../scene/MaterialLibrary';
 import { DimensionOverlay } from '../scene/DimensionOverlay';
 import { SwingOverlay } from '../scene/SwingOverlay';
 import { OpeningBuilder } from '../scene/OpeningBuilder';
+import { ServiceOverlay } from '../scene/ServiceOverlay';
 import type { Object3D } from 'three';
 import type { RegisteredInstance } from './SceneRegistry';
 import { AssetLoader } from '../loading/AssetLoader';
@@ -60,6 +61,8 @@ export class Viewer {
   readonly swings: SwingOverlay;
   /** Двери и окна в проёмах */
   readonly openings: OpeningBuilder;
+  /** Метки инженерии: розетки, вода, вентиляция */
+  readonly services: ServiceOverlay;
   /** Выдвижные ящики загруженных моделей */
   readonly drawers = new DrawerController();
   /** Распашные дверцы загруженных моделей */
@@ -112,6 +115,7 @@ export class Viewer {
     this.dimensions = new DimensionOverlay(this.scene);
     this.swings = new SwingOverlay(this.scene);
     this.openings = new OpeningBuilder(this.scene);
+    this.services = new ServiceOverlay(this.scene);
     this.telemetry = new Telemetry();
     this.quality = new QualityManager(this.renderer, this.telemetry, options.forceTier);
     // Загрузчик держит кэш моделей и зависит от бюджета видеопамяти
@@ -225,6 +229,24 @@ export class Viewer {
       // Попасть можно в любую деталь ящика — короб, фронт или ручку
       const owner = drawers.find((drawer) => isDescendant(hit.object, drawer));
       if (owner) return owner;
+    }
+    return null;
+  }
+
+  /**
+   * Метка инженерии под экранной точкой.
+   *
+   * Проверяется раньше всего: метка мелкая, лежит на стене и на полу, и
+   * попасть по ней иначе невозможно.
+   */
+  pickService(ndc: Vector2): string | null {
+    const targets = this.services.targets;
+    if (targets.length === 0 || !this.services.root.visible) return null;
+
+    this.raycaster.setFromCamera(ndc, this.camera);
+    for (const hit of this.raycaster.intersectObjects(targets, false)) {
+      const id = this.services.resolve(hit.object);
+      if (id) return id;
     }
     return null;
   }
@@ -347,6 +369,7 @@ export class Viewer {
     this.dimensions.dispose();
     this.swings.dispose();
     this.openings.dispose();
+    this.services.dispose();
     this.materials.dispose();
     this.environment.dispose();
     this.renderer.dispose();

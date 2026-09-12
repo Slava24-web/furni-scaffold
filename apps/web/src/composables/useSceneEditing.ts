@@ -44,7 +44,13 @@ import { useSceneStore } from '../stores/scene';
  * Объект двигается напрямую в Three.js, стор обновляется один раз на dragEnd.
  */
 /** Режим работы планировщика: что делает тап по сцене. */
-export type PlannerMode = 'select' | 'draw-wall' | 'add-door' | 'add-window';
+export type PlannerMode =
+  | 'select'
+  | 'draw-wall'
+  | 'add-door'
+  | 'add-window'
+  /** Разметка инженерии: тап ставит точку выбранного вида */
+  | 'add-service';
 
 export interface FloorPoint {
   x: number;
@@ -73,6 +79,8 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
   onAim?: (point: FloorPoint | null) => void;
   /** Тап по двери или окну; null — тап мимо них. */
   onOpeningTap?: (openingId: string | null) => void;
+  /** Тап по метке инженерии. */
+  onServiceTap?: (serviceId: string) => void;
 }) {
   const scene = useSceneStore();
   const catalog = useCatalogStore();
@@ -524,6 +532,14 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
         break;
 
       case 'tap': {
+        // Метка инженерии проверяется первой: она мелкая, лежит на стене
+        // и на полу, и попасть по ней иначе невозможно
+        const service = v.pickService(toNdc(e.point));
+        if (service) {
+          options.onServiceTap?.(service);
+          break;
+        }
+
         // В режимах планировки тап адресован полу, а не объектам:
         // иначе рисование стены выделяло бы мебель под курсором
         if ((options.mode?.value ?? 'select') !== 'select') {

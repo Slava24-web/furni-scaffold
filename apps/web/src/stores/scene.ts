@@ -12,6 +12,7 @@ import {
   type Placement,
   type Room,
   type SceneDoc,
+  type ServicePoint,
   type Wall,
 } from '@furni/shared';
 import { useCatalogStore } from './catalog';
@@ -214,6 +215,18 @@ export const useSceneStore = defineStore('scene', () => {
     commit({ ...doc.value, rooms: [{ ...room, floorMaterialId: code }] });
   }
 
+  /** Инженерная точка: розетка, вода, слив, вентканал, газ. */
+  function addService(service: ServicePoint): void {
+    commit({ ...doc.value, services: [...doc.value.services, service] });
+  }
+
+  function removeService(serviceId: string): void {
+    commit({
+      ...doc.value,
+      services: doc.value.services.filter((service) => service.id !== serviceId),
+    });
+  }
+
   function clearRooms(): void {
     commit({ ...doc.value, rooms: [] });
   }
@@ -253,6 +266,8 @@ export const useSceneStore = defineStore('scene', () => {
     updateOpening,
     removeOpening,
     setFloor,
+    addService,
+    removeService,
     clearRooms,
     undo,
     redo,

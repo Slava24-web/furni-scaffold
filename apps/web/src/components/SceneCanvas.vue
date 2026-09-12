@@ -20,6 +20,7 @@ const emit = defineEmits<{
   dimensionTap: [DimensionHit | null];
   aim: [FloorPoint | null];
   openingTap: [string | null];
+  serviceTap: [string];
 }>();
 
 const canvasRef = ref<HTMLCanvasElement | null>(null);
@@ -65,6 +66,7 @@ const {
     onDimensionTap: (hit) => emit('dimensionTap', hit),
     onAim: (point) => emit('aim', point),
     onOpeningTap: (openingId) => emit('openingTap', openingId),
+    onServiceTap: (serviceId) => emit('serviceTap', serviceId),
   },
 );
 
