@@ -12,6 +12,7 @@ import {
 import {
   EMPTY_CONFLICTS,
   clampToRoom,
+  resolveOverlaps,
   roomBounds,
   findConflicts,
   groupIntoChains,
@@ -191,6 +192,53 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
   /** Зоны открывания всех дверей документа. */
   function allSwings(): SwingZone[] {
     return scene.doc.rooms.flatMap((room) => swingZones(room));
+  }
+
+  /**
+   * Позиция, в которую объект действительно можно поставить.
+   *
+   * Сначала объект выталкивается из соседей, потом прижимается к стенам,
+   * и так дважды: выталкивание могло увести его за стену, а прижатие —
+   * обратно в соседа. Двух проходов хватает на обычную расстановку, а
+   * бесконечный поиск в углу между тремя модулями стоил бы кадра.
+   *
+   * Пересечение по высоте обязательно для выталкивания, поэтому
+   * постановка НА другой объект остаётся разрешённой: мойку кладут на
+   * столешницу, а не рядом с ней.
+   */
+  function confine(
+    position: { x: number; y: number },
+    options: {
+      halfWidthMm: number;
+      halfDepthMm: number;
+      rotationDeg: number;
+      bottomMm: number;
+      topMm: number;
+      obstacles: readonly Box[];
+      bounds: RoomBoundsMm | null;
+    },
+  ): { x: number; y: number } {
+    const footprint = {
+      halfWidthMm: options.halfWidthMm,
+      halfDepthMm: options.halfDepthMm,
+      rotationDeg: options.rotationDeg,
+    };
+
+    let centre = clampToRoom(position, footprint, options.bounds);
+    for (let pass = 0; pass < 2; pass++) {
+      const box: Box = {
+        centre,
+        halfWidthMm: options.halfWidthMm,
+        halfDepthMm: options.halfDepthMm,
+        rotationDeg: options.rotationDeg,
+        bottomMm: options.bottomMm,
+        topMm: options.topMm,
+      };
+      const pushed = resolveOverlaps(box, options.obstacles);
+      centre = clampToRoom(pushed, footprint, options.bounds);
+    }
+
+    return centre;
   }
 
   /** Зона выдвижения ящиков одного размещения. Null — ящиков нет. */
@@ -580,17 +628,16 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     }
     isSnapping.value = result.snapped;
 
-    // Стена — край рабочей области: без прижатия объект уезжает за неё
-    // и вернуть его можно только отменой
-    const inside = clampToRoom(
-      result.position,
-      {
-        halfWidthMm: (product?.widthMm ?? 0) / 2,
-        halfDepthMm: (product?.depthMm ?? 0) / 2,
-        rotationDeg: result.rotation ?? (instance.root.rotation.y * 180) / Math.PI,
-      },
-      dragBounds,
-    );
+    const rotationDeg = result.rotation ?? (instance.root.rotation.y * 180) / Math.PI;
+    const inside = confine(result.position, {
+      halfWidthMm: (product?.widthMm ?? 0) / 2,
+      halfDepthMm: (product?.depthMm ?? 0) / 2,
+      rotationDeg,
+      bottomMm,
+      topMm: bottomMm + (product?.heightMm ?? 0),
+      obstacles: staticBoxes.map((entry) => entry.box),
+      bounds: dragBounds,
+    });
 
     // Прямая мутация Three.js. В Pinia НЕ пишем — это горячий путь.
     instance.root.position.set(inside.x / 1000, bottomMm / 1000, inside.y / 1000);
@@ -742,18 +789,18 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
       enableWalls: product.snapToWall,
     });
 
-    // Бросок за стену прижимается так же, как перетаскивание: объект,
-    // упавший в соседнюю квартиру, пользователю не нужен
+    // Бросок ограничивается так же, как перетаскивание: объект, упавший
+    // в соседнюю квартиру или внутрь шкафа, пользователю не нужен
     const rotationY = result.rotation ?? 0;
-    const inside = clampToRoom(
-      result.position,
-      {
-        halfWidthMm: product.widthMm / 2,
-        halfDepthMm: product.depthMm / 2,
-        rotationDeg: rotationY,
-      },
-      roomBounds(scene.doc.rooms),
-    );
+    const inside = confine(result.position, {
+      halfWidthMm: product.widthMm / 2,
+      halfDepthMm: product.depthMm / 2,
+      rotationDeg: rotationY,
+      bottomMm,
+      topMm: bottomMm + product.heightMm,
+      obstacles: staticBoxes.map((entry) => entry.box),
+      bounds: roomBounds(scene.doc.rooms),
+    });
 
     return { x: inside.x, z: inside.y, y: bottomMm, rotationY };
   }

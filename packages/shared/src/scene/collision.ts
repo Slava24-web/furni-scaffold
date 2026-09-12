@@ -109,6 +109,84 @@ export function boxesOverlap(a: Box, b: Box, toleranceMm = TOUCH_TOLERANCE_MM): 
   return true;
 }
 
+/**
+ * Вектор, на который надо сдвинуть A, чтобы он перестал накрывать B.
+ *
+ * Берётся наименьший из возможных: объект выталкивается по кратчайшему
+ * пути, поэтому он скользит вдоль препятствия, а не отскакивает от него.
+ * Отскок ощущается как поломка, скольжение — как мебель, которую двигают
+ * по полу.
+ *
+ * null означает, что габариты не пересекаются и выталкивать нечего.
+ * Пересечение по высоте обязательно: объект, стоящий НА другом, не
+ * накрывает его — это законная постановка друг на друга.
+ */
+export function separationVector(
+  a: Box,
+  b: Box,
+  toleranceMm = TOUCH_TOLERANCE_MM,
+): Vec2 | null {
+  if (!verticallyOverlapping(a, b, toleranceMm)) return null;
+
+  const cornersA = boxCorners(a);
+  const cornersB = boxCorners(b);
+  const axesA = boxAxes(a);
+  const axesB = boxAxes(b);
+
+  let best: { axis: Vec2; depth: number } | null = null;
+
+  for (const axis of [axesA.right, axesA.forward, axesB.right, axesB.forward]) {
+    const projectionA = project(cornersA, axis);
+    const projectionB = project(cornersB, axis);
+
+    const right = projectionB.max - projectionA.min;
+    const left = projectionA.max - projectionB.min;
+    if (right <= toleranceMm || left <= toleranceMm) return null;
+
+    // Ближе тот край, через который выталкивать короче
+    const depth = Math.min(right, left) + toleranceMm;
+    const sign = right < left ? 1 : -1;
+    if (!best || depth < best.depth) {
+      best = { axis: { x: axis.x * sign, y: axis.y * sign }, depth };
+    }
+  }
+
+  if (!best) return null;
+  return { x: best.axis.x * best.depth, y: best.axis.y * best.depth };
+}
+
+/**
+ * Позиция, в которой объект никого не накрывает.
+ *
+ * Выталкивание повторяется: сдвинувшись от одного соседа, объект может
+ * налезть на другого. Итераций немного — в углу между тремя модулями
+ * решения может не быть вовсе, и бесконечный цикл там дороже, чем
+ * оставленное пересечение, о котором и так скажет проверка конфликтов.
+ */
+export function resolveOverlaps(
+  box: Box,
+  others: readonly Box[],
+  toleranceMm = TOUCH_TOLERANCE_MM,
+  maxPasses = 4,
+): Vec2 {
+  let centre = box.centre;
+
+  for (let pass = 0; pass < maxPasses; pass++) {
+    let moved = false;
+
+    for (const other of others) {
+      const push = separationVector({ ...box, centre }, other, toleranceMm);
+      if (!push) continue;
+      centre = { x: centre.x + push.x, y: centre.y + push.y };
+      moved = true;
+    }
+
+    if (!moved) break;
+  }
+
+  return centre;
+}
+
 /** Стена как габарит: осевая линия по длине, толщина поперёк. */
 export function wallToBox(wall: Wall): Box {
   return {
