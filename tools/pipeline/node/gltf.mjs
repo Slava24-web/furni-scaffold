@@ -5,15 +5,18 @@
  * дают ровно столько draw calls, сколько материалов у изделия. Разбиение
  * по деталям стоило бы по draw call на каждую ножку, а бюджет на них
  * жёсткий (RENDER_BUDGETS.maxDrawCalls).
+ *
+ * Исключение — ящики: каждый уезжает отдельным дочерним узлом, иначе
+ * выдвинуть его во вьюере нечего. Цена известна и ограничена: по узлу
+ * на ящик, а не на деталь.
  */
 import { Document, NodeIO } from '@gltf-transform/core';
 
-export function buildDocument({ name, groups, materials, textures = {} }) {
+export function buildDocument({ name, groups, materials, textures = {}, drawers = [] }) {
   const doc = new Document();
   doc.getRoot().getAsset().generator = 'furni-pipeline';
   const buffer = doc.createBuffer();
   const scene = doc.createScene(name);
-  const mesh = doc.createMesh(name);
 
   const textureNodes = new Map();
   for (const [key, image] of Object.entries(textures)) {
@@ -23,9 +26,15 @@ export function buildDocument({ name, groups, materials, textures = {} }) {
     );
   }
 
-  for (const group of groups) {
-    const spec = materials[group.material];
-    if (!spec) throw new Error(`Материал ${group.material} отсутствует в каталоге`);
+  // Материал общий на весь документ: копия на каждый узел множила бы
+  // их число, а оно ограничено бюджетом (ASSET_BUDGETS.maxMaterialsPerAsset)
+  const materialNodes = new Map();
+  const materialFor = (code) => {
+    const existing = materialNodes.get(code);
+    if (existing) return existing;
+
+    const spec = materials[code];
+    if (!spec) throw new Error(`Материал ${code} отсутствует в каталоге`);
 
     const material = doc
       .createMaterial(spec.code)
@@ -39,11 +48,33 @@ export function buildDocument({ name, groups, materials, textures = {} }) {
       material.setBaseColorTexture(texture);
     }
 
-    mesh.addPrimitive(createPrimitive(doc, buffer, group.geometry, material));
+    materialNodes.set(code, material);
+    return material;
+  };
+
+  const addMesh = (meshName, meshGroups) => {
+    const mesh = doc.createMesh(meshName);
+    for (const group of meshGroups) {
+      mesh.addPrimitive(
+        createPrimitive(doc, buffer, group.geometry, materialFor(group.material)),
+      );
+    }
+    return mesh;
+  };
+
+  const node = doc.createNode(name).setMesh(addMesh(name, groups));
+  scene.addChild(node);
+
+  for (const drawer of drawers) {
+    // Ход хранится в самом узле: вьюер не знает каталога, а выдвигать
+    // ящик на глаз нельзя — он выедет из корпуса или не выедет вовсе
+    const child = doc
+      .createNode(drawer.name)
+      .setMesh(addMesh(drawer.name, drawer.groups))
+      .setExtras({ travelMm: drawer.travelMm });
+    node.addChild(child);
   }
 
-  const node = doc.createNode(name).setMesh(mesh);
-  scene.addChild(node);
   doc.getRoot().setDefaultScene(scene);
   return doc;
 }

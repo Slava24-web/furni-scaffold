@@ -13,6 +13,7 @@ import { SelectionIndicator } from './SelectionIndicator';
 import { ConflictHighlighter } from './ConflictHighlighter';
 import { upwardSurfaceHeightMm } from './surface';
 import { RotationGizmo } from '../interaction/RotationGizmo';
+import { DrawerController, drawersOf } from '../interaction/DrawerController';
 import { PlacementPreview } from '../scene/PlacementPreview';
 import { MaterialLibrary } from '../scene/MaterialLibrary';
 import { DimensionOverlay } from '../scene/DimensionOverlay';
@@ -52,6 +53,8 @@ export class Viewer {
   readonly preview: PlacementPreview;
   /** Размерные линии помещения */
   readonly dimensions: DimensionOverlay;
+  /** Выдвижные ящики загруженных моделей */
+  readonly drawers = new DrawerController();
   /** Материалы тенанта для смены отделки */
   readonly materials = new MaterialLibrary();
   readonly quality: QualityManager;
@@ -178,6 +181,26 @@ export class Viewer {
   }
 
   /**
+   * Ящик модели под экранной точкой.
+   *
+   * Ищется только среди ящиков переданного объекта: выдвигать ящик
+   * можно у выделенного изделия, и тап по чужому фасаду не должен
+   * открывать ничего.
+   */
+  pickDrawer(ndc: Vector2, root: Object3D): Object3D | null {
+    const drawers = drawersOf(root);
+    if (drawers.length === 0) return null;
+
+    this.raycaster.setFromCamera(ndc, this.camera);
+    for (const hit of this.raycaster.intersectObjects(drawers, true)) {
+      // Попасть можно в любую деталь ящика — короб, фронт или ручку
+      const owner = drawers.find((drawer) => isDescendant(hit.object, drawer));
+      if (owner) return owner;
+    }
+    return null;
+  }
+
+  /**
    * Попадает ли луч в конкретный объект — например, в кольцо поворота.
    * Отдельно от pick: манипуляторы не зарегистрированы в реестре сцены.
    */
@@ -228,6 +251,9 @@ export class Viewer {
     const frameStart = performance.now();
 
     for (const fn of this.updateCallbacks) fn(dt);
+    // Ход ящика — единственная анимация вьюера: пока она идёт,
+    // кадры нужны каждый, иначе движение застынет на полпути
+    if (this.drawers.update(dt)) this.needsRender = true;
 
     const rendered = this.needsRender;
     if (rendered) {
@@ -267,6 +293,7 @@ export class Viewer {
     this.selection.dispose();
     this.conflicts.dispose();
     this.rotation.dispose();
+    this.drawers.dispose();
     this.preview.dispose();
     this.dimensions.dispose();
     this.materials.dispose();
@@ -274,4 +301,12 @@ export class Viewer {
     this.renderer.dispose();
     this.renderer.forceContextLoss();
   }
+}
+
+/** Лежит ли объект в поддереве узла. */
+function isDescendant(object: Object3D, root: Object3D): boolean {
+  for (let node: Object3D | null = object; node; node = node.parent) {
+    if (node === root) return true;
+  }
+  return false;
 }

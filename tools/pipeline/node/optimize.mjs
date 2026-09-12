@@ -55,7 +55,10 @@ export async function optimizeAsset({ inputPath, outputDir, maxTextureSize = ASS
       prune(),
       dedup(),
       flatten(),
-      join(),
+      // keepNamed сохраняет именованные узлы: ящики уезжают в GLB
+      // отдельными узлами, и слияние их с корпусом лишило бы модель
+      // подвижных частей
+      join({ keepNamed: true }),
       weld({ tolerance: 0.0001 }),
       ratio < 1
         ? simplify({ simplifier: MeshoptSimplifier, ratio, error: 0.001 })

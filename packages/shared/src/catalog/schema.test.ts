@@ -49,6 +49,20 @@ describe('схема каталога', () => {
     expect(parsed.products[0]?.mountHeightMm).toBe(1450);
   });
 
+  it('по умолчанию ящиков нет: изделие цельное', () => {
+    const parsed = CatalogSchema.parse(catalog([product()]));
+    expect(parsed.products[0]?.drawerCount).toBe(0);
+  });
+
+  it('сохраняет число выдвижных ящиков', () => {
+    const parsed = CatalogSchema.parse(catalog([product({ drawerCount: 3 })]));
+    expect(parsed.products[0]?.drawerCount).toBe(3);
+  });
+
+  it('отвергает дробное число ящиков', () => {
+    expect(() => CatalogSchema.parse(catalog([product({ drawerCount: 1.5 })]))).toThrow();
+  });
+
   it('отвергает манифест без товаров', () => {
     expect(() => CatalogSchema.parse(catalog([]))).toThrow();
   });

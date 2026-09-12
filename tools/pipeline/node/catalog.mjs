@@ -12,7 +12,8 @@
  */
 import { cylinder, mergeGeometries, roundedBox, segmentedBox, translate } from './geometry.mjs';
 import { KITCHEN_PRODUCTS } from './kitchen.mjs';
-import { carcassPanels } from './carcass.mjs';
+import { PANEL_THICKNESS, carcassPanels, openBoxPanels } from './carcass.mjs';
+import { taperedLegs } from './legs.mjs';
 import { panelFacade } from './facade.mjs';
 
 export const TEST_TENANT = {
@@ -110,7 +111,9 @@ function wardrobe() {
     // Корпус из панелей, а не брусок: у шкафа появляются толщина
     // стенок, внутренний объём и полки
     white: carcassPanels(width, corpusHeight, depth, { bottomMm: plinth, shelves: 3 }),
-    graphite: [translate(segmentedBox(width - 60, plinth, depth - 40, 2), 0, plinth / 2, 0)],
+    // Ножки вместо глухого цоколя: под шкафом виден пол, и корпус
+    // перестаёт читаться встроенным коробом
+    graphite: taperedLegs(width, depth, { heightMm: plinth }),
     oak: [
       ...panelFacade(doorWidth, doorHeight, 18, { x: -(doorWidth / 2 + 6), y: doorY, z: doorZ }),
       ...panelFacade(doorWidth, doorHeight, 18, { x: doorWidth / 2 + 6, y: doorY, z: doorZ }),
@@ -122,29 +125,94 @@ function wardrobe() {
   };
 }
 
-function sideboard() {
-  const width = 1200;
-  const height = 780;
-  const depth = 450;
-  const plinth = 80;
-  const corpusHeight = height - plinth;
-  const drawerHeight = corpusHeight / 3 - 14;
+/**
+ * Комод. Габариты и раскладка ящиков вынесены отдельно: по ним строится
+ * и корпус, и подвижные короба — иначе фронт и ящик разъедутся при первой
+ * же правке размеров.
+ */
+const SIDEBOARD = {
+  width: 1200,
+  height: 780,
+  depth: 450,
+  legHeight: 80,
+  drawerCount: 3,
+  gap: 14,
+};
 
-  const drawers = [];
-  const handles = [];
-  for (let i = 0; i < 3; i++) {
-    const centerY = plinth + drawerHeight / 2 + 10 + i * (drawerHeight + 14);
-    drawers.push(translate(roundedBox(width - 40, drawerHeight, 18, 5, 5), 0, centerY, depth / 2 + 9));
-    handles.push(horizontalHandle(0, centerY + drawerHeight / 2 - 40, depth / 2 + 26, 320));
-  }
+/** Раскладка ящиков комода: высота фронта и его центр по вертикали. */
+function sideboardDrawerLayout() {
+  const { width, height, depth, legHeight, drawerCount, gap } = SIDEBOARD;
+  const corpusHeight = height - legHeight;
+  const frontHeight = corpusHeight / drawerCount - gap;
+
+  return Array.from({ length: drawerCount }, (_, index) => ({
+    frontHeight,
+    centreY: legHeight + frontHeight / 2 + 10 + index * (frontHeight + gap),
+    frontZ: depth / 2 + 9,
+    width,
+    depth,
+  }));
+}
+
+function sideboard() {
+  const { width, height, depth, legHeight } = SIDEBOARD;
+  const corpusHeight = height - legHeight;
 
   return {
     // Ящики занимают весь объём, полок внутри нет
-    white: carcassPanels(width, corpusHeight, depth, { bottomMm: plinth }),
-    graphite: [translate(segmentedBox(width - 60, plinth, depth - 40, 2), 0, plinth / 2, 0)],
-    oak: drawers,
-    steel: handles,
+    white: carcassPanels(width, corpusHeight, depth, { bottomMm: legHeight }),
+    graphite: taperedLegs(width, depth, { heightMm: legHeight }),
   };
+}
+
+/**
+ * Ящики комода как подвижные детали.
+ *
+ * Каждый ящик — отдельный узел в GLB: фронт с ручкой и короб за ним.
+ * Без короба выдвинутый ящик выглядит оторвавшимся фасадом, поэтому
+ * он строится даже при том, что в закрытом виде его не видно.
+ */
+function sideboardDrawers() {
+  return sideboardDrawerLayout().map((drawer) => {
+    const front = translate(
+      roundedBox(drawer.width - 40, drawer.frontHeight, 18, 5, 5),
+      0,
+      drawer.centreY,
+      drawer.frontZ,
+    );
+    const box = drawerBoxBehind(drawer);
+
+    return {
+      travelMm: Math.round(box.depthMm * 0.72),
+      parts: {
+        oak: [front],
+        white: box.parts,
+        steel: [
+          horizontalHandle(0, drawer.centreY + drawer.frontHeight / 2 - 40, drawer.frontZ + 17, 320),
+        ],
+      },
+    };
+  });
+}
+
+/**
+ * Короб ящика, приставленный вплотную к тыльной стороне фронта.
+ * Уже корпуса на зазор под направляющие с обеих сторон.
+ */
+function drawerBoxBehind(drawer) {
+  const clearance = 34;
+  const widthMm = drawer.width - PANEL_THICKNESS * 2 - clearance * 2;
+  const depthMm = drawer.depth - 40;
+  const heightMm = drawer.frontHeight - 24;
+  const bottomMm = drawer.centreY - drawer.frontHeight / 2 + 12;
+  // Перед короба совпадает с внутренней плоскостью фронта
+  const centreZ = drawer.depth / 2 - depthMm / 2;
+
+  const parts = openBoxPanels(widthMm, heightMm, depthMm, { bottomMm }).map((part) =>
+    translate(part, 0, 0, centreZ),
+  );
+
+  return { parts, depthMm };
 }
 
 function table() {
@@ -257,6 +325,7 @@ const FURNITURE = [
     type: 'static',
     basePriceCents: 2790000,
     build: sideboard,
+    drawers: sideboardDrawers,
   },
   {
     sku: 'TEST-TBL-1400',
@@ -342,9 +411,28 @@ export const PRODUCTS = [...FURNITURE, ...KITCHEN_PRODUCTS].map((product) => ({
 }));
 
 /** Слияние деталей одного материала в одну геометрию. */
-export function buildProductGeometry(product) {
-  const parts = product.build();
+function mergeByMaterial(parts) {
   return Object.entries(parts)
     .filter(([, pieces]) => pieces.length > 0)
     .map(([material, pieces]) => ({ material, geometry: mergeGeometries(pieces) }));
+}
+
+/** Неподвижная часть изделия. */
+export function buildProductGeometry(product) {
+  return mergeByMaterial(product.build());
+}
+
+/**
+ * Подвижные ящики изделия.
+ *
+ * Каждый ящик уезжает в GLB отдельным узлом: слить его с корпусом
+ * значит лишить возможности выдвинуть. Имя узла — адрес для вьюера,
+ * ход записан в extras, потому что он свойство изделия, а не сцены.
+ */
+export function buildProductDrawers(product) {
+  return (product.drawers?.() ?? []).map((drawer, index) => ({
+    name: `drawer:${index}`,
+    travelMm: Math.round(drawer.travelMm),
+    groups: mergeByMaterial(drawer.parts),
+  }));
 }

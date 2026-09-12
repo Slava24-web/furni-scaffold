@@ -404,7 +404,20 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
         );
         if (dimension) break;
 
-        select(v.pick(toNdc(e.point))?.instanceId ?? null);
+        const hit = v.pick(toNdc(e.point));
+        // Ящик выдвигается тапом по уже выделенному изделию: первый тап
+        // выбирает объект, и открывать ящик заодно с выбором нельзя —
+        // пользователь ещё не показал, что хочет заглянуть внутрь
+        if (hit && hit.instanceId === selectedId.value) {
+          const drawer = v.pickDrawer(toNdc(e.point), hit.root);
+          if (drawer) {
+            v.drawers.toggle(drawer);
+            v.invalidate();
+            break;
+          }
+        }
+
+        select(hit?.instanceId ?? null);
         break;
       }
 

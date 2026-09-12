@@ -112,6 +112,12 @@ function normalize(deg: number): number {
 
     <p v-if="conflict" class="inspector__conflict">{{ conflict }}</p>
 
+    <!-- Ящики выдвигаются тапом по фасаду: без подсказки об этом
+         не догадаться, снаружи изделие выглядит цельным -->
+    <p v-if="(props.product?.drawerCount ?? 0) > 0" class="inspector__tip">
+      Тап по фасаду выдвигает ящик
+    </p>
+
     <section v-for="slot in props.product?.finishes ?? []" :key="slot.code" class="finish">
       <span class="finish__label">{{ slot.label }}</span>
       <ul class="finish__options">
@@ -243,6 +249,15 @@ function normalize(deg: number): number {
   font-size: 11px;
   color: #8a909b;
   font-variant-numeric: tabular-nums;
+}
+.inspector__tip {
+  margin: 0;
+  padding: 7px 9px;
+  border-radius: 8px;
+  background: #eef3fe;
+  color: #2f5db0;
+  font-size: 11px;
+  line-height: 1.35;
 }
 .inspector__conflict {
   margin: 0;

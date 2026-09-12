@@ -95,26 +95,52 @@ function baseCabinet(widthMm) {
   };
 }
 
-/** Нижний шкаф с тремя ящиками. */
-function baseDrawers(widthMm) {
-  const facadeZ = BASE_DEPTH / 2 + FACADE_THICKNESS / 2;
+/** Раскладка ящиков нижнего модуля: высота фронта и его центр. */
+function baseDrawerLayout(widthMm) {
   const drawerHeight = (BASE_CARCASS - FACADE_GAP * 4) / 3;
+  const facadeZ = BASE_DEPTH / 2 + FACADE_THICKNESS / 2;
 
-  const fronts = [];
-  const handles = [];
-  for (let i = 0; i < 3; i++) {
-    const centreY = PLINTH + FACADE_GAP + drawerHeight / 2 + i * (drawerHeight + FACADE_GAP);
-    fronts.push(...facade(widthMm, drawerHeight, centreY, facadeZ));
-    handles.push(...bracketHandle(0, centreY, facadeZ + FACADE_THICKNESS / 2, 160));
-  }
+  return Array.from({ length: 3 }, (_, index) => ({
+    widthMm,
+    frontHeight: drawerHeight,
+    centreY: PLINTH + FACADE_GAP + drawerHeight / 2 + index * (drawerHeight + FACADE_GAP),
+    frontZ: facadeZ,
+  }));
+}
 
+/** Нижний шкаф с тремя ящиками. Корпус неподвижен, ящики — отдельные узлы. */
+function baseDrawers(widthMm) {
   return {
     // У шкафа с ящиками полок нет: внутренний объём занимают короба
     white: carcass(widthMm, BASE_CARCASS, BASE_DEPTH, PLINTH, 0),
     graphite: [plinth(widthMm, BASE_DEPTH)],
-    oak: fronts,
-    steel: handles,
   };
+}
+
+/**
+ * Ящики нижнего модуля как подвижные детали: фронт, ручка и короб.
+ * Короб строится всегда — без него выдвинутый ящик выглядит
+ * оторвавшимся фасадом.
+ */
+function baseDrawerParts(widthMm) {
+  return baseDrawerLayout(widthMm).map((drawer) => {
+    const boxDepth = BASE_DEPTH - 60;
+    const boxHeight = drawer.frontHeight - 30;
+    const bottomMm = drawer.centreY - drawer.frontHeight / 2 + 14;
+    // Перед короба прижат к тыльной стороне фронта
+    const centreZ = BASE_DEPTH / 2 - boxDepth / 2;
+
+    return {
+      travelMm: Math.round(boxDepth * 0.72),
+      parts: {
+        oak: facade(widthMm, drawer.frontHeight, drawer.centreY, drawer.frontZ),
+        white: openBoxPanels(widthMm - 80, boxHeight, boxDepth, { bottomMm }).map((part) =>
+          translate(part, 0, 0, centreZ),
+        ),
+        steel: bracketHandle(0, drawer.centreY, drawer.frontZ + FACADE_THICKNESS / 2, 160),
+      },
+    };
+  });
 }
 
 /** Верхний шкаф. Origin остаётся внизу модели, подъём задаёт mountHeightMm. */
@@ -309,6 +335,7 @@ export const KITCHEN_PRODUCTS = [
     mountHeightMm: 0,
     snapToWall: true,
     build: () => baseDrawers(600),
+    drawers: () => baseDrawerParts(600),
   },
   {
     sku: 'TEST-KIT-WALL-600',

@@ -205,6 +205,71 @@ export function cylinder(radiusMm, heightMm, radialSegments = 12) {
   return geometry;
 }
 
+/**
+ * Усечённый конус вдоль оси Y: конические ножки мебели.
+ *
+ * Боковая нормаль наклонена вместе с образующей, а не взята
+ * горизонтальной как у цилиндра: иначе конус бликует как труба
+ * и читается плоским.
+ */
+export function taperedCylinder(topRadiusMm, bottomRadiusMm, heightMm, radialSegments = 12) {
+  const topRadius = topRadiusMm / MM;
+  const bottomRadius = bottomRadiusMm / MM;
+  const halfHeight = heightMm / MM / 2;
+  const geometry = emptyGeometry();
+
+  // Наклон образующей: на него заваливается нормаль боковой поверхности
+  const slope = (bottomRadius - topRadius) / (halfHeight * 2);
+  const scale = Math.hypot(1, slope);
+
+  for (let iy = 0; iy <= 1; iy++) {
+    const radius = iy === 0 ? bottomRadius : topRadius;
+    for (let i = 0; i <= radialSegments; i++) {
+      const angle = (i / radialSegments) * Math.PI * 2;
+      const x = Math.cos(angle);
+      const z = Math.sin(angle);
+      geometry.positions.push(x * radius, iy === 0 ? -halfHeight : halfHeight, z * radius);
+      geometry.normals.push(x / scale, slope / scale, z / scale);
+      geometry.uvs.push(i / radialSegments, iy);
+    }
+  }
+
+  const stride = radialSegments + 1;
+  for (let i = 0; i < radialSegments; i++) {
+    geometry.indices.push(i, i + stride, i + 1, i + 1, i + stride, i + stride + 1);
+  }
+
+  // Крышки: веер треугольников от центра
+  for (const [sign, y, radius] of [
+    [-1, -halfHeight, bottomRadius],
+    [1, halfHeight, topRadius],
+  ]) {
+    const center = geometry.positions.length / 3;
+    geometry.positions.push(0, y, 0);
+    geometry.normals.push(0, sign, 0);
+    geometry.uvs.push(0.5, 0.5);
+
+    const rimStart = geometry.positions.length / 3;
+    for (let i = 0; i <= radialSegments; i++) {
+      const angle = (i / radialSegments) * Math.PI * 2;
+      const x = Math.cos(angle);
+      const z = Math.sin(angle);
+      geometry.positions.push(x * radius, y, z * radius);
+      geometry.normals.push(0, sign, 0);
+      geometry.uvs.push(x * 0.5 + 0.5, z * 0.5 + 0.5);
+    }
+
+    for (let i = 0; i < radialSegments; i++) {
+      const a = rimStart + i;
+      const b = rimStart + i + 1;
+      if (sign < 0) geometry.indices.push(center, a, b);
+      else geometry.indices.push(center, b, a);
+    }
+  }
+
+  return geometry;
+}
+
 /** Число треугольников — для проверки бюджета ASSET_BUDGETS. */
 export function triangleCount(geometry) {
   return geometry.indices.length / 3;

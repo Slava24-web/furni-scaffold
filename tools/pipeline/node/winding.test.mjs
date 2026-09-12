@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { cylinder, mergeGeometries, roundedBox, segmentedBox } from './geometry.mjs';
+import { cylinder, mergeGeometries, roundedBox, segmentedBox, taperedCylinder } from './geometry.mjs';
 import { carcassPanels, openBoxPanels } from './carcass.mjs';
-import { PRODUCTS, buildProductGeometry } from './catalog.mjs';
+import { PRODUCTS, buildProductDrawers, buildProductGeometry } from './catalog.mjs';
+import { taperedLegs } from './legs.mjs';
 
 /**
  * Обход вершин наружу.
@@ -58,6 +59,9 @@ describe('обход вершин у построителей', () => {
     'скруглённый бокс с нулевым радиусом': roundedBox(600, 400, 300, 0, 2),
     'скруглённый бокс с предельным радиусом': roundedBox(400, 400, 400, 5000, 4),
     цилиндр: cylinder(30, 700, 16),
+    'усечённый конус': taperedCylinder(26, 16, 90, 10),
+    'конус с равными радиусами': taperedCylinder(20, 20, 100, 8),
+    ножки: mergeGeometries(taperedLegs(1200, 450, { heightMm: 80 })),
     'корпус из панелей': mergeGeometries(carcassPanels(600, 720, 560, { shelves: 2 })),
     'открытый короб': mergeGeometries(openBoxPanels(600, 176, 500)),
   };
@@ -76,7 +80,13 @@ describe('обход вершин у построителей', () => {
 describe('обход вершин у изделий каталога', () => {
   for (const product of PRODUCTS) {
     it(`${product.sku}: ни одной вывернутой грани`, () => {
-      const merged = mergeGeometries(buildProductGeometry(product).map((g) => g.geometry));
+      // Ящики — часть изделия: вывернутая грань короба видна, как
+      // только ящик выдвинут
+      const groups = [
+        ...buildProductGeometry(product),
+        ...buildProductDrawers(product).flatMap((drawer) => drawer.groups),
+      ];
+      const merged = mergeGeometries(groups.map((g) => g.geometry));
       expect(invertedTriangles(merged)).toBe(0);
       expect(zeroNormals(merged)).toBe(0);
     });

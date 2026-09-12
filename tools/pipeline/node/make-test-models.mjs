@@ -14,7 +14,14 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { ASSET_BUDGETS } from '@furni/shared';
-import { MATERIALS, PRODUCTS, TEST_TENANT, buildProductGeometry, finishesFor } from './catalog.mjs';
+import {
+  MATERIALS,
+  PRODUCTS,
+  TEST_TENANT,
+  buildProductDrawers,
+  buildProductGeometry,
+  finishesFor,
+} from './catalog.mjs';
 import { boundsMm, triangleCount } from './geometry.mjs';
 import { buildDocument, writeGlb } from './gltf.mjs';
 import { renderThumbnail } from './thumbnail.mjs';
@@ -74,9 +81,13 @@ async function main() {
 
   for (const product of PRODUCTS) {
     const groups = buildProductGeometry(product);
-    const sourceTriangles = groups.reduce((sum, g) => sum + triangleCount(g.geometry), 0);
+    const drawers = buildProductDrawers(product);
+    // Ящики в закрытом положении — часть изделия: и габарит, и вес
+    // геометрии считаются вместе с ними
+    const allGroups = [...groups, ...drawers.flatMap((drawer) => drawer.groups)];
+    const sourceTriangles = allGroups.reduce((sum, g) => sum + triangleCount(g.geometry), 0);
     const bounds = boundsMm({
-      positions: groups.flatMap((g) => g.geometry.positions),
+      positions: allGroups.flatMap((g) => g.geometry.positions),
       indices: [],
     });
 
@@ -89,8 +100,9 @@ async function main() {
     const doc = buildDocument({
       name: product.sku,
       groups,
+      drawers,
       materials: MATERIALS,
-      textures: usedTextures(groups, textures),
+      textures: usedTextures(allGroups, textures),
     });
 
     const glb = await writeGlb(doc);
@@ -103,7 +115,10 @@ async function main() {
 
     // Превью для каталога: рисуется по той же геометрии, что и модель,
     // поэтому не расходится с ней (AssetKind.thumb в схеме БД)
-    await writeFile(join(outputDir, 'thumb.png'), await renderThumbnail(groups, previewMaterials));
+    await writeFile(
+      join(outputDir, 'thumb.png'),
+      await renderThumbnail(allGroups, previewMaterials),
+    );
 
     manifest.products.push({
       sku: product.sku,
@@ -120,9 +135,11 @@ async function main() {
       snapToWall: product.snapToWall,
       /** Можно ли ставить объект на другие объекты */
       stackable: product.stackable,
-      materials: groups.map((g) => g.material),
+      materials: [...new Set(allGroups.map((g) => g.material))],
       /** Слоты отделки: какие материалы модели можно подменить */
-      finishes: finishesFor(groups.map((g) => g.material)),
+      finishes: finishesFor(allGroups.map((g) => g.material)),
+      /** Сколько ящиков можно выдвинуть */
+      drawerCount: drawers.length,
       /** Шаблон под AssetRef.urlTemplate из packages/viewer */
       urlTemplate: `/assets/test/${product.sku}/lod{lod}.glb`,
       thumbnailUrl: `/assets/test/${product.sku}/thumb.png`,
