@@ -15,6 +15,37 @@ export const CatalogLodSchema = z.object({
   triangles: z.number().int().nonnegative(),
 });
 
+/**
+ * Материал тенанта: и цена, и всё нужное, чтобы собрать его в браузере.
+ *
+ * Отделку нельзя держать только внутри GLB: сменить её на текстурную
+ * было бы нечем, ведь в модель попадают лишь те карты, что она
+ * использует. Поэтому материалы описаны отдельно, а текстуры лежат
+ * самостоятельными файлами.
+ */
+export const CatalogMaterialSchema = z.object({
+  code: z.string().min(1),
+  name: z.string().min(1),
+  priceModifierCents: z.number().int().default(0),
+  baseColorFactor: z.tuple([z.number(), z.number(), z.number(), z.number()]),
+  roughness: z.number().min(0).max(1),
+  metallic: z.number().min(0).max(1),
+  textureUrl: z.string().min(1).optional(),
+});
+
+/**
+ * Слот отделки: какой материал модели можно подменить и на что.
+ *
+ * `slotMaterial` — имя материала внутри GLB. Пайплайн сохраняет имена
+ * на всех уровнях детализации, по ним клиент и находит нужные меши.
+ */
+export const FinishSlotSchema = z.object({
+  code: z.string().min(1),
+  label: z.string().min(1),
+  slotMaterial: z.string().min(1),
+  options: z.array(z.string().min(1)).min(1),
+});
+
 export const CatalogProductSchema = z.object({
   sku: z.string().min(1),
   name: z.string().min(1),
@@ -43,6 +74,8 @@ export const CatalogProductSchema = z.object({
   /** Превью для панели каталога. Пусто — карточка рисуется без картинки */
   thumbnailUrl: z.string().min(1).optional(),
   lods: z.array(CatalogLodSchema).min(1),
+  /** Слоты отделки. Пусто — изделие поставляется в одном исполнении */
+  finishes: z.array(FinishSlotSchema).default([]),
 });
 
 export const CatalogSchema = z.object({
@@ -50,18 +83,14 @@ export const CatalogSchema = z.object({
     slug: z.string().min(1),
     name: z.string().min(1),
   }),
-  materials: z.array(
-    z.object({
-      code: z.string().min(1),
-      name: z.string().min(1),
-      priceModifierCents: z.number().int().default(0),
-    }),
-  ),
+  materials: z.array(CatalogMaterialSchema),
   products: z.array(CatalogProductSchema).min(1),
 });
 
 export type Catalog = z.infer<typeof CatalogSchema>;
 export type CatalogProduct = z.infer<typeof CatalogProductSchema>;
+export type CatalogMaterial = z.infer<typeof CatalogMaterialSchema>;
+export type FinishSlot = z.infer<typeof FinishSlotSchema>;
 
 /** Группировка для панели каталога. Порядок категорий — как в манифесте. */
 export function groupByCategory(

@@ -1,6 +1,11 @@
 import { defineStore } from 'pinia';
 import { computed, ref, shallowRef } from 'vue';
-import { CatalogSchema, groupByCategory, type CatalogProduct } from '@furni/shared';
+import {
+  CatalogSchema,
+  groupByCategory,
+  type CatalogMaterial,
+  type CatalogProduct,
+} from '@furni/shared';
 
 const CATALOG_URL = '/assets/test/catalog.json';
 
@@ -13,11 +18,13 @@ const CATALOG_URL = '/assets/test/catalog.json';
  */
 export const useCatalogStore = defineStore('catalog', () => {
   const products = shallowRef<CatalogProduct[]>([]);
+  const materials = shallowRef<CatalogMaterial[]>([]);
   const loading = ref(false);
   const error = ref<string | null>(null);
 
   const groups = computed(() => groupByCategory(products.value));
   const bySku = computed(() => new Map(products.value.map((p) => [p.sku, p])));
+  const materialByCode = computed(() => new Map(materials.value.map((m) => [m.code, m])));
 
   async function load(): Promise<void> {
     if (loading.value || products.value.length > 0) return;
@@ -32,7 +39,9 @@ export const useCatalogStore = defineStore('catalog', () => {
             'Сгенерируйте модели: pnpm models:test',
         );
       }
-      products.value = CatalogSchema.parse(await response.json()).products;
+      const catalog = CatalogSchema.parse(await response.json());
+      materials.value = catalog.materials;
+      products.value = catalog.products;
     } catch (cause) {
       error.value = cause instanceof Error ? cause.message : String(cause);
     } finally {
@@ -40,5 +49,5 @@ export const useCatalogStore = defineStore('catalog', () => {
     }
   }
 
-  return { products, groups, bySku, loading, error, load };
+  return { products, materials, groups, bySku, materialByCode, loading, error, load };
 });

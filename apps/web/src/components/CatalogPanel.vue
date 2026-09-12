@@ -67,12 +67,11 @@ const size = (product: CatalogProduct): string =>
 
 <style scoped>
 .catalog {
-  width: 300px;
-  flex: none;
+  /* Ширину и фон задаёт колонка: под каталогом ещё живёт смета */
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  padding: 14px 14px 32px;
-  border-right: 1px solid #e5e7ec;
-  background: #fbfbfc;
+  padding: 14px 14px 24px;
   /* Перетаскивание идёт на указательных событиях: без этого браузер
      перехватит жест под прокрутку панели */
   touch-action: pan-y;

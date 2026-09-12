@@ -18,7 +18,17 @@ const product = (over: Partial<CatalogProduct> = {}) => ({
 
 const catalog = (products: unknown[]) => ({
   tenant: { slug: 'test', name: 'Тест' },
-  materials: [{ code: 'oak', name: 'Дуб', priceModifierCents: 0 }],
+  materials: [
+    {
+      code: 'oak',
+      name: 'Дуб',
+      priceModifierCents: 0,
+      baseColorFactor: [0.9, 0.8, 0.7, 1],
+      roughness: 0.6,
+      metallic: 0,
+      textureUrl: '/assets/test/textures/wood.webp',
+    },
+  ],
   products,
 });
 
@@ -73,5 +83,65 @@ describe('группировка каталога', () => {
 
   it('пустой каталог даёт пустой список групп', () => {
     expect(groupByCategory([])).toEqual([]);
+  });
+});
+
+describe('слоты отделки в схеме', () => {
+  const slot = {
+    code: 'facade',
+    label: 'Фасад',
+    slotMaterial: 'oak',
+    options: ['oak', 'white'],
+  };
+
+  it('по умолчанию слотов нет: изделие в одном исполнении', () => {
+    const parsed = CatalogSchema.parse(catalog([product()]));
+    expect(parsed.products[0]?.finishes).toEqual([]);
+  });
+
+  it('слот принимается целиком', () => {
+    const parsed = CatalogSchema.parse(catalog([product({ finishes: [slot] })]));
+    expect(parsed.products[0]?.finishes[0]).toEqual(slot);
+  });
+
+  it('слот без вариантов отвергается: выбирать было бы не из чего', () => {
+    expect(() =>
+      CatalogSchema.parse(catalog([product({ finishes: [{ ...slot, options: [] }] })])),
+    ).toThrow();
+  });
+
+  it('слот без привязки к материалу модели отвергается', () => {
+    expect(() =>
+      CatalogSchema.parse(catalog([product({ finishes: [{ ...slot, slotMaterial: '' }] })])),
+    ).toThrow();
+  });
+});
+
+describe('материалы в схеме', () => {
+  it('материал без цвета отвергается: собрать его в браузере нечем', () => {
+    const broken = {
+      tenant: { slug: 'test', name: 'Тест' },
+      materials: [{ code: 'oak', name: 'Дуб', priceModifierCents: 0 }],
+      products: [product()],
+    };
+    expect(() => CatalogSchema.parse(broken)).toThrow();
+  });
+
+  it('текстура необязательна: одноцветный материал допустим', () => {
+    const plain = {
+      tenant: { slug: 'test', name: 'Тест' },
+      materials: [
+        {
+          code: 'white',
+          name: 'Белый',
+          priceModifierCents: 0,
+          baseColorFactor: [0.9, 0.9, 0.9, 1],
+          roughness: 0.5,
+          metallic: 0,
+        },
+      ],
+      products: [product()],
+    };
+    expect(CatalogSchema.parse(plain).materials[0]?.textureUrl).toBeUndefined();
   });
 });

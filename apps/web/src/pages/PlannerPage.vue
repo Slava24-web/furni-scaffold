@@ -3,6 +3,8 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import {
   createRectangularRoom,
+  estimateScene,
+  placementPriceCents,
   projectOntoWall,
   randomUUID,
   wallLengthMm,
@@ -16,6 +18,7 @@ import SceneCanvas from '../components/SceneCanvas.vue';
 import CatalogPanel from '../components/CatalogPanel.vue';
 import RoomToolbar from '../components/RoomToolbar.vue';
 import ObjectInspector from '../components/ObjectInspector.vue';
+import EstimatePanel from '../components/EstimatePanel.vue';
 import { conflictMessage } from '../lib/conflictMessage';
 import { useCatalogDrag } from '../composables/useCatalogDrag';
 import { useWallDrawing } from '../composables/useWallDrawing';
@@ -145,6 +148,19 @@ const selected = computed(() => {
   return id ? scene.doc.placements.find((p) => p.instanceId === id) : undefined;
 });
 
+/** Предварительная смета: считается на клиенте, итог — за сервером. */
+const estimate = computed(() =>
+  estimateScene(scene.doc.placements, catalog.bySku, catalog.materialByCode),
+);
+
+const selectedPrice = computed(() => {
+  const placement = selected.value;
+  const product = placement && catalog.bySku.get(placement.sku);
+  return placement && product
+    ? placementPriceCents(product, placement.options, catalog.materialByCode)
+    : 0;
+});
+
 function updateSelected(patch: Partial<Placement>): void {
   const id = canvas.value?.selectedId;
   if (id) scene.updatePlacement(id, patch);
@@ -215,7 +231,10 @@ onBeforeUnmount(() => uninstallTestingApi());
     />
 
     <div class="planner__body">
-      <CatalogPanel :dragging="drag.product.value" @drag-start="drag.start" />
+      <div class="planner__sidebar">
+        <CatalogPanel :dragging="drag.product.value" @drag-start="drag.start" />
+        <EstimatePanel :estimate="estimate" />
+      </div>
 
       <div class="planner__scene" :class="{ 'is-drop-target': drag.overScene.value }">
         <SceneCanvas
@@ -229,6 +248,8 @@ onBeforeUnmount(() => uninstallTestingApi());
           v-if="selected"
           :placement="selected"
           :product="catalog.bySku.get(selected.sku)"
+          :materials="catalog.materialByCode"
+          :price-cents="selectedPrice"
           :conflicts="canvas?.conflicts"
           @update="updateSelected"
           @remove="deleteSelected"
@@ -264,6 +285,15 @@ onBeforeUnmount(() => uninstallTestingApi());
   display: flex;
   flex: 1;
   min-height: 0;
+}
+.planner__sidebar {
+  display: flex;
+  flex-direction: column;
+  width: 300px;
+  flex: none;
+  min-height: 0;
+  border-right: 1px solid #e5e7ec;
+  background: #fbfbfc;
 }
 .planner__scene {
   position: relative;

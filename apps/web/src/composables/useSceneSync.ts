@@ -1,6 +1,7 @@
 import { markRaw, onBeforeUnmount, shallowRef, watch, type ShallowRef } from 'vue';
-import { RoomBuilder, type Viewer } from '@furni/viewer';
-import type { Placement, SceneDoc } from '@furni/shared';
+import { RoomBuilder, applyFinishes, type Viewer } from '@furni/viewer';
+import { selectedFinish, type CatalogProduct, type Placement, type SceneDoc } from '@furni/shared';
+import type { MeshStandardMaterial, Object3D } from 'three';
 import { useCatalogStore } from '../stores/catalog';
 import { useSceneStore } from '../stores/scene';
 
@@ -58,15 +59,16 @@ export function useSceneSync(viewer: ShallowRef<Viewer | null>): {
     }
 
     for (const placement of wanted.values()) {
+      const product = catalog.bySku.get(placement.sku);
       const existing = v.registry.get(placement.instanceId);
       if (existing) {
         applyTransform(existing.root, placement);
+        if (product) applyFinish(v, existing.root, product, placement);
         // Закрепление живёт в документе, а проверяют его жесты по реестру
         existing.locked = placement.locked;
         continue;
       }
 
-      const product = catalog.bySku.get(placement.sku);
       if (!product) continue; // товар исчез из каталога — молча пропускаем
 
       const group = await v.assets.load(
@@ -77,6 +79,7 @@ export function useSceneSync(viewer: ShallowRef<Viewer | null>): {
       if (token !== generation || v.registry.get(placement.instanceId)) continue;
 
       applyTransform(group, placement);
+      applyFinish(v, group, product, placement);
       v.registry.add(placement.instanceId, placement.sku, group).locked = placement.locked;
     }
 
@@ -87,6 +90,8 @@ export function useSceneSync(viewer: ShallowRef<Viewer | null>): {
     [() => viewer.value, () => scene.doc, () => catalog.products],
     async ([v, doc]) => {
       if (!v) return;
+      // Материалы тенанта нужны раньше объектов: по ним собирается отделка
+      v.materials.register(catalog.materials);
       syncRooms(v, doc);
       await syncPlacements(v, doc);
       ready.value = true;
@@ -107,4 +112,28 @@ export function useSceneSync(viewer: ShallowRef<Viewer | null>): {
 function applyTransform(root: { position: { set(x: number, y: number, z: number): void }; rotation: { y: number } }, placement: Placement): void {
   root.position.set(placement.position.x / 1000, placement.position.y / 1000, placement.position.z / 1000);
   root.rotation.y = (placement.rotationY * Math.PI) / 180;
+}
+
+/**
+ * Отделка размещения.
+ *
+ * Выбор по умолчанию не подменяет материал: исходный запечён в модель
+ * вместе со своей текстурой, и собранный на клиенте двойник выглядел бы
+ * иначе там, где карта в GLB сжата иначе.
+ */
+function applyFinish(
+  viewer: Viewer,
+  root: Object3D,
+  product: CatalogProduct,
+  placement: Placement,
+): void {
+  if (product.finishes.length === 0) return;
+
+  const slots: Record<string, MeshStandardMaterial | undefined> = {};
+  for (const slot of product.finishes) {
+    const code = selectedFinish(slot.code, slot, placement.options);
+    slots[slot.slotMaterial] = code === slot.slotMaterial ? undefined : viewer.materials.get(code);
+  }
+
+  applyFinishes(root, slots);
 }

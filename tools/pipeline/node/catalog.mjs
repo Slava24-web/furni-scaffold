@@ -285,6 +285,48 @@ const FURNITURE = [
 ];
 
 /**
+ * Слоты отделки по умолчанию.
+ *
+ * Слот привязан к ИМЕНИ материала в модели: пайплайн сохраняет их на всех
+ * LOD, поэтому клиент находит нужные меши по нему и подменяет материал.
+ * Без слотов отделка была бы запечена в геометрию намертво.
+ */
+const FACADE_FINISH = {
+  code: 'facade',
+  label: 'Фасад',
+  slotMaterial: 'oak',
+  options: ['oak', 'white', 'graphite'],
+};
+
+const UPHOLSTERY_FINISH = {
+  code: 'upholstery',
+  label: 'Обивка',
+  slotMaterial: 'fabric',
+  options: ['fabric', 'graphite', 'oak'],
+};
+
+const WORKTOP_FINISH = {
+  code: 'worktop',
+  label: 'Столешница',
+  slotMaterial: 'stone',
+  options: ['stone', 'graphite', 'white'],
+};
+
+/**
+ * Слоты отделки по фактическому составу модели.
+ *
+ * Слот существует, только если в модели действительно есть материал,
+ * который он подменяет: у мойки нет фасада, и предлагать выбор его
+ * отделки значит обещать то, чего не произойдёт.
+ */
+export function finishesFor(materialCodes) {
+  const present = new Set(materialCodes);
+  return [FACADE_FINISH, UPHOLSTERY_FINISH, WORKTOP_FINISH].filter((finish) =>
+    present.has(finish.slotMaterial),
+  );
+}
+
+/**
  * Полный каталог: корпусная мебель плюс кухонные модули и детали.
  * Значения по умолчанию проставляются здесь, чтобы описания изделий
  * не повторяли одно и то же.

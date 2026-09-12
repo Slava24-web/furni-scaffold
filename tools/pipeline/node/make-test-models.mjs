@@ -14,7 +14,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { ASSET_BUDGETS } from '@furni/shared';
-import { MATERIALS, PRODUCTS, TEST_TENANT, buildProductGeometry } from './catalog.mjs';
+import { MATERIALS, PRODUCTS, TEST_TENANT, buildProductGeometry, finishesFor } from './catalog.mjs';
 import { boundsMm, triangleCount } from './geometry.mjs';
 import { buildDocument, writeGlb } from './gltf.mjs';
 import { renderThumbnail } from './thumbnail.mjs';
@@ -46,12 +46,28 @@ async function main() {
   // при первой же правке рисунка.
   const previewMaterials = await materialsForPreview(textures);
 
+  // Текстуры выкладываются отдельными файлами: клиент собирает материалы
+  // сам, иначе сменить отделку на текстурную было бы нечем — в GLB лежат
+  // только те карты, что использованы моделью
+  const textureDir = join(PUBLIC_DIR, 'textures');
+  await mkdir(textureDir, { recursive: true });
+  const textureUrls = {};
+  for (const [key, image] of Object.entries(textures)) {
+    const webp = await sharp(image).webp({ quality: 86 }).toBuffer();
+    await writeFile(join(textureDir, `${key}.webp`), webp);
+    textureUrls[key] = `/assets/test/textures/${key}.webp`;
+  }
+
   const manifest = {
     tenant: TEST_TENANT,
-    materials: Object.values(MATERIALS).map(({ code, name, priceModifierCents }) => ({
-      code,
-      name,
-      priceModifierCents,
+    materials: Object.values(MATERIALS).map((material) => ({
+      code: material.code,
+      name: material.name,
+      priceModifierCents: material.priceModifierCents,
+      baseColorFactor: material.baseColorFactor,
+      roughness: material.roughness,
+      metallic: material.metallic,
+      ...(material.texture ? { textureUrl: textureUrls[material.texture] } : {}),
     })),
     products: [],
   };
@@ -105,6 +121,8 @@ async function main() {
       /** Можно ли ставить объект на другие объекты */
       stackable: product.stackable,
       materials: groups.map((g) => g.material),
+      /** Слоты отделки: какие материалы модели можно подменить */
+      finishes: finishesFor(groups.map((g) => g.material)),
       /** Шаблон под AssetRef.urlTemplate из packages/viewer */
       urlTemplate: `/assets/test/${product.sku}/lod{lod}.glb`,
       thumbnailUrl: `/assets/test/${product.sku}/thumb.png`,

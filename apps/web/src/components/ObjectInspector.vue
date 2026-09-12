@@ -1,7 +1,15 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import type { CatalogProduct, ConflictReport, Placement } from '@furni/shared';
+import {
+  selectedFinish,
+  type CatalogMaterial,
+  type CatalogProduct,
+  type ConflictReport,
+  type FinishSlot,
+  type Placement,
+} from '@furni/shared';
 import { conflictMessage } from '../lib/conflictMessage';
+import { formatDelta, formatPrice } from '../lib/money';
 
 /**
  * Свойства выделенного объекта.
@@ -13,6 +21,8 @@ import { conflictMessage } from '../lib/conflictMessage';
 const props = defineProps<{
   placement: Placement;
   product: CatalogProduct | undefined;
+  materials: ReadonlyMap<string, CatalogMaterial>;
+  priceCents: number;
   conflicts: ConflictReport | undefined;
 }>();
 
@@ -22,6 +32,35 @@ const emit = defineEmits<{
 }>();
 
 const conflict = computed(() => conflictMessage(props.conflicts));
+
+/** Текущий выбор по каждому слоту отделки. */
+function chosen(slot: FinishSlot): string {
+  return selectedFinish(slot.code, slot, props.placement.options);
+}
+
+/** Надбавка варианта относительно исполнения, включённого в цену. */
+function optionDelta(slot: FinishSlot, code: string): string | null {
+  const selected = props.materials.get(code)?.priceModifierCents ?? 0;
+  const included = props.materials.get(slot.slotMaterial)?.priceModifierCents ?? 0;
+  return formatDelta(selected - included);
+}
+
+function optionName(code: string): string {
+  return props.materials.get(code)?.name ?? code;
+}
+
+/** Кружок-образец: показывает цвет материала, а не только название. */
+function swatch(code: string): string {
+  const colour = props.materials.get(code)?.baseColorFactor;
+  if (!colour) return '#d5d8dd';
+  const channel = (value: number) =>
+    Math.round(Math.min(1, Math.max(0, value)) ** (1 / 2.2) * 255);
+  return `rgb(${channel(colour[0])} ${channel(colour[1])} ${channel(colour[2])})`;
+}
+
+function pickFinish(slot: FinishSlot, code: string): void {
+  emit('update', { options: { ...props.placement.options, [slot.code]: code } });
+}
 
 const size = computed(() =>
   props.product
@@ -72,6 +111,31 @@ function normalize(deg: number): number {
     </header>
 
     <p v-if="conflict" class="inspector__conflict">{{ conflict }}</p>
+
+    <section v-for="slot in props.product?.finishes ?? []" :key="slot.code" class="finish">
+      <span class="finish__label">{{ slot.label }}</span>
+      <ul class="finish__options">
+        <li v-for="code in slot.options" :key="code">
+          <button
+            type="button"
+            class="finish__option"
+            :class="{ 'finish__option--active': chosen(slot) === code }"
+            @click="pickFinish(slot, code)"
+          >
+            <span class="finish__swatch" :style="{ background: swatch(code) }" />
+            <span class="finish__name">{{ optionName(code) }}</span>
+            <span v-if="optionDelta(slot, code)" class="finish__delta">
+              {{ optionDelta(slot, code) }}
+            </span>
+          </button>
+        </li>
+      </ul>
+    </section>
+
+    <p class="price">
+      <span>Цена позиции</span>
+      <strong>{{ formatPrice(props.priceCents) }}</strong>
+    </p>
 
     <div class="fields">
       <label class="field">
@@ -188,6 +252,76 @@ function normalize(deg: number): number {
   color: #b42318;
   font-size: 11px;
   line-height: 1.35;
+}
+.finish {
+  display: grid;
+  gap: 5px;
+}
+.finish__label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #8a909b;
+}
+.finish__options {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+}
+.finish__option {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border: 1px solid #e5e7ec;
+  border-radius: 8px;
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.finish__option:hover {
+  border-color: #b6c2d4;
+}
+.finish__option--active {
+  border-color: #2f6fed;
+  box-shadow: inset 0 0 0 1px #2f6fed;
+}
+.finish__swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid rgb(16 24 40 / 0.12);
+}
+.finish__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.finish__delta {
+  font-size: 11px;
+  color: #6b7280;
+  font-variant-numeric: tabular-nums;
+}
+.price {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin: 0;
+  padding-top: 10px;
+  border-top: 1px solid #eceef2;
+  font-size: 12px;
+  color: #6b7280;
+}
+.price strong {
+  font-size: 14px;
+  color: #111418;
+  font-variant-numeric: tabular-nums;
 }
 .fields {
   display: grid;

@@ -14,6 +14,7 @@ import { ConflictHighlighter } from './ConflictHighlighter';
 import { upwardSurfaceHeightMm } from './surface';
 import { RotationGizmo } from '../interaction/RotationGizmo';
 import { PlacementPreview } from '../scene/PlacementPreview';
+import { MaterialLibrary } from '../scene/MaterialLibrary';
 import type { Object3D } from 'three';
 import type { RegisteredInstance } from './SceneRegistry';
 import { AssetLoader } from '../loading/AssetLoader';
@@ -48,6 +49,8 @@ export class Viewer {
   readonly conflicts: ConflictHighlighter;
   readonly rotation: RotationGizmo;
   readonly preview: PlacementPreview;
+  /** Материалы тенанта для смены отделки */
+  readonly materials = new MaterialLibrary();
   readonly quality: QualityManager;
   readonly telemetry: Telemetry;
 
@@ -243,6 +246,7 @@ export class Viewer {
     this.conflicts.dispose();
     this.rotation.dispose();
     this.preview.dispose();
+    this.materials.dispose();
     this.environment.dispose();
     this.renderer.dispose();
     this.renderer.forceContextLoss();
