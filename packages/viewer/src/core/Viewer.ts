@@ -18,6 +18,7 @@ import { PlacementPreview } from '../scene/PlacementPreview';
 import { MaterialLibrary } from '../scene/MaterialLibrary';
 import { DimensionOverlay } from '../scene/DimensionOverlay';
 import { SwingOverlay } from '../scene/SwingOverlay';
+import { OpeningBuilder } from '../scene/OpeningBuilder';
 import type { Object3D } from 'three';
 import type { RegisteredInstance } from './SceneRegistry';
 import { AssetLoader } from '../loading/AssetLoader';
@@ -56,6 +57,8 @@ export class Viewer {
   readonly dimensions: DimensionOverlay;
   /** Зоны открывания дверей */
   readonly swings: SwingOverlay;
+  /** Двери и окна в проёмах */
+  readonly openings: OpeningBuilder;
   /** Выдвижные ящики загруженных моделей */
   readonly drawers = new DrawerController();
   /** Материалы тенанта для смены отделки */
@@ -105,6 +108,7 @@ export class Viewer {
     this.preview = new PlacementPreview(this.scene);
     this.dimensions = new DimensionOverlay(this.scene);
     this.swings = new SwingOverlay(this.scene);
+    this.openings = new OpeningBuilder(this.scene);
     this.telemetry = new Telemetry();
     this.quality = new QualityManager(this.renderer, this.telemetry, options.forceTier);
     // Загрузчик держит кэш моделей и зависит от бюджета видеопамяти
@@ -172,7 +176,7 @@ export class Viewer {
    * Проверяется раньше объектов каталога: подпись лежит поверх мебели,
    * и тап по видимой плашке обязан попасть именно в неё.
    */
-  pickDimension(ndc: Vector2): { wallId: string; clearLengthMm: number } | null {
+  pickDimension(ndc: Vector2): { id: string; lengthMm: number } | null {
     const targets = this.dimensions.targets;
     if (targets.length === 0 || !this.dimensions.visible) return null;
 
@@ -200,6 +204,24 @@ export class Viewer {
       // Попасть можно в любую деталь ящика — короб, фронт или ручку
       const owner = drawers.find((drawer) => isDescendant(hit.object, drawer));
       if (owner) return owner;
+    }
+    return null;
+  }
+
+  /**
+   * Изделие в проёме под экранной точкой.
+   *
+   * Проверяется отдельно от мебели: дверь не зарегистрирована в реестре
+   * сцены — она часть планировки, а не размещённый товар.
+   */
+  pickOpening(ndc: Vector2): string | null {
+    const targets = this.openings.targets;
+    if (targets.length === 0) return null;
+
+    this.raycaster.setFromCamera(ndc, this.camera);
+    for (const hit of this.raycaster.intersectObjects(targets, true)) {
+      const id = this.openings.resolve(hit.object);
+      if (id) return id;
     }
     return null;
   }
@@ -301,6 +323,7 @@ export class Viewer {
     this.preview.dispose();
     this.dimensions.dispose();
     this.swings.dispose();
+    this.openings.dispose();
     this.materials.dispose();
     this.environment.dispose();
     this.renderer.dispose();

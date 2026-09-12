@@ -18,6 +18,8 @@ const emit = defineEmits<{
   floorTap: [FloorPoint];
   floorDoubleTap: [];
   dimensionTap: [DimensionHit | null];
+  aim: [FloorPoint | null];
+  openingTap: [string | null];
 }>();
 
 const canvasRef = ref<HTMLCanvasElement | null>(null);
@@ -60,6 +62,8 @@ const {
     onFloorTap: (point) => emit('floorTap', point),
     onFloorDoubleTap: () => emit('floorDoubleTap'),
     onDimensionTap: (hit) => emit('dimensionTap', hit),
+    onAim: (point) => emit('aim', point),
+    onOpeningTap: (openingId) => emit('openingTap', openingId),
   },
 );
 

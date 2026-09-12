@@ -167,6 +167,32 @@ export const useSceneStore = defineStore('scene', () => {
     });
   }
 
+  /** Правка проёма: размеры, изделие, сторона навески. */
+  function updateOpening(openingId: string, patch: Partial<Opening>): void {
+    const [room] = doc.value.rooms;
+    if (!room) return;
+    commit({
+      ...doc.value,
+      rooms: [
+        {
+          ...room,
+          openings: room.openings.map((opening) =>
+            opening.id === openingId ? { ...opening, ...patch } : opening,
+          ),
+        },
+      ],
+    });
+  }
+
+  function removeOpening(openingId: string): void {
+    const [room] = doc.value.rooms;
+    if (!room) return;
+    commit({
+      ...doc.value,
+      rooms: [{ ...room, openings: room.openings.filter((o) => o.id !== openingId) }],
+    });
+  }
+
   function clearRooms(): void {
     commit({ ...doc.value, rooms: [] });
   }
@@ -202,6 +228,8 @@ export const useSceneStore = defineStore('scene', () => {
     setRoom,
     addWall,
     addOpening,
+    updateOpening,
+    removeOpening,
     clearRooms,
     undo,
     redo,

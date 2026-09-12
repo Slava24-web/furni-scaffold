@@ -1,7 +1,7 @@
 import { markRaw, onBeforeUnmount, shallowRef, watch, type ShallowRef } from 'vue';
 import { RoomBuilder, applyFinishes, type Viewer } from '@furni/viewer';
 import {
-  roomDimensions,
+  planDimensions,
   selectedFinish,
   swingZones,
   type CatalogProduct,
@@ -53,10 +53,13 @@ export function useSceneSync(viewer: ShallowRef<Viewer | null>): {
     room.build(doc.rooms);
     // Размерные линии пересобираются вместе со стенами: подпись обязана
     // показывать текущий размер, а не тот, что был до правки
-    v.dimensions.build(doc.rooms.flatMap((item) => roomDimensions(item)));
+    v.dimensions.build(doc.rooms.flatMap((item) => planDimensions(item)));
     // Зоны открывания дверей: пользователь должен видеть, куда нельзя
     // ставить мебель, а не узнавать об этом из сообщения о конфликте
     v.swings.build(doc.rooms.flatMap((item) => swingZones(item)));
+    // Двери и окна строятся после материалов тенанта: цвет изделия —
+    // та же отделка, что у мебели
+    v.openings.build(doc.rooms, v.materials);
     // Опорная сетка нужна на пустой сцене; в готовом помещении она
     // только спорит с полом
     v.environment.setGridVisible(room.isEmpty);

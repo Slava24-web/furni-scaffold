@@ -45,10 +45,10 @@ export interface FloorPoint {
   z: number;
 }
 
-/** Тап по размерной линии: стена, её текущий размер и место для поля ввода. */
+/** Тап по размерной линии: ключ подписи, её значение и место для поля ввода. */
 export interface DimensionHit {
-  wallId: string;
-  clearLengthMm: number;
+  id: string;
+  lengthMm: number;
   clientX: number;
   clientY: number;
 }
@@ -63,6 +63,10 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
   onFloorDoubleTap?: () => void;
   /** Тап по размерной линии; null — тап мимо неё, поле ввода пора закрыть. */
   onDimensionTap?: (hit: DimensionHit | null) => void;
+  /** Наведение на пол в режиме вставки проёма; null — указатель ушёл со сцены. */
+  onAim?: (point: FloorPoint | null) => void;
+  /** Тап по двери или окну; null — тап мимо них. */
+  onOpeningTap?: (openingId: string | null) => void;
 }) {
   const scene = useSceneStore();
   const catalog = useCatalogStore();
@@ -105,6 +109,10 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
 
     // Колесо мыши: на десктопе это основной способ зума
     target.addEventListener('wheel', onWheel, { passive: false });
+    // Наведение нужно только режимам вставки проёма: подсветка места
+    // обязана следовать за указателем ещё до нажатия
+    target.addEventListener('pointermove', onPointerMove);
+    target.addEventListener('pointerleave', onPointerLeave);
   }
 
   function refreshRect(): void {
@@ -112,6 +120,15 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     rect = element.getBoundingClientRect();
     camera?.setViewport(rect.width, rect.height);
     viewer.value?.invalidate();
+  }
+
+  function onPointerMove(event: PointerEvent): void {
+    if ((options.mode?.value ?? 'select') === 'select' || !options.onAim) return;
+    options.onAim(floorPointAt(new Vector2(event.clientX, event.clientY)));
+  }
+
+  function onPointerLeave(): void {
+    options.onAim?.(null);
   }
 
   function onWheel(event: WheelEvent): void {
@@ -413,6 +430,15 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
           dimension ? { ...dimension, clientX: e.point.x, clientY: e.point.y } : null,
         );
         if (dimension) break;
+
+        // Дверь и окно выбираются раньше мебели: они нарисованы в
+        // плоскости стены, и мебель у стены иначе перехватывала бы тап
+        const opening = v.pickOpening(toNdc(e.point));
+        options.onOpeningTap?.(opening);
+        if (opening) {
+          select(null);
+          break;
+        }
 
         const hit = v.pick(toNdc(e.point));
         // Ящик выдвигается тапом по уже выделенному изделию: первый тап
@@ -785,6 +811,8 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     if (rotationCommitTimer) clearTimeout(rotationCommitTimer);
     rotationCommitTimer = null;
     element?.removeEventListener('wheel', onWheel);
+    element?.removeEventListener('pointermove', onPointerMove);
+    element?.removeEventListener('pointerleave', onPointerLeave);
     resizeObserver?.disconnect();
     resizeObserver = null;
     gestures?.dispose();

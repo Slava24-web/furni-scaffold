@@ -1,15 +1,17 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import {
   createRectangularRoom,
+  defaultStyle,
   estimateScene,
   placementPriceCents,
-  projectOntoWall,
+  planDimensions,
+  planOpening,
+  resizeOpening,
   randomUUID,
   rectangularExtent,
   resizeRoomWall,
-  wallLengthMm,
   type CatalogProduct,
   type DeviceTier,
   type Opening,
@@ -22,6 +24,7 @@ import RoomToolbar from '../components/RoomToolbar.vue';
 import ObjectInspector from '../components/ObjectInspector.vue';
 import EstimatePanel from '../components/EstimatePanel.vue';
 import DimensionEditor from '../components/DimensionEditor.vue';
+import OpeningInspector from '../components/OpeningInspector.vue';
 import { conflictMessage } from '../lib/conflictMessage';
 import { useCatalogDrag } from '../composables/useCatalogDrag';
 import { useWallDrawing } from '../composables/useWallDrawing';
@@ -100,6 +103,40 @@ function finishDrawing(): void {
   mode.value = 'select';
 }
 
+/**
+ * Подсветка будущего проёма под указателем.
+ *
+ * Место считается той же функцией, что и вставка: подсветка обязана
+ * показывать ровно тот прямоугольник, который получится после тапа.
+ */
+function onAim(point: FloorPoint | null): void {
+  const viewer = canvas.value?.viewer;
+  const [room] = scene.doc.rooms;
+  const kind = mode.value === 'add-door' ? 'door' : mode.value === 'add-window' ? 'window' : null;
+
+  if (!viewer || !room || !point || !kind) {
+    viewer?.openings.previewAt(null, null, null);
+    viewer?.invalidate();
+    return;
+  }
+
+  const style = defaultStyle(kind);
+  const plan = planOpening(room, { x: point.x, y: point.z }, style.widthMm);
+  viewer.openings.previewAt(
+    room,
+    plan?.wall ?? null,
+    plan
+      ? {
+          offsetMm: plan.offsetMm,
+          widthMm: plan.widthMm,
+          heightMm: style.heightMm,
+          sillMm: style.sillHeightMm,
+        }
+      : null,
+  );
+  viewer.invalidate();
+}
+
 function onFloorTap(point: FloorPoint): void {
   if (mode.value === 'draw-wall') {
     if (drawing.addPoint(point)) mode.value = 'select';
@@ -119,33 +156,27 @@ function insertOpening(point: FloorPoint, kind: 'door' | 'window'): void {
   const [room] = scene.doc.rooms;
   if (!room) return;
 
-  let best: { wall: Wall; offsetMm: number; distanceMm: number } | null = null;
-  for (const wall of room.walls) {
-    const projection = projectOntoWall(wall, { x: point.x, y: point.z });
-    if (!best || projection.distanceMm < best.distanceMm) {
-      best = { wall, offsetMm: projection.offsetMm, distanceMm: projection.distanceMm };
-    }
-  }
-  if (!best) return;
+  // Размеры берутся у изделия, а не задаются здесь: проём и то, что
+  // в него встанет, обязаны совпадать с первого клика
+  const style = defaultStyle(kind);
+  const plan = planOpening(room, { x: point.x, y: point.z }, style.widthMm);
+  if (!plan) return;
 
-  const width = kind === 'door' ? 900 : 1400;
-  const maxOffset = Math.max(0, wallLengthMm(best.wall) - width);
-  const opening: Opening = {
+  canvas.value?.viewer?.openings.previewAt(null, null, null);
+  scene.addOpening({
     id: randomUUID(),
-    wallId: best.wall.id,
+    wallId: plan.wall.id,
     kind,
-    offset: Math.round(Math.min(maxOffset, Math.max(0, best.offsetMm - width / 2))),
-    width,
-    height: kind === 'door' ? 2100 : 1400,
-    sillHeight: kind === 'door' ? 0 : 800,
+    offset: plan.offsetMm,
+    width: plan.widthMm,
+    height: style.heightMm,
+    sillHeight: style.sillHeightMm,
     swingRadius: null,
     hinge: 'left',
     swingInward: true,
-    sku: null,
+    sku: style.code,
     options: {},
-  };
-
-  scene.addOpening(opening);
+  });
   mode.value = 'select';
 }
 
@@ -155,7 +186,7 @@ function insertOpening(point: FloorPoint, kind: 'door' | 'window'): void {
  * Координаты тапа переводятся в систему области сцены: поле ввода лежит
  * в ней, а жест приходит в клиентских координатах окна.
  */
-const editedDimension = ref<{ wallId: string; valueMm: number; x: number; y: number } | null>(null);
+const editedDimension = ref<{ id: string; valueMm: number; x: number; y: number } | null>(null);
 
 function onDimensionTap(hit: DimensionHit | null): void {
   const rect = sceneRect();
@@ -164,24 +195,32 @@ function onDimensionTap(hit: DimensionHit | null): void {
     return;
   }
   editedDimension.value = {
-    wallId: hit.wallId,
-    valueMm: hit.clearLengthMm,
+    id: hit.id,
+    valueMm: hit.lengthMm,
     x: hit.clientX - rect.left,
     y: hit.clientY - rect.top,
   };
 }
 
-function applyDimension(clearLengthMm: number): void {
+function applyDimension(valueMm: number): void {
   const edited = editedDimension.value;
   const [room] = scene.doc.rooms;
   editedDimension.value = null;
   if (!edited || !room) return;
 
-  const next = resizeRoomWall(room, edited.wallId, clearLengthMm);
+  const target = planDimensions(room).find((dimension) => dimension.id === edited.id)?.target;
+  if (!target) return;
+
+  const next =
+    target.kind === 'wall'
+      ? resizeRoomWall(room, target.wallId, valueMm)
+      : resizeOpening(room, target.openingId, valueMm);
   // Отвергнутый размер не должен попадать в историю отмен пустым шагом
   if (next === room) return;
 
   scene.setRoom(next);
+  // Ширина проёма кадрирование не меняет: помещение осталось прежним
+  if (target.kind === 'opening') return;
   // Кадрирование по новым габаритам: выросшая стена уезжает за край
   // экрана, и пользователь не видит результата своего же ввода
   const extent = rectangularExtent(next);
@@ -190,6 +229,56 @@ function applyDimension(clearLengthMm: number): void {
     { x: (extent.minX + extent.maxX) / 2, z: (extent.minZ + extent.maxZ) / 2 },
     Math.max(extent.maxX - extent.minX, extent.maxZ - extent.minZ) * 0.75,
   );
+}
+
+/** Выбранный проём: по нему рисуется панель свойств двери или окна. */
+const selectedOpeningId = ref<string | null>(null);
+
+const selectedOpening = computed(() => {
+  const id = selectedOpeningId.value;
+  return id ? scene.doc.rooms[0]?.openings.find((opening) => opening.id === id) : undefined;
+});
+
+/**
+ * Подсветка выбранного проёма.
+ *
+ * Тот же прямоугольник, что показывает будущее место: выделение должно
+ * читаться одинаково и до вставки, и после неё.
+ */
+watch([selectedOpening, () => canvas.value?.viewer], ([opening, viewer]) => {
+  if (!viewer) return;
+  const [room] = scene.doc.rooms;
+  const wall = room?.walls.find((candidate) => candidate.id === opening?.wallId);
+
+  viewer.openings.previewAt(
+    room ?? null,
+    wall ?? null,
+    opening
+      ? {
+          offsetMm: opening.offset,
+          widthMm: opening.width,
+          heightMm: opening.height,
+          sillMm: opening.sillHeight,
+        }
+      : null,
+  );
+  viewer.invalidate();
+});
+
+function onOpeningTap(openingId: string | null): void {
+  selectedOpeningId.value = openingId;
+}
+
+function updateOpening(patch: Partial<Opening>): void {
+  const id = selectedOpeningId.value;
+  if (id) scene.updateOpening(id, patch);
+}
+
+function removeOpening(): void {
+  const id = selectedOpeningId.value;
+  if (!id) return;
+  selectedOpeningId.value = null;
+  scene.removeOpening(id);
 }
 
 /** Есть ли помещение, размеры которого можно править. */
@@ -305,18 +394,27 @@ onBeforeUnmount(() => uninstallTestingApi());
           @floor-tap="onFloorTap"
           @floor-double-tap="finishDrawing"
           @dimension-tap="onDimensionTap"
+          @aim="onAim"
+          @opening-tap="onOpeningTap"
         />
         <DimensionEditor
           v-if="editedDimension"
-          :key="editedDimension.wallId"
+          :key="editedDimension.id"
           :value-mm="editedDimension.valueMm"
           :x="editedDimension.x"
           :y="editedDimension.y"
           @apply="applyDimension"
           @cancel="editedDimension = null"
         />
+        <OpeningInspector
+          v-if="selectedOpening"
+          :opening="selectedOpening"
+          :materials="catalog.materialByCode"
+          @update="updateOpening"
+          @remove="removeOpening"
+        />
         <ObjectInspector
-          v-if="selected"
+          v-else-if="selected"
           :placement="selected"
           :product="catalog.bySku.get(selected.sku)"
           :materials="catalog.materialByCode"

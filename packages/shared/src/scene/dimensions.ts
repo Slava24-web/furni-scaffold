@@ -23,7 +23,15 @@ export const MAX_ROOM_SIDE_MM = 30000;
 /** Допуск на совпадение углов и на выравнивание стены по оси. */
 const TOLERANCE_MM = 1;
 
+/** Что правит подпись: сторону помещения или ширину проёма. */
+export type DimensionTarget =
+  | { kind: 'wall'; wallId: string }
+  | { kind: 'opening'; openingId: string };
+
 export interface WallDimension {
+  /** Ключ подписи: по нему вьюер отдаёт обратно то, во что попал луч */
+  id: string;
+  target: DimensionTarget;
   wallId: string;
   /** Длина по осевой линии */
   axisLengthMm: number;
@@ -130,6 +138,8 @@ export function roomDimensions(room: Room, offsetMm = DIMENSION_OFFSET_MM): Wall
     const axis = wallAxis(wall);
 
     return {
+      id: `wall:${wall.id}`,
+      target: { kind: 'wall', wallId: wall.id },
       wallId: wall.id,
       axisLengthMm,
       clearLengthMm,
@@ -208,4 +218,92 @@ function clampOpenings(walls: readonly Wall[], openings: readonly Opening[]): Op
     const offset = Math.min(maxOffset, Math.max(0, opening.offset));
     return offset === opening.offset ? opening : { ...opening, offset };
   });
+}
+
+/** Отступ размерной линии проёма: ближе к стене, чем размер помещения. */
+export const OPENING_DIMENSION_OFFSET_MM = 90;
+
+/** Пределы ширины проёма. */
+export const MIN_OPENING_WIDTH_MM = 300;
+
+/**
+ * Размерные линии проёмов.
+ *
+ * Ширина двери и окна — такой же вводимый размер, как сторона комнаты:
+ * на глаз проём не поставить, а стандартные полотна идут фиксированным
+ * рядом. Линия лежит перед проёмом, ближе к стене, чем размер помещения,
+ * чтобы подписи не наезжали друг на друга.
+ */
+export function openingDimensions(
+  room: Room,
+  offsetMm = OPENING_DIMENSION_OFFSET_MM,
+): WallDimension[] {
+  const dimensions: WallDimension[] = [];
+
+  for (const opening of room.openings) {
+    const wall = room.walls.find((candidate) => candidate.id === opening.wallId);
+    if (!wall) continue;
+
+    const length = wallLengthMm(wall);
+    const from = Math.max(0, Math.min(length, opening.offset));
+    const to = Math.max(0, Math.min(length, opening.offset + opening.width));
+    if (to <= from) continue;
+
+    const normal = innerNormal(room, wall);
+    const shift = wall.thickness / 2 + offsetMm;
+    const at = (alongMm: number): Vec2 => {
+      const base = pointAlongWall(wall, alongMm);
+      return { x: base.x + normal.x * shift, y: base.y + normal.y * shift };
+    };
+
+    const start = at(from);
+    const end = at(to);
+    dimensions.push({
+      id: `opening:${opening.id}`,
+      target: { kind: 'opening', openingId: opening.id },
+      wallId: wall.id,
+      axisLengthMm: to - from,
+      clearLengthMm: Math.round(to - from),
+      start,
+      end,
+      labelAt: { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 },
+      axis: wallAxis(wall),
+      editable: true,
+    });
+  }
+
+  return dimensions;
+}
+
+/** Все размерные линии плана: стороны помещения и ширины проёмов. */
+export function planDimensions(room: Room): WallDimension[] {
+  return [...roomDimensions(room), ...openingDimensions(room)];
+}
+
+/**
+ * Новое помещение с изменённой шириной проёма.
+ *
+ * Проём растягивается от своего начала и упирается в торец стены:
+ * вылезший за него проём молча исчезает из геометрии, потому что
+ * разбиение на панели отбрасывает проёмы вне стены.
+ */
+export function resizeOpening(room: Room, openingId: string, widthMm: number): Room {
+  const opening = room.openings.find((candidate) => candidate.id === openingId);
+  const wall = room.walls.find((candidate) => candidate.id === opening?.wallId);
+  if (!opening || !wall) return room;
+
+  const target = Math.round(widthMm);
+  if (!Number.isFinite(target) || target < MIN_OPENING_WIDTH_MM) return room;
+
+  const length = Math.round(wallLengthMm(wall));
+  const width = Math.min(target, length);
+  const offset = Math.min(opening.offset, Math.max(0, length - width));
+  if (width === opening.width && offset === opening.offset) return room;
+
+  return {
+    ...room,
+    openings: room.openings.map((candidate) =>
+      candidate.id === openingId ? { ...candidate, width, offset } : candidate,
+    ),
+  };
 }

@@ -52,8 +52,8 @@ export type DimensionLabelFactory = (text: string, editable: boolean) => Texture
 
 interface DimensionLabel {
   sprite: Sprite;
-  wallId: string;
-  clearLengthMm: number;
+  id: string;
+  lengthMm: number;
   editable: boolean;
 }
 
@@ -121,13 +121,13 @@ export class DimensionOverlay {
     sprite.scale.set(LABEL_WIDTH_MM / MM, LABEL_HEIGHT_MM / MM, 1);
     sprite.position.set(dimension.labelAt.x / MM, HEIGHT_MM / MM, dimension.labelAt.y / MM);
     sprite.renderOrder = RENDER_ORDER + 1;
-    sprite.name = `dimension:${dimension.wallId}`;
+    sprite.name = `dimension:${dimension.id}`;
     this.root.add(sprite);
 
     this.labels.push({
       sprite,
-      wallId: dimension.wallId,
-      clearLengthMm: dimension.clearLengthMm,
+      id: dimension.id,
+      lengthMm: dimension.clearLengthMm,
       editable: dimension.editable,
     });
   }
@@ -141,12 +141,18 @@ export class DimensionOverlay {
     return this.labels.filter((label) => label.editable).map((label) => label.sprite);
   }
 
-  /** Размер, которому принадлежит объект под лучом. */
-  resolve(object: Object3D): { wallId: string; clearLengthMm: number } | null {
+  /**
+   * Размер, которому принадлежит объект под лучом.
+   *
+   * Отдаётся только ключ подписи и число: что именно правится — сторона
+   * помещения или ширина проёма — решает страница, вьюер о документе
+   * ничего не знает.
+   */
+  resolve(object: Object3D): { id: string; lengthMm: number } | null {
     const label = this.labels.find(
       (candidate) => candidate.editable && candidate.sprite === object,
     );
-    return label ? { wallId: label.wallId, clearLengthMm: label.clearLengthMm } : null;
+    return label ? { id: label.id, lengthMm: label.lengthMm } : null;
   }
 
   setVisible(visible: boolean): void {

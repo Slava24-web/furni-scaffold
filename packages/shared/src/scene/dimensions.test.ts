@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   MAX_ROOM_SIDE_MM,
+  openingDimensions,
+  planDimensions,
+  resizeOpening,
   MIN_ROOM_SIDE_MM,
   rectangularExtent,
   resizeRoomWall,
@@ -157,5 +160,81 @@ describe('ввод размера помещения', () => {
     const moved = next.openings[0]!;
 
     expect(moved.offset + moved.width).toBeLessThanOrEqual(Math.round(wallLengthMm(wall)));
+  });
+});
+
+describe('размеры проёмов', () => {
+  const withDoor = (): Room => {
+    const value = room();
+    return {
+      ...value,
+      openings: [
+        {
+          id: randomUUID(),
+          wallId: value.walls[0]!.id,
+          kind: 'door',
+          offset: 800,
+          width: 900,
+          height: 2000,
+          sillHeight: 0,
+          swingRadius: null,
+          hinge: 'left',
+          swingInward: true,
+          sku: 'door-flush',
+          options: {},
+        },
+      ],
+    };
+  };
+
+  it('подпись равна ширине проёма', () => {
+    expect(openingDimensions(withDoor())[0]?.clearLengthMm).toBe(900);
+  });
+
+  it('проём на несуществующей стене подписи не получает', () => {
+    const value = withDoor();
+    const broken: Room = {
+      ...value,
+      openings: [{ ...value.openings[0]!, wallId: randomUUID() }],
+    };
+    expect(openingDimensions(broken)).toHaveLength(0);
+  });
+
+  it('линия проёма лежит ближе к стене, чем размер помещения', () => {
+    const value = withDoor();
+    const wallDim = roomDimensions(value).find((d) => d.wallId === value.walls[0]!.id)!;
+    const openingDim = openingDimensions(value)[0]!;
+
+    // Стена идёт вдоль X: «ближе к стене» значит большее по модулю Z
+    expect(Math.abs(openingDim.labelAt.y)).toBeGreaterThan(Math.abs(wallDim.labelAt.y));
+  });
+
+  it('план собирает размеры и сторон, и проёмов', () => {
+    expect(planDimensions(withDoor())).toHaveLength(5);
+  });
+
+  it('ввод меняет ширину проёма', () => {
+    const value = withDoor();
+    const next = resizeOpening(value, value.openings[0]!.id, 1200);
+    expect(next.openings[0]?.width).toBe(1200);
+  });
+
+  it('проём шире стены ужимается до её длины и прижимается к торцу', () => {
+    const value = withDoor();
+    const next = resizeOpening(value, value.openings[0]!.id, 99000);
+    const wall = next.walls.find((w) => w.id === next.openings[0]!.wallId)!;
+
+    expect(next.openings[0]!.width).toBe(Math.round(wallLengthMm(wall)));
+    expect(next.openings[0]!.offset).toBe(0);
+  });
+
+  it('слишком узкий проём отвергается', () => {
+    const value = withDoor();
+    expect(resizeOpening(value, value.openings[0]!.id, 100)).toBe(value);
+  });
+
+  it('неизвестный проём ничего не меняет', () => {
+    const value = withDoor();
+    expect(resizeOpening(value, randomUUID(), 1000)).toBe(value);
   });
 });

@@ -76,8 +76,8 @@ describe('DimensionOverlay', () => {
     const hit = raycaster.intersectObjects(view.targets, false)[0];
 
     expect(hit && view.resolve(hit.object)).toEqual({
-      wallId: first!.wallId,
-      clearLengthMm: first!.clearLengthMm,
+      id: first!.id,
+      lengthMm: first!.clearLengthMm,
     });
   });
 
