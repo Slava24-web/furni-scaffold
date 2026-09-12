@@ -16,6 +16,7 @@ const emit = defineEmits<{
   clearRooms: [];
   undo: [];
   redo: [];
+  showCut: [];
 }>();
 
 const widthMm = ref(4000);
@@ -71,6 +72,7 @@ function toggleMode(mode: PlannerMode): void {
         Окно
       </button>
       <button type="button" @click="emit('clearRooms')">Убрать планировку</button>
+      <button type="button" @click="emit('showCut')">Раскрой</button>
     </div>
 
     <div class="toolbar__group toolbar__group--end">

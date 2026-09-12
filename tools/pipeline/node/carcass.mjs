@@ -8,7 +8,7 @@
  *
  * Все размеры в миллиметрах, origin по низу корпуса (CLAUDE.md).
  */
-import { segmentedBox, translate } from './geometry.mjs';
+import { markPanel, segmentedBox, translate } from './geometry.mjs';
 
 /** Толщина ЛДСП и задней стенки из ХДФ. */
 export const PANEL_THICKNESS = 18;
@@ -37,30 +37,56 @@ export function carcassPanels(widthMm, heightMm, depthMm, options = {}) {
   // Боковины во всю высоту: на них опираются дно и крышка
   for (const side of [-1, 1]) {
     parts.push(
-      at(
-        segmentedBox(thickness, heightMm, depthMm, 1),
-        (side * (widthMm - thickness)) / 2,
-        heightMm / 2,
-        0,
+      markPanel(
+        at(
+          segmentedBox(thickness, heightMm, depthMm, 1),
+          (side * (widthMm - thickness)) / 2,
+          heightMm / 2,
+          0,
+        ),
+        'Боковина',
+        depthMm,
+        heightMm,
+        thickness,
       ),
     );
   }
 
-  parts.push(at(segmentedBox(innerWidth, thickness, depthMm, 1), 0, thickness / 2, 0));
+  parts.push(
+    markPanel(
+      at(segmentedBox(innerWidth, thickness, depthMm, 1), 0, thickness / 2, 0),
+      'Дно',
+      innerWidth,
+      depthMm,
+      thickness,
+    ),
+  );
 
   if (!openTop) {
     parts.push(
-      at(segmentedBox(innerWidth, thickness, depthMm, 1), 0, heightMm - thickness / 2, 0),
+      markPanel(
+        at(segmentedBox(innerWidth, thickness, depthMm, 1), 0, heightMm - thickness / 2, 0),
+        'Крышка',
+        innerWidth,
+        depthMm,
+        thickness,
+      ),
     );
   }
 
   if (!openBack) {
     parts.push(
-      at(
-        segmentedBox(innerWidth, heightMm - thickness * 2, BACK_THICKNESS, 1),
-        0,
-        heightMm / 2,
-        -(depthMm - BACK_THICKNESS) / 2,
+      markPanel(
+        at(
+          segmentedBox(innerWidth, heightMm - thickness * 2, BACK_THICKNESS, 1),
+          0,
+          heightMm / 2,
+          -(depthMm - BACK_THICKNESS) / 2,
+        ),
+        'Задняя стенка',
+        innerWidth,
+        heightMm - thickness * 2,
+        BACK_THICKNESS,
       ),
     );
   }
@@ -69,7 +95,13 @@ export function carcassPanels(widthMm, heightMm, depthMm, options = {}) {
   for (let index = 1; index <= shelves; index++) {
     const shelfY = (heightMm * index) / (shelves + 1);
     parts.push(
-      at(segmentedBox(innerWidth, thickness, depthMm - 30, 1), 0, shelfY, 12),
+      markPanel(
+        at(segmentedBox(innerWidth, thickness, depthMm - 30, 1), 0, shelfY, 12),
+        'Полка',
+        innerWidth,
+        depthMm - 30,
+        thickness,
+      ),
     );
   }
 
@@ -90,11 +122,17 @@ export function openBoxPanels(widthMm, heightMm, depthMm, options = {}) {
 
   // Задний борт такой же, как боковины: у ящика он несущий
   parts.push(
-    translate(
-      segmentedBox(widthMm - thickness * 2, heightMm, thickness, 1),
-      0,
-      bottomMm + heightMm / 2,
-      -(depthMm - thickness) / 2,
+    markPanel(
+      translate(
+        segmentedBox(widthMm - thickness * 2, heightMm, thickness, 1),
+        0,
+        bottomMm + heightMm / 2,
+        -(depthMm - thickness) / 2,
+      ),
+      'Задний борт ящика',
+      widthMm - thickness * 2,
+      heightMm,
+      thickness,
     ),
   );
 

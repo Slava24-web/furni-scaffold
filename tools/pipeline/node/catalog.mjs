@@ -424,6 +424,28 @@ export function buildProductGeometry(product) {
 }
 
 /**
+ * Листовые детали изделия для карты раскроя.
+ *
+ * Собираются ДО слияния по материалам: после него отдельных деталей уже
+ * нет. Метку ставит тот, кто деталь построил, — ручки, ножки и стекло
+ * её не несут и в раскрой не попадают.
+ */
+export function buildProductPanels(product) {
+  const panels = [];
+  const collect = (parts) => {
+    for (const [material, pieces] of Object.entries(parts)) {
+      for (const piece of pieces) {
+        if (piece.panel) panels.push({ material, ...piece.panel });
+      }
+    }
+  };
+
+  collect(product.build());
+  for (const drawer of product.drawers?.() ?? []) collect(drawer.parts);
+  return panels;
+}
+
+/**
  * Подвижные ящики изделия.
  *
  * Каждый ящик уезжает в GLB отдельным узлом: слить его с корпусом

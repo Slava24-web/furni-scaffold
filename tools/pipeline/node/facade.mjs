@@ -9,7 +9,7 @@
  *
  * Все размеры в миллиметрах, деталь строится вокруг переданного центра.
  */
-import { roundedBox, segmentedBox, translate } from './geometry.mjs';
+import { markPanel, roundedBox, segmentedBox, translate } from './geometry.mjs';
 
 /** Ширина обвязки рамки. */
 export const FRAME_WIDTH = 68;
@@ -30,11 +30,14 @@ export const MIN_FRAMED_HEIGHT = FRAME_WIDTH * 3;
  */
 export function flatFacade(widthMm, heightMm, thicknessMm, centre) {
   return [
-    translate(
-      roundedBox(widthMm, heightMm, thicknessMm, 3, 3),
-      centre.x,
-      centre.y,
-      centre.z,
+    markPanel(
+      translate(roundedBox(widthMm, heightMm, thicknessMm, 3, 3), centre.x, centre.y, centre.z),
+      'Фасад',
+      widthMm,
+      heightMm,
+      thicknessMm,
+      // У фасада направленный рисунок: при раскрое его не повернуть
+      { grain: true },
     ),
   ];
 }
@@ -86,5 +89,8 @@ export function panelFacade(widthMm, heightMm, thicknessMm, centre) {
     ),
   );
 
+  // Заказывают фасад целиком, а не пятью брусками: метка раскроя
+  // ставится на одну деталь и несёт габарит всего фасада
+  markPanel(parts[0], 'Фасад', widthMm, heightMm, thicknessMm, { grain: true });
   return parts;
 }

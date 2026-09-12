@@ -24,6 +24,7 @@ import RoomToolbar from '../components/RoomToolbar.vue';
 import ObjectInspector from '../components/ObjectInspector.vue';
 import EstimatePanel from '../components/EstimatePanel.vue';
 import FloorPanel from '../components/FloorPanel.vue';
+import CutPlanView from '../components/CutPlanView.vue';
 import DimensionEditor from '../components/DimensionEditor.vue';
 import OpeningInspector from '../components/OpeningInspector.vue';
 import { conflictMessage } from '../lib/conflictMessage';
@@ -39,6 +40,8 @@ const scene = useSceneStore();
 const catalog = useCatalogStore();
 const canvas = ref<InstanceType<typeof SceneCanvas> | null>(null);
 const mode = ref<PlannerMode>('select');
+/** Карта раскроя поверх сцены: отдельная страница увела бы от планировки. */
+const cutOpen = ref(false);
 
 const TIERS: readonly DeviceTier[] = ['low', 'mid', 'high', 'desktop'];
 
@@ -379,6 +382,15 @@ onBeforeUnmount(() => uninstallTestingApi());
       @clear-rooms="scene.clearRooms()"
       @undo="scene.undo()"
       @redo="scene.redo()"
+      @show-cut="cutOpen = true"
+    />
+
+    <CutPlanView
+      v-if="cutOpen"
+      :placements="scene.doc.placements"
+      :products="catalog.bySku"
+      :materials="catalog.materialByCode"
+      @close="cutOpen = false"
     />
 
     <div class="planner__body">

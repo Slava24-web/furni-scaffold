@@ -34,6 +34,23 @@ export const CatalogMaterialSchema = z.object({
 });
 
 /**
+ * Листовая деталь изделия: из таких собирается карта раскроя.
+ *
+ * Толщина отделена от габарита: пилят из плиты своей толщины, и
+ * шестимиллиметровая задняя стенка не ляжет на тот же лист, что
+ * восемнадцатимиллиметровая боковина.
+ */
+export const PanelSpecSchema = z.object({
+  name: z.string().min(1),
+  material: z.string().min(1),
+  widthMm: z.number().int().positive(),
+  heightMm: z.number().int().positive(),
+  thicknessMm: z.number().int().positive(),
+  /** Направленный рисунок: такую деталь при раскрое не повернуть */
+  grain: z.boolean().default(false),
+});
+
+/**
  * Слот отделки: какой материал модели можно подменить и на что.
  *
  * `slotMaterial` — имя материала внутри GLB. Пайплайн сохраняет имена
@@ -84,6 +101,8 @@ export const CatalogProductSchema = z.object({
    * иначе тумбу нельзя открыть, а узнаётся это уже на монтаже.
    */
   drawerTravelMm: z.number().int().min(0).default(0),
+  /** Листовые детали изделия. Пусто — изделие не пилят из плиты */
+  panels: z.array(PanelSpecSchema).default([]),
   /** Шаблон с плейсхолдером {lod} */
   urlTemplate: z.string().min(1),
   /** Превью для панели каталога. Пусто — карточка рисуется без картинки */
@@ -127,6 +146,7 @@ export type CatalogProduct = z.infer<typeof CatalogProductSchema>;
 export type CatalogMaterial = z.infer<typeof CatalogMaterialSchema>;
 export type FinishSlot = z.infer<typeof FinishSlotSchema>;
 export type FloorFinish = z.infer<typeof FloorFinishSchema>;
+export type PanelSpec = z.infer<typeof PanelSpecSchema>;
 
 /** Группировка покрытий по типу: в магазине их показывают так же. */
 export function groupFloorsByKind(

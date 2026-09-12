@@ -10,6 +10,7 @@ export * from './scene/swing';
 export * from './scene/drawerZone';
 export * from './catalog/schema';
 export * from './catalog/estimate';
+export * from './cut/plan';
 export { randomUUID, deterministicUuid } from './scene/uuid';
 export * from './rules/dsl';
 export * from './rules/evaluate';

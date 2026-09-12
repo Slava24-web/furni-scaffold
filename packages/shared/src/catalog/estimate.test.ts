@@ -40,6 +40,7 @@ const product = (over: Partial<CatalogProduct> = {}): CatalogProduct => ({
   materials: ['oak'],
   drawerCount: 0,
   drawerTravelMm: 0,
+  panels: [],
   urlTemplate: '/x/lod{lod}.glb',
   lods: [{ lod: 0, bytes: 1, triangles: 1 }],
   finishes: [facadeSlot],

@@ -20,6 +20,7 @@ import {
   TEST_TENANT,
   buildProductDrawers,
   buildProductGeometry,
+  buildProductPanels,
   finishesFor,
 } from './catalog.mjs';
 import { boundsMm, triangleCount } from './geometry.mjs';
@@ -101,6 +102,9 @@ async function main() {
   for (const product of PRODUCTS) {
     const groups = buildProductGeometry(product);
     const drawers = buildProductDrawers(product);
+    // Листовые детали для карты раскроя: только то, что действительно
+    // пилят из плиты, — ручки, ножки и стекло сюда не попадают
+    const panels = buildProductPanels(product);
     // Ящики в закрытом положении — часть изделия: и габарит, и вес
     // геометрии считаются вместе с ними
     const allGroups = [...groups, ...drawers.flatMap((drawer) => drawer.groups)];
@@ -157,6 +161,8 @@ async function main() {
       materials: [...new Set(allGroups.map((g) => g.material))],
       /** Слоты отделки: какие материалы модели можно подменить */
       finishes: finishesFor(allGroups.map((g) => g.material)),
+      /** Листовые детали изделия: из них собирается карта раскроя */
+      panels,
       /** Сколько ящиков можно выдвинуть */
       drawerCount: drawers.length,
       /**
