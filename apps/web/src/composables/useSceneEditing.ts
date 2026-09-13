@@ -131,6 +131,8 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
   let dragEnv: ConflictEnvironment | null = null;
   let dragObstacles: Box[] = [];
   let dragBounds: RoomBoundsMm | null = null;
+  /** Размещение под жестом: см. placementOf. */
+  let dragPlacement: Placement | undefined;
 
   // -------------------------------------------------------------------
   // Подключение к канвасу
@@ -231,9 +233,23 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     v.invalidate();
   }
 
+  /**
+   * Размещение по идентификатору.
+   *
+   * За один кадр перетаскивания оно нужно трижды — самому движению,
+   * габариту и проверке конфликтов, — а поиск по документу это линейный
+   * обход сцены. На время жеста размещение не меняется (CLAUDE.md,
+   * правило 3), поэтому берётся из снимка.
+   */
+  function placementOf(instanceId: string | null): Placement | undefined {
+    if (!instanceId) return undefined;
+    if (dragPlacement?.instanceId === instanceId) return dragPlacement;
+    return scene.doc.placements.find((p) => p.instanceId === instanceId);
+  }
+
   /** Размещение выделенного объекта из документа сцены. */
   function selectedPlacement(): Placement | undefined {
-    return scene.doc.placements.find((p) => p.instanceId === selectedId.value);
+    return placementOf(selectedId.value);
   }
 
   /** Открыть или закрыть все дверцы выделенного изделия. */
@@ -251,7 +267,7 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
   // -------------------------------------------------------------------
 
   function documentBox(instanceId: string): Box | null {
-    const placement = scene.doc.placements.find((p) => p.instanceId === instanceId);
+    const placement = placementOf(instanceId);
     return placement ? boxOf(placement, catalog.bySku) : null;
   }
 
@@ -259,7 +275,7 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
   function liveBox(instanceId: string): Box | undefined {
     const v = viewer.value;
     const instance = v?.registry.get(instanceId);
-    const placement = scene.doc.placements.find((p) => p.instanceId === instanceId);
+    const placement = placementOf(instanceId);
     const product = placement && catalog.bySku.get(placement.sku);
     if (!instance || !product) return undefined;
 
@@ -293,7 +309,7 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     }
 
     const env = subject && dragEnv ? dragEnv : documentEnvironment(id);
-    const placement = scene.doc.placements.find((p) => p.instanceId === id);
+    const placement = placementOf(id);
     // Зона выдвижения считается по тому же габариту, что и проверка:
     // во время перетаскивания это позиция под указателем, а не в документе
     const own = placement
@@ -355,6 +371,7 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
 
       case 'dragEnd':
         if (e.onSelection && selectedId.value) commitSelectedPosition();
+        dragPlacement = undefined;
         dragKind = 'move';
         isSnapping.value = false;
         break;
@@ -450,6 +467,7 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     projector.refresh();
     captureGrabOffset(grabPoint);
 
+    dragPlacement = scene.doc.placements.find((p) => p.instanceId === selectedId.value);
     const env = documentEnvironment(exceptId);
     dragEnv = env;
     dragObstacles = env.neighbours.map((entry) => entry.box);
@@ -634,6 +652,7 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     if (rotationCommitTimer) clearTimeout(rotationCommitTimer);
     rotationCommitTimer = setTimeout(() => {
       rotationCommitTimer = null;
+      dragPlacement = undefined;
       commitSelectedPosition();
     }, 220);
   }
@@ -739,8 +758,17 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
   }
 
   // Вне жеста конфликты пересчитываются по документу: так они верны
-  // после отмены, загрузки сцены и удаления соседа
-  watch([selectedId, () => scene.doc], () => updateConflicts(), { immediate: true });
+  // после отмены, загрузки сцены и удаления соседа. Снимок размещения
+  // при этом сбрасывается: документ изменился, и держаться за старый
+  // объект нельзя
+  watch(
+    [selectedId, () => scene.doc],
+    () => {
+      dragPlacement = undefined;
+      updateConflicts();
+    },
+    { immediate: true },
+  );
 
   return {
     selectedId,

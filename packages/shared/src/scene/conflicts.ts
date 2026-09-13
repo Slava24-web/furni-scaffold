@@ -85,9 +85,14 @@ export function findConflicts(
     if (boxesOverlap(subject, other.box, toleranceMm)) objectIds.push(other.id);
   }
 
+  // Габарит стены считается один раз на вызов: он нужен и здесь,
+  // и ниже для зоны выдвижения, а проверка идёт на каждое движение
+  // указателя во время перетаскивания
+  const wallBoxes = walls.map((wall) => wallToBox(wall));
+
   const wallIds: string[] = [];
-  for (const wall of walls) {
-    if (boxesOverlap(subject, wallToBox(wall), toleranceMm)) wallIds.push(wall.id);
+  for (let i = 0; i < walls.length; i++) {
+    if (boxesOverlap(subject, wallBoxes[i]!, toleranceMm)) wallIds.push(walls[i]!.id);
   }
 
   const outsideRoom = isClosedContour(walls) && !isInsideContour(subject.centre, walls);
@@ -107,7 +112,7 @@ export function findConflicts(
     own !== undefined &&
     own !== null &&
     (others.some((other) => boxesOverlap(own, other.box, toleranceMm)) ||
-      walls.some((wall) => boxesOverlap(own, wallToBox(wall), toleranceMm)));
+      wallBoxes.some((wallBox) => boxesOverlap(own, wallBox, toleranceMm)));
 
   return { objectIds, wallIds, outsideRoom, openingIds, blockedDrawerIds, ownDrawersBlocked };
 }
