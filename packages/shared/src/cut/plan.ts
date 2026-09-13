@@ -368,10 +368,6 @@ function newSheet(sample: CutPart, sheets: readonly SheetLayout[]): SheetLayout 
   };
 }
 
-function place(sheet: SheetLayout, item: PlacedPart, xMm: number, yMm: number): void {
-  sheet.parts.push({ ...item, xMm, yMm });
-}
-
 function finish(sheet: SheetLayout, usableArea: number): void {
   const used = sheet.parts.reduce((sum, item) => sum + item.widthMm * item.heightMm, 0);
   sheet.usage = usableArea === 0 ? 0 : used / usableArea;

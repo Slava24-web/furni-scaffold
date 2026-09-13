@@ -66,10 +66,6 @@ function facade(widthMm, heightMm, centreYMm, frontZMm) {
   });
 }
 
-function roundedBoxAt(w, h, d, x, y, z, radius = 3, segments = 3) {
-  return translate(roundedBox(w, h, d, radius, segments), x, y, z);
-}
-
 /**
  * Корпус шкафа из панелей: боковины, дно, крышка, задняя стенка и полки.
  * Сплошной брусок читался снаружи как монолит и не имел толщины стенок.
@@ -185,9 +181,6 @@ function wallCabinetDoor(widthMm, heightMm) {
 /** Пенал: колонна во всю высоту с двумя фасадами. */
 function tallCabinet(widthMm) {
   const height = 2140;
-  const facadeZ = BASE_DEPTH / 2 + FACADE_THICKNESS / 2;
-  const lower = 1300;
-  const upper = height - lower - FACADE_GAP * 3;
 
   return {
     // Пенал высокий: полок больше

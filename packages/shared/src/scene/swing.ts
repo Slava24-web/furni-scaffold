@@ -1,6 +1,6 @@
-import type { Opening, Room, Wall } from './schema';
+import type { Opening, Room } from './schema';
 import { innerNormal, pointAlongWall, wallDirection, wallLengthMm, type Vec2 } from './walls';
-import type { Box } from './collision';
+import { boxCorners, insideBox, type Box } from './box';
 
 /**
  * Зоны открывания дверей.
@@ -158,35 +158,4 @@ export function swingBlocked(zone: SwingZone, box: Box): boolean {
 /** Идентификаторы проёмов, открыванию которых мешает габарит. */
 export function blockedSwings(zones: readonly SwingZone[], box: Box): string[] {
   return zones.filter((zone) => swingBlocked(zone, box)).map((zone) => zone.openingId);
-}
-
-/** Углы габарита в плане с учётом поворота. */
-function boxCorners(box: Box): Vec2[] {
-  const angle = (box.rotationDeg * Math.PI) / 180;
-  const cos = Math.cos(angle);
-  const sin = Math.sin(angle);
-
-  return [
-    [-box.halfWidthMm, -box.halfDepthMm],
-    [box.halfWidthMm, -box.halfDepthMm],
-    [box.halfWidthMm, box.halfDepthMm],
-    [-box.halfWidthMm, box.halfDepthMm],
-  ].map(([x, z]) => ({
-    x: box.centre.x + x! * cos - z! * sin,
-    y: box.centre.y + x! * sin + z! * cos,
-  }));
-}
-
-/** Лежит ли точка плана внутри габарита. */
-function insideBox(box: Box, point: Vec2): boolean {
-  const angle = (box.rotationDeg * Math.PI) / 180;
-  const cos = Math.cos(angle);
-  const sin = Math.sin(angle);
-  const dx = point.x - box.centre.x;
-  const dz = point.y - box.centre.y;
-
-  // Поворот в локальные оси габарита: там проверка сводится к сравнению
-  const localX = dx * cos + dz * sin;
-  const localZ = -dx * sin + dz * cos;
-  return Math.abs(localX) <= box.halfWidthMm && Math.abs(localZ) <= box.halfDepthMm;
 }

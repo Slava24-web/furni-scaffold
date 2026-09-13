@@ -11,21 +11,16 @@ import {
 } from '@furni/viewer';
 import {
   EMPTY_CONFLICTS,
-  clampToRoom,
   placementProductSize,
-  resolveOverlaps,
   roomBounds,
   findConflicts,
   groupIntoChains,
   hasConflicts,
   innerNormal,
   normalizeAngleDeg,
-  placementBox,
   planAngleDeg,
   drawerZone,
   restingHeightMm,
-  supportTopMm,
-  swingZones,
   type Box,
   type CatalogProduct,
   type ConflictReport,
@@ -36,6 +31,17 @@ import {
 } from '@furni/shared';
 import { useCatalogStore } from '../stores/catalog';
 import { useSceneStore } from '../stores/scene';
+import {
+  allSwings as swingsOf,
+  allWalls as wallsOf,
+  boxOf,
+  confine,
+  drawerZoneOf,
+  neighbourBoxes,
+  neighbourDrawerZones as drawerZonesOf,
+} from '../lib/sceneBoxes';
+
+/** Габариты и стены сцены считаются в lib/sceneBoxes: там они чистые. */
 
 /**
  * Связка жестов, камеры, выделения и снаппинга.
@@ -188,6 +194,17 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     v.invalidate();
   }
 
+  const allWalls = (): Wall[] => wallsOf(scene.doc.rooms);
+  const allSwings = (): SwingZone[] => swingsOf(scene.doc.rooms);
+  const otherBoxes = (exceptId: string | null) =>
+    neighbourBoxes(scene.doc.placements, catalog.bySku, exceptId).map((entry) => ({
+      id: entry.instanceId,
+      box: entry.box,
+    }));
+  const neighbourDrawerZones = (exceptId: string | null) =>
+    drawerZonesOf(scene.doc.placements, catalog.bySku, exceptId);
+  const zoneOf = (placement: Placement) => drawerZoneOf(placement, catalog.bySku);
+
   /** Размещение выделенного объекта из документа сцены. */
   function selectedPlacement(): Placement | undefined {
     return scene.doc.placements.find((p) => p.instanceId === selectedId.value);
@@ -201,95 +218,6 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
 
     v.doors.setAll(instance.root, open);
     v.invalidate();
-  }
-
-  /** Все стены документа одним списком. */
-  function allWalls(): Wall[] {
-    return scene.doc.rooms.flatMap((room) => room.walls);
-  }
-
-  /** Зоны открывания всех дверей документа. */
-  function allSwings(): SwingZone[] {
-    return scene.doc.rooms.flatMap((room) => swingZones(room));
-  }
-
-  /**
-   * Позиция, в которую объект действительно можно поставить.
-   *
-   * Сначала объект выталкивается из соседей, потом прижимается к стенам,
-   * и так дважды: выталкивание могло увести его за стену, а прижатие —
-   * обратно в соседа. Двух проходов хватает на обычную расстановку, а
-   * бесконечный поиск в углу между тремя модулями стоил бы кадра.
-   *
-   * Пересечение по высоте обязательно для выталкивания, поэтому
-   * постановка НА другой объект остаётся разрешённой: мойку кладут на
-   * столешницу, а не рядом с ней.
-   */
-  function confine(
-    position: { x: number; y: number },
-    options: {
-      halfWidthMm: number;
-      halfDepthMm: number;
-      rotationDeg: number;
-      bottomMm: number;
-      topMm: number;
-      obstacles: readonly Box[];
-      bounds: RoomBoundsMm | null;
-    },
-  ): { x: number; y: number } {
-    const footprint = {
-      halfWidthMm: options.halfWidthMm,
-      halfDepthMm: options.halfDepthMm,
-      rotationDeg: options.rotationDeg,
-    };
-
-    let centre = clampToRoom(position, footprint, options.bounds);
-    for (let pass = 0; pass < 2; pass++) {
-      const box: Box = {
-        centre,
-        halfWidthMm: options.halfWidthMm,
-        halfDepthMm: options.halfDepthMm,
-        rotationDeg: options.rotationDeg,
-        bottomMm: options.bottomMm,
-        topMm: options.topMm,
-      };
-      const pushed = resolveOverlaps(box, options.obstacles);
-      centre = clampToRoom(pushed, footprint, options.bounds);
-    }
-
-    return centre;
-  }
-
-  /** Зона выдвижения ящиков одного размещения. Null — ящиков нет. */
-  function zoneOf(placement: Placement): Box | null {
-    const product = catalog.bySku.get(placement.sku);
-    return product ? drawerZone(placement, product) : null;
-  }
-
-  /** Зоны выдвижения соседей: перед ними нельзя ставить объекты. */
-  function neighbourDrawerZones(exceptId: string | null): { instanceId: string; box: Box }[] {
-    const zones: { instanceId: string; box: Box }[] = [];
-    for (const placement of scene.doc.placements) {
-      if (placement.instanceId === exceptId) continue;
-      const box = zoneOf(placement);
-      if (box) zones.push({ instanceId: placement.instanceId, box });
-    }
-    return zones;
-  }
-
-  /** Габариты остальных объектов сцены. Товары без каталога пропускаются. */
-  function otherBoxes(exceptId: string | null): { id: string; box: Box }[] {
-    const boxes: { id: string; box: Box }[] = [];
-    for (const placement of scene.doc.placements) {
-      if (placement.instanceId === exceptId) continue;
-      const product = catalog.bySku.get(placement.sku);
-      if (!product) continue;
-      boxes.push({
-        id: placement.instanceId,
-        box: placementBox(placement, placementProductSize(placement, product)),
-      });
-    }
-    return boxes;
   }
 
   /**
@@ -308,7 +236,7 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
 
   /** Что делает текущий жест: двигает объект или вращает его. */
   let dragKind: 'move' | 'rotate' = 'move';
-  let rotateCentreMm = new Vector2();
+  const rotateCentreMm = new Vector2();
   let rotatePointerStartDeg = 0;
   let rotateObjectStartDeg = 0;
 
@@ -492,10 +420,7 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
 
   function documentBox(instanceId: string): Box | null {
     const placement = scene.doc.placements.find((p) => p.instanceId === instanceId);
-    const product = placement && catalog.bySku.get(placement.sku);
-    return placement && product
-      ? placementBox(placement, placementProductSize(placement, product))
-      : null;
+    return placement ? boxOf(placement, catalog.bySku) : null;
   }
 
   /** Габарит объекта по его текущему положению в сцене. */

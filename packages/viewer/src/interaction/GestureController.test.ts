@@ -1,5 +1,4 @@
-import { Vector2 } from 'three';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { GestureController, type GestureEvent } from './GestureController';
 
 /**

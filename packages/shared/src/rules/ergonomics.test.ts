@@ -168,7 +168,9 @@ describe('эргономика кухни', () => {
       catalog,
     );
     const severities = findings.map((finding) => finding.severity);
-    expect(severities).toEqual([...severities].sort((a, b) => (a === 'warning' ? -1 : 1)));
+    const notesStart = severities.indexOf('note');
+    // После первой заметки предупреждений быть не должно
+    if (notesStart >= 0) expect(severities.slice(notesStart)).not.toContain('warning');
   });
 
   it('замечание называет виновников: их надо подсветить', () => {

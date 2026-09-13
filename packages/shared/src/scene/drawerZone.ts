@@ -1,5 +1,5 @@
 import type { Placement } from './schema';
-import { boxAxes, type Box } from './collision';
+import { boxAxes, type Box } from './box';
 
 /**
  * Место, которое занимает выдвинутый ящик.

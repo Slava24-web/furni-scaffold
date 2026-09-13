@@ -9,7 +9,7 @@ import {
 } from './swing';
 import { createRectangularRoom } from './walls';
 import { randomUUID } from './uuid';
-import type { Box } from './collision';
+import { boxCorners, type Box } from './box';
 import type { Opening, Room } from './schema';
 
 const room = (): Room => createRectangularRoom({ widthMm: 4000, depthMm: 3200 });
@@ -170,5 +170,40 @@ describe('препятствие в зоне открывания', () => {
   it('пустой список зон конфликтов не даёт', () => {
     const none: SwingZone[] = [];
     expect(blockedSwings(none, box(0, 0))).toEqual([]);
+  });
+
+  it('повёрнутый объект проверяется своим габаритом, а не зеркальным', () => {
+    // Узкий длинный объект под 45°: одним концом он заходит в сектор.
+    // Пока углы габарита считались с обратным знаком поворота, сюда
+    // подставлялся зеркальный прямоугольник, и дверь считалась свободной
+    const diagonal: Box = {
+      centre: { x: -1166, y: -634 },
+      halfWidthMm: 800,
+      halfDepthMm: 100,
+      rotationDeg: 45,
+      bottomMm: 0,
+      topMm: 900,
+    };
+
+    expect(blockedSwings([zone], diagonal)).toEqual([zone.openingId]);
+  });
+
+  it('углы габарита берутся по общему соглашению о повороте', () => {
+    // Проверка сектора и проверка пересечений обязаны видеть один и тот
+    // же прямоугольник: разошедшийся знак поворота ловится только так
+    for (const rotationDeg of [0, 30, 45, 90, 135, -60]) {
+      const box: Box = {
+        centre: { x: -700, y: -1100 },
+        halfWidthMm: 700,
+        halfDepthMm: 120,
+        rotationDeg,
+        bottomMm: 0,
+        topMm: 900,
+      };
+
+      const byCorners = boxCorners(box).some((corner) => insideSwing(zone, corner));
+      if (!byCorners) continue;
+      expect(blockedSwings([zone], box)).toEqual([zone.openingId]);
+    }
   });
 });

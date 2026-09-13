@@ -9,6 +9,7 @@ export * from './scene/services';
 export * from './scene/kitchenLayout';
 export * from './scene/openingStyles';
 export * from './scene/openingPlacement';
+export * from './scene/box';
 export * from './scene/collision';
 export * from './scene/swing';
 export * from './scene/drawerZone';

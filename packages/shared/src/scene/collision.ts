@@ -1,6 +1,18 @@
 import type { Placement, Wall } from './schema';
 import { isClosedContour, wallAngleDeg, wallLengthMm, type Vec2 } from './walls';
 import { blockedSwings, type SwingZone } from './swing';
+import {
+  TOUCH_TOLERANCE_MM,
+  boxAxes,
+  boxCorners,
+  verticallyOverlapping,
+  type Box,
+} from './box';
+
+// Примитивы габарита живут отдельным модулем: соглашение о повороте
+// должно быть одно на всех, и раньше оно успело разойтись знаком
+export { TOUCH_TOLERANCE_MM, boxAxes, boxCorners, insideBox, verticallyOverlapping } from './box';
+export type { Box } from './box';
 
 /**
  * Габариты объектов в плане, их пересечение и точки стыковки.
@@ -9,70 +21,6 @@ import { blockedSwings, type SwingZone } from './swing';
  * и на сервере при проверке присланного документа. План лежит в плоскости
  * XZ, поэтому Vec2 здесь это (x, z) мира, всё в миллиметрах.
  */
-
-/**
- * Габарит объекта: прямоугольник в плане плюс диапазон высот.
- *
- * Без высоты проверка бесполезна: верхний шкаф висит ровно над нижним
- * и в плане с ним совпадает. Считать это пересечением нельзя.
- */
-export interface Box {
-  centre: Vec2;
-  /** Полуразмер вдоль локальной оси X объекта */
-  halfWidthMm: number;
-  /** Полуразмер вдоль локальной оси Z объекта */
-  halfDepthMm: number;
-  rotationDeg: number;
-  bottomMm: number;
-  topMm: number;
-  /**
-   * Высота, на которой на объекте стоят. По умолчанию это его верх.
-   *
-   * Отличается там, где габарит выше рабочей поверхности: у столешницы
-   * в него входит пристенный плинтус, но мойку ставят на плиту. Без
-   * этого числа мойка на столешнице считалась бы пересечением.
-   */
-  surfaceTopMm?: number;
-}
-
-/**
- * Допуск на соприкосновение.
- *
- * Модули, поставленные вплотную, делят общую грань, и без допуска каждая
- * состыкованная пара считалась бы конфликтом. Два миллиметра меньше любого
- * технологического зазора и больше ошибки округления.
- */
-export const TOUCH_TOLERANCE_MM = 2;
-
-const toRad = (deg: number): number => (deg * Math.PI) / 180;
-
-/**
- * Локальные оси объекта в координатах плана.
- *
- * Поворот вокруг Y на φ переводит локальную +X в (cos φ, −sin φ),
- * а локальную +Z в (sin φ, cos φ). Знаки именно такие, потому что ось Y
- * смотрит вверх, а план читается сверху.
- */
-export function boxAxes(box: Pick<Box, 'rotationDeg'>): { right: Vec2; forward: Vec2 } {
-  const angle = toRad(box.rotationDeg);
-  return {
-    right: { x: Math.cos(angle), y: -Math.sin(angle) },
-    forward: { x: Math.sin(angle), y: Math.cos(angle) },
-  };
-}
-
-export function boxCorners(box: Box): Vec2[] {
-  const { right, forward } = boxAxes(box);
-  return [
-    [1, 1],
-    [1, -1],
-    [-1, -1],
-    [-1, 1],
-  ].map(([sx, sz]) => ({
-    x: box.centre.x + right.x * box.halfWidthMm * sx! + forward.x * box.halfDepthMm * sz!,
-    y: box.centre.y + right.y * box.halfWidthMm * sx! + forward.y * box.halfDepthMm * sz!,
-  }));
-}
 
 function project(points: readonly Vec2[], axis: Vec2): { min: number; max: number } {
   let min = Infinity;
@@ -210,24 +158,6 @@ export function wallToBox(wall: Wall): Box {
     bottomMm: 0,
     topMm: wall.height,
   };
-}
-
-/**
- * Пересекаются ли габариты по высоте.
- *
- * Объект, стоящий НА рабочей поверхности другого, пересечением не
- * считается: так ставят мойку на столешницу и микроволновку на тумбу.
- */
-export function verticallyOverlapping(
-  a: Pick<Box, 'bottomMm' | 'topMm' | 'surfaceTopMm'>,
-  b: Pick<Box, 'bottomMm' | 'topMm' | 'surfaceTopMm'>,
-  toleranceMm = TOUCH_TOLERANCE_MM,
-): boolean {
-  const restsOnB = a.bottomMm >= (b.surfaceTopMm ?? b.topMm) - toleranceMm;
-  const restsOnA = b.bottomMm >= (a.surfaceTopMm ?? a.topMm) - toleranceMm;
-  if (restsOnB || restsOnA) return false;
-
-  return a.bottomMm < b.topMm - toleranceMm && b.bottomMm < a.topMm - toleranceMm;
 }
 
 export type DockSide = 'right' | 'left' | 'front' | 'back';
@@ -644,7 +574,7 @@ function mergeChainBox(boxes: readonly Box[]): Box {
   const reference = boxes[0]!;
   if (boxes.length === 1) return reference;
 
-  const { right, forward } = boxAxes(reference);
+  const { right } = boxAxes(reference);
   let min = Infinity;
   let max = -Infinity;
   let halfDepth = 0;

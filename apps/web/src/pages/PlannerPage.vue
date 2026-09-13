@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import {
   buildKitchen,
@@ -9,17 +9,13 @@ import {
   checkServices,
   estimateScene,
   placementPriceCents,
-  planDimensions,
   planOpening,
-  resizeOpening,
   serviceInfo,
   snapToWall,
   randomUUID,
   rectangularExtent,
-  resizeRoomWall,
   type CatalogProduct,
   type DeviceTier,
-  type Opening,
   type Placement,
   type Wall,
 } from '@furni/shared';
@@ -46,11 +42,12 @@ const LeadForm = defineAsyncComponent(() => import('../components/LeadForm.vue')
 const PlanView = defineAsyncComponent(() => import('../components/PlanView.vue'));
 import { useCatalogDrag } from '../composables/useCatalogDrag';
 import { useWallDrawing } from '../composables/useWallDrawing';
+import { useOpeningEditing } from '../composables/useOpeningEditing';
 import { installTestingApi, uninstallTestingApi } from '../dev/testingApi';
 import { useCatalogStore } from '../stores/catalog';
 import { useSceneStore } from '../stores/scene';
 import type { KitchenLayoutKind, ServicePointKind } from '@furni/shared';
-import type { DimensionHit, FloorPoint, PlannerMode } from '../composables/useSceneEditing';
+import type { FloorPoint, PlannerMode } from '../composables/useSceneEditing';
 
 const route = useRoute();
 const scene = useSceneStore();
@@ -266,129 +263,14 @@ function insertOpening(point: FloorPoint, kind: 'door' | 'window'): void {
 }
 
 /**
- * Правка размера помещения по размерной линии.
- *
- * Координаты тапа переводятся в систему области сцены: поле ввода лежит
- * в ней, а жест приходит в клиентских координатах окна.
+ * Проёмы и размерные линии: выбор, правка, открывание двери.
+ * Своя обязанность — свой композабл (apps/web/src/composables).
  */
-const editedDimension = ref<{ id: string; valueMm: number; x: number; y: number } | null>(null);
-
-function onDimensionTap(hit: DimensionHit | null): void {
-  const rect = sceneRect();
-  if (!hit || !rect) {
-    editedDimension.value = null;
-    return;
-  }
-  editedDimension.value = {
-    id: hit.id,
-    valueMm: hit.lengthMm,
-    x: hit.clientX - rect.left,
-    y: hit.clientY - rect.top,
-  };
-}
-
-function applyDimension(valueMm: number): void {
-  const edited = editedDimension.value;
-  const [room] = scene.doc.rooms;
-  editedDimension.value = null;
-  if (!edited || !room) return;
-
-  const target = planDimensions(room).find((dimension) => dimension.id === edited.id)?.target;
-  if (!target) return;
-
-  const next =
-    target.kind === 'wall'
-      ? resizeRoomWall(room, target.wallId, valueMm)
-      : resizeOpening(room, target.openingId, valueMm);
-  // Отвергнутый размер не должен попадать в историю отмен пустым шагом
-  if (next === room) return;
-
-  scene.setRoom(next);
-  // Ширина проёма кадрирование не меняет: помещение осталось прежним
-  if (target.kind === 'opening') return;
-  // Кадрирование по новым габаритам: выросшая стена уезжает за край
-  // экрана, и пользователь не видит результата своего же ввода
-  const extent = rectangularExtent(next);
-  if (!extent) return;
-  canvas.value?.focusArea(
-    { x: (extent.minX + extent.maxX) / 2, z: (extent.minZ + extent.maxZ) / 2 },
-    Math.max(extent.maxX - extent.minX, extent.maxZ - extent.minZ) * 0.75,
-  );
-}
-
-/** Выбранный проём: по нему рисуется панель свойств двери или окна. */
-const selectedOpeningId = ref<string | null>(null);
-
-const selectedOpening = computed(() => {
-  const id = selectedOpeningId.value;
-  return id ? scene.doc.rooms[0]?.openings.find((opening) => opening.id === id) : undefined;
+const openings = useOpeningEditing({
+  sceneRect,
+  viewer: () => canvas.value?.viewer,
+  focusArea: (centre, radius) => canvas.value?.focusArea(centre, radius),
 });
-
-/**
- * Подсветка выбранного проёма.
- *
- * Тот же прямоугольник, что показывает будущее место: выделение должно
- * читаться одинаково и до вставки, и после неё.
- */
-watch([selectedOpening, () => canvas.value?.viewer], ([opening, viewer]) => {
-  if (!viewer) return;
-  const [room] = scene.doc.rooms;
-  const wall = room?.walls.find((candidate) => candidate.id === opening?.wallId);
-
-  viewer.openings.previewAt(
-    room ?? null,
-    wall ?? null,
-    opening
-      ? {
-          offsetMm: opening.offset,
-          widthMm: opening.width,
-          heightMm: opening.height,
-          sillMm: opening.sillHeight,
-        }
-      : null,
-  );
-  viewer.invalidate();
-});
-
-function onOpeningTap(openingId: string | null): void {
-  selectedOpeningId.value = openingId;
-  openingOpen.value = openingId ? isOpeningOpen(openingId) : false;
-}
-
-/**
- * Распахнутая дверь — состояние вьюера, а не документа: это осмотр, а не
- * свойство планировки. Поэтому и панель спрашивает вьюер.
- */
-const openingOpen = ref(false);
-
-function isOpeningOpen(openingId: string): boolean {
-  return canvas.value?.viewer?.openings.isOpen(openingId) ?? false;
-}
-
-function setOpeningOpen(open: boolean): void {
-  const id = selectedOpeningId.value;
-  const viewer = canvas.value?.viewer;
-  if (!id || !viewer) return;
-
-  openingOpen.value = open;
-  if (!viewer.openings.setOpen(id, open)) return;
-
-  // Полотно строится вместе с проёмом: пересобираем сцену комнаты
-  viewer.openings.build(scene.doc.rooms, viewer.materials);
-  viewer.invalidate();
-}
-
-function updateOpening(patch: Partial<Opening>): void {
-  const id = selectedOpeningId.value;
-  if (id) scene.updateOpening(id, patch);
-}
-
-function removeOpening(): void {
-  const id = selectedOpeningId.value;
-  if (!id) return;
-  selectedOpeningId.value = null;
-  scene.removeOpening(id);
-}
 
 /** Есть ли помещение, размеры которого можно править. */
 const editableRoom = computed(() => {
@@ -557,28 +439,28 @@ onBeforeUnmount(() => uninstallTestingApi());
           :mode="mode"
           @floor-tap="onFloorTap"
           @floor-double-tap="finishDrawing"
-          @dimension-tap="onDimensionTap"
+          @dimension-tap="openings.onDimensionTap"
           @aim="onAim"
-          @opening-tap="onOpeningTap"
+          @opening-tap="openings.selectOpening"
           @service-tap="scene.removeService"
         />
         <DimensionEditor
-          v-if="editedDimension"
-          :key="editedDimension.id"
-          :value-mm="editedDimension.valueMm"
-          :x="editedDimension.x"
-          :y="editedDimension.y"
-          @apply="applyDimension"
-          @cancel="editedDimension = null"
+          v-if="openings.editedDimension.value"
+          :key="openings.editedDimension.value.id"
+          :value-mm="openings.editedDimension.value.valueMm"
+          :x="openings.editedDimension.value.x"
+          :y="openings.editedDimension.value.y"
+          @apply="openings.applyDimension"
+          @cancel="openings.editedDimension.value = null"
         />
         <OpeningInspector
-          v-if="selectedOpening"
-          :opening="selectedOpening"
+          v-if="openings.selectedOpening.value"
+          :opening="openings.selectedOpening.value"
           :materials="catalog.materialByCode"
-          :open="openingOpen"
-          @update="updateOpening"
-          @remove="removeOpening"
-          @set-open="setOpeningOpen"
+          :open="openings.openingOpen.value"
+          @update="openings.updateOpening"
+          @remove="openings.removeOpening"
+          @set-open="openings.setOpeningOpen"
         />
         <ObjectInspector
           v-else-if="selected"

@@ -22,9 +22,11 @@
   "devDependencies": {
     "@playwright/test": "^1.48.0",
     "@size-limit/preset-app": "^11.1.0",
+    "@typescript-eslint/eslint-plugin": "^8",
     "@typescript-eslint/parser": "^8",
     "eslint": "^9.13.0",
     "eslint-plugin-local-rules": "^3.0.2",
+    "eslint-plugin-vue": "^9",
     "prettier": "^3.3.0",
     "size-limit": "^11.1.0",
     "turbo": "^2.2.0",
@@ -37,6 +39,15 @@
       "name": "3D engine chunk",
       "path": "apps/web/dist/assets/engine-*.js",
       "limit": "500 kB"
+    },
+    {
+      "name": "Planner screen",
+      "path": [
+        "apps/web/dist/assets/index-*.js",
+        "apps/web/dist/assets/vendor-*.js",
+        "apps/web/dist/assets/PlannerPage-*.js"
+      ],
+      "limit": "90 kB"
     }
   ]
 }

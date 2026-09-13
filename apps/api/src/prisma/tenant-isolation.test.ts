@@ -24,7 +24,7 @@ suite('Изоляция тенантов через RLS', () => {
   const prisma = new PrismaService();
   const tenantA = { id: randomUUID(), slug: `test-a-${Date.now()}` };
   const tenantB = { id: randomUUID(), slug: `test-b-${Date.now()}` };
-  let productA = '';
+
   let productB = '';
 
   async function createTenant(tenant: { id: string; slug: string }, sku: string): Promise<string> {
@@ -46,7 +46,7 @@ suite('Изоляция тенантов через RLS', () => {
   }
 
   beforeAll(async () => {
-    productA = await createTenant(tenantA, 'ISO-A');
+    await createTenant(tenantA, 'ISO-A');
     productB = await createTenant(tenantB, 'ISO-B');
   }, 30_000);
 
