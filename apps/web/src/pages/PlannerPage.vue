@@ -4,20 +4,14 @@ import { useRoute } from 'vue-router';
 import {
   buildKitchen,
   createRectangularRoom,
-  defaultStyle,
   checkErgonomics,
   checkServices,
   estimateScene,
   placementPriceCents,
-  planOpening,
-  serviceInfo,
-  snapToWall,
-  randomUUID,
   rectangularExtent,
   type CatalogProduct,
   type DeviceTier,
   type Placement,
-  type Wall,
 } from '@furni/shared';
 import SceneCanvas from '../components/SceneCanvas.vue';
 import CatalogPanel from '../components/CatalogPanel.vue';
@@ -41,19 +35,18 @@ const CutPlanView = defineAsyncComponent(() => import('../components/CutPlanView
 const LeadForm = defineAsyncComponent(() => import('../components/LeadForm.vue'));
 const PlanView = defineAsyncComponent(() => import('../components/PlanView.vue'));
 import { useCatalogDrag } from '../composables/useCatalogDrag';
-import { useWallDrawing } from '../composables/useWallDrawing';
+import { usePlannerTools } from '../composables/usePlannerTools';
 import { useOpeningEditing } from '../composables/useOpeningEditing';
 import { installTestingApi, uninstallTestingApi } from '../dev/testingApi';
 import { useCatalogStore } from '../stores/catalog';
 import { useSceneStore } from '../stores/scene';
-import type { KitchenLayoutKind, ServicePointKind } from '@furni/shared';
-import type { FloorPoint, PlannerMode } from '../composables/useSceneEditing';
+import type { KitchenLayoutKind } from '@furni/shared';
 
 const route = useRoute();
 const scene = useSceneStore();
 const catalog = useCatalogStore();
 const canvas = ref<InstanceType<typeof SceneCanvas> | null>(null);
-const mode = ref<PlannerMode>('select');
+
 /** Карта раскроя поверх сцены: отдельная страница увела бы от планировки. */
 const cutOpen = ref(false);
 /** План сверху: отдельная страница для замерщика и монтажника. */
@@ -72,7 +65,21 @@ const forceTier = computed<DeviceTier | undefined>(() => {
 
 const testingEnabled = computed(() => import.meta.env.DEV || route.query.perf === '1');
 
-const drawing = useWallDrawing({ onWall: (wall: Wall) => scene.addWall(wall) });
+/**
+ * Инструменты планировки: режим, стены, проёмы, инженерия.
+ * Своя обязанность — свой композабл (apps/web/src/composables).
+ */
+const {
+  mode,
+  drawing,
+  serviceKind,
+  hint: toolHint,
+  setMode,
+  finishDrawing,
+  pickServiceKind,
+  onFloorTap,
+  onAim,
+} = usePlannerTools({ viewer: () => canvas.value?.viewer });
 
 const drag = useCatalogDrag({
   isOverScene: (x, y) => isInsideScene(x, y),
@@ -133,134 +140,6 @@ function assembleKitchen(kind: KitchenLayoutKind): void {
 }
 
 const kitchenProblem = ref<string | null>(null);
-
-function setMode(next: PlannerMode): void {
-  mode.value = next;
-  if (next === 'draw-wall') drawing.start();
-  else drawing.finish();
-}
-
-function finishDrawing(): void {
-  drawing.finish();
-  mode.value = 'select';
-}
-
-/**
- * Подсветка будущего проёма под указателем.
- *
- * Место считается той же функцией, что и вставка: подсветка обязана
- * показывать ровно тот прямоугольник, который получится после тапа.
- */
-function onAim(point: FloorPoint | null): void {
-  const viewer = canvas.value?.viewer;
-  const [room] = scene.doc.rooms;
-  const kind = mode.value === 'add-door' ? 'door' : mode.value === 'add-window' ? 'window' : null;
-
-  if (!viewer || !room || !point || !kind) {
-    viewer?.openings.previewAt(null, null, null);
-    viewer?.invalidate();
-    return;
-  }
-
-  const style = defaultStyle(kind);
-  const plan = planOpening(room, { x: point.x, y: point.z }, style.widthMm);
-  viewer.openings.previewAt(
-    room,
-    plan?.wall ?? null,
-    plan
-      ? {
-          offsetMm: plan.offsetMm,
-          widthMm: plan.widthMm,
-          heightMm: style.heightMm,
-          sillMm: style.sillHeightMm,
-        }
-      : null,
-  );
-  viewer.invalidate();
-}
-
-/**
- * Разметка инженерии.
- *
- * Вид точки выбирается в панели и остаётся выбранным: розетки ставят
- * пачкой, и переключаться на каждую значит удвоить число нажатий.
- */
-const serviceKind = ref<ServicePointKind>('socket');
-
-function pickServiceKind(kind: ServicePointKind): void {
-  // Повторное нажатие на активный вид выходит из режима разметки
-  if (mode.value === 'add-service' && serviceKind.value === kind) {
-    mode.value = 'select';
-    return;
-  }
-  serviceKind.value = kind;
-  mode.value = 'add-service';
-}
-
-/** Точка ставится на ближайшую стену: инженерия живёт на стенах. */
-function addService(point: FloorPoint): void {
-  const [room] = scene.doc.rooms;
-  if (!room) return;
-
-  const info = serviceInfo(serviceKind.value);
-  const snapped = snapToWall(room, { x: point.x, y: point.z });
-
-  scene.addService({
-    id: randomUUID(),
-    kind: serviceKind.value,
-    position: { x: Math.round(snapped.position.x), y: Math.round(snapped.position.y) },
-    heightMm: info.heightMm,
-    wallId: snapped.wallId,
-    note: '',
-  });
-}
-
-function onFloorTap(point: FloorPoint): void {
-  if (mode.value === 'add-service') {
-    addService(point);
-    return;
-  }
-  if (mode.value === 'draw-wall') {
-    if (drawing.addPoint(point)) mode.value = 'select';
-    return;
-  }
-  if (mode.value === 'add-door' || mode.value === 'add-window') {
-    insertOpening(point, mode.value === 'add-door' ? 'door' : 'window');
-  }
-}
-
-/**
- * Проём ставится в ближайшую стену: пользователь целится в стену, а не
- * задаёт её идентификатор. Смещение центрируется по точке клика и
- * прижимается к границам стены, иначе дверь вылезет за её торец.
- */
-function insertOpening(point: FloorPoint, kind: 'door' | 'window'): void {
-  const [room] = scene.doc.rooms;
-  if (!room) return;
-
-  // Размеры берутся у изделия, а не задаются здесь: проём и то, что
-  // в него встанет, обязаны совпадать с первого клика
-  const style = defaultStyle(kind);
-  const plan = planOpening(room, { x: point.x, y: point.z }, style.widthMm);
-  if (!plan) return;
-
-  canvas.value?.viewer?.openings.previewAt(null, null, null);
-  scene.addOpening({
-    id: randomUUID(),
-    wallId: plan.wall.id,
-    kind,
-    offset: plan.offsetMm,
-    width: plan.widthMm,
-    height: style.heightMm,
-    sillHeight: style.sillHeightMm,
-    swingRadius: null,
-    hinge: 'left',
-    swingInward: true,
-    sku: style.code,
-    options: {},
-  });
-  mode.value = 'select';
-}
 
 /**
  * Проёмы и размерные линии: выбор, правка, открывание двери.
@@ -357,16 +236,7 @@ const previewReadout = computed(() => {
 });
 
 const hint = computed(() => {
-  if (mode.value === 'draw-wall') {
-    return drawing.points.value.length === 0
-      ? 'Тапните по полу, чтобы поставить первую точку'
-      : 'Тап достраивает стену, тап по первой точке замыкает контур, двойной тап завершает';
-  }
-  if (mode.value === 'add-door') return 'Тапните по стене, куда поставить дверь';
-  if (mode.value === 'add-window') return 'Тапните по стене, куда поставить окно';
-  if (mode.value === 'add-service') {
-    return `Тапните по стене: ${serviceInfo(serviceKind.value).name.toLowerCase()}. Тап по метке удаляет её`;
-  }
+  if (toolHint.value) return toolHint.value;
   if (kitchenProblem.value) return kitchenProblem.value;
   // Подсказка про размеры нужна, пока пользователь не занят объектом:
   // иначе о вводе точного размера он не догадается
