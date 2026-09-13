@@ -335,7 +335,7 @@ function verticalBands(sheet: { parts: readonly { yMm: number; heightMm: number 
   justify-content: space-between;
   gap: 16px;
   padding: 14px 18px;
-  border-bottom: 1px solid #e5e7ec;
+  border-bottom: 1px solid var(--c-line);
 }
 .cut__title {
   margin: 0;
@@ -344,13 +344,13 @@ function verticalBands(sheet: { parts: readonly { yMm: number; heightMm: number 
 .cut__meta {
   margin: 3px 0 0;
   font-size: 12px;
-  color: #6b7280;
+  color: var(--c-text-muted);
   font-variant-numeric: tabular-nums;
 }
 .cut__close {
   padding: 6px 12px;
-  border: 1px solid #d5d8dd;
-  border-radius: 7px;
+  border: 1px solid var(--c-line-strong);
+  border-radius: var(--r-sm);
   background: #fff;
   font: inherit;
   font-size: 13px;
@@ -360,17 +360,17 @@ function verticalBands(sheet: { parts: readonly { yMm: number; heightMm: number 
 .cut__warning {
   margin: 16px 18px 0;
   padding: 9px 12px;
-  border-radius: 9px;
+  border-radius: var(--r-md);
   font-size: 12px;
   line-height: 1.4;
 }
 .cut__empty {
   background: #f4f5f7;
-  color: #6b7280;
+  color: var(--c-text-muted);
 }
 .cut__warning {
-  background: #fef3f2;
-  color: #b42318;
+  background: var(--c-danger-soft);
+  color: var(--c-danger);
 }
 .cut__body {
   flex: 1;
@@ -388,7 +388,7 @@ function verticalBands(sheet: { parts: readonly { yMm: number; heightMm: number 
 .sheet__usage {
   margin-left: 8px;
   font-weight: 400;
-  color: #8a909b;
+  color: var(--c-text-faint);
   font-variant-numeric: tabular-nums;
 }
 .sheet__plan {
@@ -420,14 +420,14 @@ function verticalBands(sheet: { parts: readonly { yMm: number; heightMm: number 
 .parts__table th,
 .parts__table td {
   padding: 5px 9px;
-  border-bottom: 1px solid #eceef1;
+  border-bottom: 1px solid var(--c-bg-active);
   text-align: left;
 }
 .parts__table th {
   font-size: 10px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: #8a909b;
+  color: var(--c-text-faint);
   font-weight: 600;
 }
 .num {
@@ -436,6 +436,6 @@ function verticalBands(sheet: { parts: readonly { yMm: number; heightMm: number 
 .parts__note {
   margin: 6px 0 0;
   font-size: 11px;
-  color: #8a909b;
+  color: var(--c-text-faint);
 }
 </style>

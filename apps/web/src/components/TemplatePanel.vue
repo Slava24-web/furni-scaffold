@@ -5,26 +5,20 @@ import { KITCHEN_TEMPLATES, type KitchenTemplate } from '@furni/shared';
 /**
  * Готовые кухни.
  *
- * Отдельный раздел, а не кнопки в тулбаре: шаблон выбирают глазами, и
- * ему нужны образцы отделки и описание типажа. «Прямая / Угловая /
- * П-образная» отвечали на вопрос о геометрии, а покупатель спрашивает
- * «как это будет выглядеть».
- *
- * Раздел раскрыт по умолчанию, пока в сцене ничего нет: пустой
- * планировщик — это как раз момент, когда шаблон и нужен.
+ * Своя вкладка, а не строка в тулбаре: шаблон выбирают глазами, и ему
+ * нужны образцы отделки и описание типажа. «Прямая / Угловая /
+ * П-образная» отвечали на вопрос о геометрии, а покупатель спрашивает,
+ * как это будет выглядеть.
  */
 const props = defineProps<{
   /** Нечего собирать, пока не построено помещение */
   ready: boolean;
-  /** Сколько объектов уже в сцене: по ним решается, раскрывать ли раздел */
-  placed: number;
   /** Что помешало собрать выбранный шаблон */
   problem: string | null;
 }>();
 
 const emit = defineEmits<{ apply: [KitchenTemplate] }>();
 
-const open = ref(props.placed === 0);
 const applied = ref<string | null>(null);
 
 function apply(template: KitchenTemplate): void {
@@ -34,112 +28,60 @@ function apply(template: KitchenTemplate): void {
 </script>
 
 <template>
-  <section class="templates">
-    <button type="button" class="templates__head" @click="open = !open">
-      <span class="templates__title">Шаблоны</span>
-      <span class="templates__count">{{ KITCHEN_TEMPLATES.length }}</span>
-      <span class="templates__chevron" :class="{ 'templates__chevron--open': open }">⌄</span>
-    </button>
+  <div class="templates scroll-thin">
+    <p v-if="!props.ready" class="templates__hint">
+      Задайте размеры комнаты сверху — шаблон встанет по ним
+    </p>
+    <p v-else-if="props.problem" class="templates__problem">{{ props.problem }}</p>
 
-    <div v-if="open" class="templates__body">
-      <p v-if="!props.ready" class="templates__hint">
-        Сначала постройте помещение — шаблон встанет по его размерам
-      </p>
-      <p v-else-if="props.problem" class="templates__problem">{{ props.problem }}</p>
-
-      <ul class="templates__list">
-        <li v-for="template in KITCHEN_TEMPLATES" :key="template.id">
-          <button
-            type="button"
-            class="card"
-            :class="{ 'card--active': applied === template.id }"
-            :disabled="!props.ready"
-            @click="apply(template)"
-          >
-            <span class="card__swatch" aria-hidden="true">
-              <span class="card__chip" :style="{ background: template.swatch[0] }" />
-              <span class="card__chip" :style="{ background: template.swatch[1] }" />
+    <ul class="templates__list">
+      <li v-for="template in KITCHEN_TEMPLATES" :key="template.id">
+        <button
+          type="button"
+          class="card"
+          :class="{ 'card--active': applied === template.id }"
+          :disabled="!props.ready"
+          @click="apply(template)"
+        >
+          <span class="card__swatch" aria-hidden="true">
+            <span class="card__chip" :style="{ background: template.swatch[0] }" />
+            <span class="card__chip" :style="{ background: template.swatch[1] }" />
+          </span>
+          <span class="card__text">
+            <span class="card__name">
+              {{ template.name }}
+              <span class="card__style">{{ template.style }}</span>
             </span>
-            <span class="card__text">
-              <span class="card__name">
-                {{ template.name }}
-                <span class="card__style">{{ template.style }}</span>
-              </span>
-              <span class="card__description">{{ template.description }}</span>
-            </span>
-          </button>
-        </li>
-      </ul>
-    </div>
-  </section>
+            <span class="card__description">{{ template.description }}</span>
+          </span>
+        </button>
+      </li>
+    </ul>
+  </div>
 </template>
 
 <style scoped>
 .templates {
-  flex: none;
-  border-top: 1px solid #e5e7ec;
-  background: #fff;
-  display: flex;
-  flex-direction: column;
+  flex: 1;
   min-height: 0;
-}
-
-.templates__head {
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  gap: 8px;
-  align-items: center;
-  padding: 10px 14px;
-  border: 0;
-  background: none;
-  font: inherit;
-  cursor: pointer;
-  text-align: left;
-}
-
-.templates__title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #111418;
-}
-
-.templates__count {
-  min-width: 20px;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: #eef1f6;
-  font-size: 11px;
-  color: #4b5462;
-  text-align: center;
-}
-
-.templates__chevron {
-  color: #8a909b;
-  transition: transform 0.15s;
-}
-
-.templates__chevron--open {
-  transform: rotate(180deg);
-}
-
-.templates__body {
   overflow-y: auto;
-  padding: 0 10px 10px;
+  padding: var(--gap-3);
 }
 
 .templates__hint,
 .templates__problem {
-  margin: 0 4px 8px;
-  font-size: 11px;
-  line-height: 1.4;
-  color: #8a909b;
+  margin: 0 0 var(--gap-2);
+  font-size: var(--t-sm);
+  line-height: 1.45;
+  color: var(--c-text-muted);
 }
 
 .templates__problem {
-  padding: 6px 8px;
-  border-left: 3px solid #e0a04a;
-  background: #fff8ef;
-  color: #7a5320;
+  padding: 8px 10px;
+  border: 1px solid var(--c-warn-line);
+  border-radius: var(--r-sm);
+  background: var(--c-warn-soft);
+  color: var(--c-warn);
 }
 
 .templates__list {
@@ -147,27 +89,33 @@ function apply(template: KitchenTemplate): void {
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 6px;
+  gap: var(--gap-2);
 }
 
 .card {
   width: 100%;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  gap: 10px;
+  gap: var(--gap-3);
   align-items: start;
-  padding: 8px;
-  border: 1px solid #e5e7ec;
-  border-radius: 9px;
-  background: #fff;
+  padding: 10px;
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  background: var(--c-bg);
   font: inherit;
   text-align: left;
   cursor: pointer;
+  transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease),
+    transform 0.08s var(--ease);
 }
 
 .card:hover:not(:disabled) {
-  border-color: #b6c2d4;
-  background: #fbfcfe;
+  border-color: var(--c-line-strong);
+  box-shadow: var(--sh-md);
+}
+
+.card:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .card:disabled {
@@ -176,18 +124,20 @@ function apply(template: KitchenTemplate): void {
 }
 
 .card--active {
-  border-color: #2f6fed;
-  background: #f4f8ff;
+  border-color: var(--c-accent);
+  box-shadow: 0 0 0 1px var(--c-accent);
 }
 
+/* Образец отделки: фасад сверху, столешница снизу. По нему шаблон
+   узнаётся раньше, чем прочитано название */
 .card__swatch {
   display: grid;
   grid-template-rows: 1fr 1fr;
-  width: 34px;
-  height: 34px;
-  border-radius: 7px;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--r-sm);
   overflow: hidden;
-  border: 1px solid #d5d8dd;
+  box-shadow: inset 0 0 0 1px rgb(22 24 29 / 0.10);
 }
 
 .card__chip {
@@ -196,7 +146,7 @@ function apply(template: KitchenTemplate): void {
 
 .card__text {
   display: grid;
-  gap: 2px;
+  gap: 3px;
   min-width: 0;
 }
 
@@ -204,22 +154,20 @@ function apply(template: KitchenTemplate): void {
   display: flex;
   gap: 6px;
   align-items: baseline;
-  font-size: 13px;
+  font-size: var(--t-md);
   font-weight: 600;
-  color: #111418;
+  color: var(--c-text);
 }
 
 .card__style {
-  font-size: 10px;
+  font-size: var(--t-xs);
   font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: #8a909b;
+  color: var(--c-text-faint);
 }
 
 .card__description {
-  font-size: 11px;
-  line-height: 1.35;
-  color: #4b5462;
+  font-size: var(--t-sm);
+  line-height: 1.4;
+  color: var(--c-text-muted);
 }
 </style>

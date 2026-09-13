@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed } from 'vue';
 import type { FloorFinish } from '@furni/shared';
 
 /**
@@ -16,103 +16,70 @@ const props = defineProps<{
 
 const emit = defineEmits<{ pick: [string | null] }>();
 
-const open = ref(false);
-
 /** Повторный тап по выбранному покрытию снимает его. */
 function pick(code: string): void {
   emit('pick', props.selected === code ? null : code);
 }
+
+const current = computed(() =>
+  props.groups.flatMap((group) => group.floors).find((floor) => floor.code === props.selected),
+);
 </script>
 
 <template>
-  <section class="floors" :class="{ 'floors--open': open }">
-    <button type="button" class="floors__head" @click="open = !open">
-      <span class="floors__title">Пол</span>
-      <span class="floors__value">{{
-        props.groups.flatMap((g) => g.floors).find((f) => f.code === props.selected)?.name ??
-        'не выбран'
-      }}</span>
-      <span class="floors__chevron" :class="{ 'floors__chevron--open': open }">⌄</span>
-    </button>
+  <div class="floors scroll-thin">
+    <p class="floors__current">
+      Пол: <strong>{{ current?.name ?? 'не выбран' }}</strong>
+    </p>
 
-    <div v-if="open" class="floors__body">
-      <section v-for="group in props.groups" :key="group.kind" class="group">
-        <h4 class="group__title">{{ group.kind }}</h4>
-        <ul class="group__items">
-          <li v-for="floor in group.floors" :key="floor.code">
-            <button
-              type="button"
-              class="sample"
-              :class="{ 'sample--active': floor.code === props.selected }"
-              :title="floor.name"
-              @click="pick(floor.code)"
-            >
-              <img class="sample__image" :src="floor.textureUrl" :alt="floor.name" loading="lazy" />
-              <span class="sample__name">{{ floor.name }}</span>
-            </button>
-          </li>
-        </ul>
-      </section>
-    </div>
-  </section>
+    <section v-for="group in props.groups" :key="group.kind" class="group">
+      <h4 class="group__title">{{ group.kind }}</h4>
+      <ul class="group__items">
+        <li v-for="floor in group.floors" :key="floor.code">
+          <button
+            type="button"
+            class="sample"
+            :class="{ 'sample--active': floor.code === props.selected }"
+            :title="floor.name"
+            @click="pick(floor.code)"
+          >
+            <img class="sample__image" :src="floor.textureUrl" :alt="floor.name" loading="lazy" />
+            <span class="sample__name">{{ floor.name }}</span>
+          </button>
+        </li>
+      </ul>
+    </section>
+  </div>
 </template>
 
 <style scoped>
 .floors {
-  border-top: 1px solid #e5e7ec;
-  background: #fff;
-  flex: none;
-  display: flex;
-  flex-direction: column;
+  flex: 1;
   min-height: 0;
-}
-.floors--open {
-  flex: 1 1 auto;
-}
-.floors__head {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  gap: 8px;
-  align-items: baseline;
-  width: 100%;
-  padding: 9px 12px;
-  border: 0;
-  background: none;
-  font: inherit;
-  cursor: pointer;
-  text-align: left;
-}
-.floors__title {
-  font-size: 12px;
-  font-weight: 600;
-}
-.floors__value {
-  font-size: 11px;
-  color: #8a909b;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.floors__chevron {
-  font-size: 12px;
-  color: #8a909b;
-  transition: transform 0.15s;
-}
-.floors__chevron--open {
-  transform: rotate(180deg);
-}
-.floors__body {
   overflow-y: auto;
-  padding: 0 12px 12px;
+  padding: var(--gap-3);
   display: grid;
-  gap: 10px;
+  align-content: start;
+  gap: var(--gap-4);
 }
+
+.floors__current {
+  margin: 0;
+  font-size: var(--t-sm);
+  color: var(--c-text-muted);
+}
+
+.floors__current strong {
+  font-weight: 500;
+  color: var(--c-text);
+}
+
 .group__title {
   margin: 0 0 5px;
   font-size: 10px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: #8a909b;
+  color: var(--c-text-faint);
   font-weight: 600;
 }
 .group__items {
@@ -129,29 +96,29 @@ function pick(code: string): void {
   width: 100%;
   padding: 4px;
   border: 1px solid #e2e4e9;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: #fff;
   font: inherit;
   cursor: pointer;
 }
 .sample:hover {
-  border-color: #b6c2d4;
+  border-color: var(--c-text-faint);
 }
 .sample--active {
-  border-color: #2f6fed;
-  box-shadow: inset 0 0 0 1px #2f6fed;
+  border-color: var(--c-accent);
+  box-shadow: inset 0 0 0 1px var(--c-accent);
 }
 .sample__image {
   display: block;
   width: 100%;
   aspect-ratio: 1;
-  border-radius: 5px;
+  border-radius: var(--r-sm);
   object-fit: cover;
 }
 .sample__name {
   font-size: 9px;
   line-height: 1.2;
-  color: #6b7280;
+  color: var(--c-text-muted);
   text-align: center;
 }
 </style>

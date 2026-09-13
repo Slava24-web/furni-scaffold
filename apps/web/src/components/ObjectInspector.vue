@@ -60,7 +60,7 @@ function pickFinish(slot: FinishSlot, code: string): void {
 </script>
 
 <template>
-  <section class="inspector" :class="{ 'inspector--conflict': Boolean(conflict) }">
+  <section class="inspector scroll-thin" :class="{ 'inspector--conflict': Boolean(conflict) }">
     <header class="inspector__head">
       <img
         v-if="props.product?.thumbnailUrl"
@@ -140,8 +140,8 @@ function pickFinish(slot: FinishSlot, code: string): void {
 /* Базовый вид кнопки; красный акцент «Удалить» задаётся ниже */
 .remove {
   padding: 6px 10px;
-  border: 1px solid #d5d8dd;
-  border-radius: 7px;
+  border: 1px solid var(--c-line-strong);
+  border-radius: var(--r-sm);
   background: #fff;
   font: inherit;
   font-size: 12px;
@@ -149,27 +149,40 @@ function pickFinish(slot: FinishSlot, code: string): void {
 }
 
 .remove:hover {
-  border-color: #b6c2d4;
+  border-color: var(--c-text-faint);
 }
 
-<style scoped>
 .inspector {
   position: absolute;
-  top: 12px;
-  right: 12px;
-  width: 244px;
+  top: var(--gap-3);
+  right: var(--gap-3);
+  z-index: 2;
+  width: min(258px, calc(100% - var(--gap-3) * 2));
+  max-height: calc(100% - var(--gap-3) * 2);
+  overflow-y: auto;
   display: grid;
-  gap: 12px;
-  padding: 12px;
-  border: 1px solid #e5e7ec;
-  border-radius: 12px;
-  background: rgb(255 255 255 / 0.96);
-  box-shadow: 0 8px 24px rgb(16 24 40 / 0.1);
-  backdrop-filter: blur(6px);
+  align-content: start;
+  gap: var(--gap-3);
+  padding: var(--gap-3);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-lg);
+  background: rgb(255 255 255 / 0.94);
+  box-shadow: var(--sh-lg);
+  backdrop-filter: blur(10px);
+}
+
+/* Полупрозрачная панель поверх сцены: если система просит убрать
+   прозрачность, подложка становится сплошной */
+@media (prefers-reduced-transparency: reduce) {
+  .inspector {
+    background: var(--c-bg);
+    backdrop-filter: none;
+  }
 }
 
 .inspector--conflict {
-  border-color: #f0a9a2;
+  border-color: var(--c-danger-line);
+  box-shadow: var(--sh-lg), 0 0 0 1px var(--c-danger-line);
 }
 
 .inspector__head {
@@ -181,8 +194,8 @@ function pickFinish(slot: FinishSlot, code: string): void {
 
 .inspector__preview {
   display: block;
-  border-radius: 7px;
-  background: #f1f2f5;
+  border-radius: var(--r-sm);
+  background: var(--c-bg-sunken);
   object-fit: contain;
 }
 
@@ -200,7 +213,7 @@ function pickFinish(slot: FinishSlot, code: string): void {
 
 .inspector__size {
   font-size: 11px;
-  color: #8a909b;
+  color: var(--c-text-faint);
   font-variant-numeric: tabular-nums;
 }
 
@@ -218,7 +231,7 @@ function pickFinish(slot: FinishSlot, code: string): void {
 .doors__buttons button {
   padding: 6px 8px;
   border: 1px solid #e2e4e9;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: #fff;
   font: inherit;
   font-size: 12px;
@@ -226,20 +239,20 @@ function pickFinish(slot: FinishSlot, code: string): void {
 }
 
 .doors__buttons button:hover {
-  border-color: #b6c2d4;
+  border-color: var(--c-text-faint);
 }
 
 .inspector__note {
   margin: 0;
   font-size: 10px;
   line-height: 1.35;
-  color: #8a909b;
+  color: var(--c-text-faint);
 }
 
 .inspector__tip {
   margin: 0;
   padding: 7px 9px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: #eef3fe;
   color: #2f5db0;
   font-size: 11px;
@@ -249,9 +262,9 @@ function pickFinish(slot: FinishSlot, code: string): void {
 .inspector__conflict {
   margin: 0;
   padding: 7px 9px;
-  border-radius: 8px;
-  background: #fef3f2;
-  color: #b42318;
+  border-radius: var(--r-md);
+  background: var(--c-danger-soft);
+  color: var(--c-danger);
   font-size: 11px;
   line-height: 1.35;
 }
@@ -264,22 +277,22 @@ function pickFinish(slot: FinishSlot, code: string): void {
   padding-top: 10px;
   border-top: 1px solid #eceef2;
   font-size: 12px;
-  color: #6b7280;
+  color: var(--c-text-muted);
 }
 
 .price strong {
   font-size: 14px;
-  color: #111418;
+  color: var(--c-text);
   font-variant-numeric: tabular-nums;
 }
 
 .remove {
-  color: #b42318;
-  border-color: #f0c2bd;
+  color: var(--c-danger);
+  border-color: var(--c-danger-line);
 }
 
 .remove:hover {
-  background: #fef3f2;
+  background: var(--c-danger-soft);
   border-color: #e0837a;
 }
 
@@ -289,7 +302,7 @@ function pickFinish(slot: FinishSlot, code: string): void {
   gap: 8px;
   align-items: start;
   font-size: 11px;
-  color: #4b5462;
+  color: var(--c-text-muted);
   line-height: 1.35;
   cursor: pointer;
 }
@@ -298,6 +311,6 @@ function pickFinish(slot: FinishSlot, code: string): void {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  color: #8a909b;
+  color: var(--c-text-faint);
 }
 </style>

@@ -153,8 +153,8 @@ async function send(): Promise<void> {
   display: grid;
   gap: 9px;
   padding: 13px;
-  border: 1px solid #e5e7ec;
-  border-radius: 12px;
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-lg);
   background: #fff;
   box-shadow: 0 12px 32px rgb(16 24 40 / 0.16);
 }
@@ -172,7 +172,7 @@ async function send(): Promise<void> {
   background: none;
   font-size: 18px;
   line-height: 1;
-  color: #8a909b;
+  color: var(--c-text-faint);
   cursor: pointer;
 }
 .lead__total,
@@ -180,7 +180,7 @@ async function send(): Promise<void> {
 .lead__done {
   margin: 0;
   font-size: 12px;
-  color: #4b5262;
+  color: var(--c-text-muted);
 }
 .lead__done {
   color: #1a7f47;
@@ -192,7 +192,7 @@ async function send(): Promise<void> {
 .lead__warning {
   margin: 0;
   padding: 7px 9px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: #fef6e7;
   color: #93540a;
   font-size: 11px;
@@ -204,17 +204,17 @@ async function send(): Promise<void> {
   font-size: 10px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: #8a909b;
+  color: var(--c-text-faint);
 }
 .field input,
 .field textarea {
   width: 100%;
   padding: 6px 8px;
-  border: 1px solid #d5d8dd;
-  border-radius: 7px;
+  border: 1px solid var(--c-line-strong);
+  border-radius: var(--r-sm);
   font: inherit;
   font-size: 13px;
-  color: #111418;
+  color: var(--c-text);
   text-transform: none;
   letter-spacing: normal;
   resize: vertical;
@@ -224,21 +224,25 @@ async function send(): Promise<void> {
   gap: 7px;
   align-items: flex-start;
   font-size: 11px;
-  color: #4b5262;
+  color: var(--c-text-muted);
   line-height: 1.35;
 }
 .lead__submit {
   padding: 8px 12px;
-  border: 1px solid #2f6fed;
-  border-radius: 8px;
-  background: #2f6fed;
+  border: 1px solid var(--c-accent);
+  border-radius: var(--r-md);
+  background: var(--c-accent);
   color: #fff;
   font: inherit;
   font-size: 13px;
   cursor: pointer;
 }
+/* Выключенная кнопка гасится заливкой, а не прозрачностью: полупрозрачный
+   синий на белом читается как сломанный, а не как «пока нельзя» */
 .lead__submit:disabled {
-  opacity: 0.5;
+  border-color: var(--c-line-strong);
+  background: var(--c-bg-active);
+  color: var(--c-text-faint);
   cursor: default;
 }
 </style>

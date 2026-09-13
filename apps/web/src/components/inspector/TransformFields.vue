@@ -65,8 +65,8 @@ function turnBy(deltaDeg: number): void {
 
 .turns button {
   padding: 6px 10px;
-  border: 1px solid #d5d8dd;
-  border-radius: 7px;
+  border: 1px solid var(--c-line-strong);
+  border-radius: var(--r-sm);
   background: #fff;
   font: inherit;
   font-size: 12px;
@@ -74,6 +74,6 @@ function turnBy(deltaDeg: number): void {
 }
 
 .turns button:hover {
-  border-color: #b6c2d4;
+  border-color: var(--c-text-faint);
 }
 </style>

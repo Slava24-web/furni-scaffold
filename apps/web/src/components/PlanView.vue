@@ -110,7 +110,7 @@ const sortedItems = computed(() =>
             v-if="opening.arc.length > 0"
             :points="polyline(opening.arc)"
             fill="none"
-            stroke="#8a909b"
+            stroke="var(--c-text-faint)"
             stroke-width="8"
             stroke-dasharray="60 40"
           />
@@ -120,7 +120,7 @@ const sortedItems = computed(() =>
         <g v-for="item in sortedItems" :key="item.instanceId">
           <path
             :d="path(item.corners)"
-            :fill="item.mounted ? 'none' : '#f2f3f5'"
+            :fill="item.mounted ? 'none' : 'var(--c-bg-hover)'"
             stroke="#3d4450"
             stroke-width="10"
             :stroke-dasharray="item.mounted ? '90 60' : undefined"
@@ -207,7 +207,7 @@ const sortedItems = computed(() =>
   justify-content: space-between;
   gap: 16px;
   padding: 14px 18px;
-  border-bottom: 1px solid #e5e7ec;
+  border-bottom: 1px solid var(--c-line);
 }
 .plan__title {
   margin: 0;
@@ -216,13 +216,13 @@ const sortedItems = computed(() =>
 .plan__meta {
   margin: 3px 0 0;
   font-size: 12px;
-  color: #6b7280;
+  color: var(--c-text-muted);
   font-variant-numeric: tabular-nums;
 }
 .plan__close {
   padding: 6px 12px;
-  border: 1px solid #d5d8dd;
-  border-radius: 7px;
+  border: 1px solid var(--c-line-strong);
+  border-radius: var(--r-sm);
   background: #fff;
   font: inherit;
   font-size: 13px;
@@ -231,9 +231,9 @@ const sortedItems = computed(() =>
 .plan__empty {
   margin: 16px 18px;
   padding: 9px 12px;
-  border-radius: 9px;
+  border-radius: var(--r-md);
   background: #f4f5f7;
-  color: #6b7280;
+  color: var(--c-text-muted);
   font-size: 12px;
 }
 .plan__body {
@@ -252,12 +252,12 @@ const sortedItems = computed(() =>
   background: #fff;
 }
 .dim line {
-  stroke: #2f6fed;
+  stroke: var(--c-accent);
   stroke-width: 6;
 }
 .dim text {
   font-size: 120px;
-  fill: #2f6fed;
+  fill: var(--c-accent);
   font-variant-numeric: tabular-nums;
 }
 .legend__title {
@@ -271,7 +271,7 @@ const sortedItems = computed(() =>
   padding: 0;
   list-style: none;
   font-size: 12px;
-  color: #4b5262;
+  color: var(--c-text-muted);
 }
 .legend__dot {
   display: inline-block;

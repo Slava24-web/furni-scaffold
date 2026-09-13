@@ -41,21 +41,21 @@ const emit = defineEmits<{ change: [string] }>();
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  color: #8a909b;
+  color: var(--c-text-faint);
 }
 
 input[type='number'] {
   width: 100%;
   padding: 5px 7px;
-  border: 1px solid #d5d8dd;
-  border-radius: 7px;
+  border: 1px solid var(--c-line-strong);
+  border-radius: var(--r-sm);
   font: inherit;
   font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
 
 input[type='number']:focus {
-  outline: 2px solid #2f6fed;
+  outline: 2px solid var(--c-accent);
   outline-offset: -1px;
   border-color: transparent;
 }

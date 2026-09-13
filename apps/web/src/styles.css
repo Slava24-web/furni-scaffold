@@ -1,11 +1,95 @@
+/**
+ * Токены интерфейса планировщика.
+ *
+ * Раньше цвета, радиусы и размеры шрифта задавались числами прямо
+ * в компонентах: шесть оттенков серого, пять радиусов, десять размеров
+ * текста. Со стороны это читается как набор экранов от разных людей.
+ * Здесь одна шкала на всё приложение.
+ *
+ * Планировщик — рабочий инструмент, и главное в нём сцена. Хром вокруг
+ * неё обязан быть тихим: один акцент, одно семейство нейтральных,
+ * тени крашеные в фон, а не чёрные.
+ */
 :root {
   /* Светлая схема задана явно: интерфейс планировщика нарисован светлым,
      и при системной тёмной теме браузер красил бы текст белым по белому.
      Тёмная тема — отдельная задача, а не побочный эффект настроек ОС. */
   color-scheme: light;
+
+  /* --- Нейтральные. Одно семейство, слегка тёплое: чистый серый рядом
+         с деревом и камнем в сцене выглядит синим --- */
+  --c-bg: #ffffff;
+  --c-bg-sunken: #f7f7f8;
+  --c-bg-raised: #ffffff;
+  --c-bg-hover: #f2f3f5;
+  --c-bg-active: #eceef1;
+
+  --c-line: #e6e7ea;
+  --c-line-strong: #d4d6db;
+
+  --c-text: #16181d;
+  --c-text-muted: #5c626d;
+  /* Приглушённый, но читаемый: 4.7:1 даже на самой тёмной подложке
+     интерфейса. Прежний #8c919b давал 3.0 и не проходил WCAG AA
+     для мелких подписей — а мелкие подписи здесь почти весь текст */
+  --c-text-faint: #646973;
+
+  /* --- Акцент. Один на всё приложение --- */
+  --c-accent: #2f6fed;
+  --c-accent-hover: #2560d8;
+  --c-accent-soft: #eef3fe;
+  --c-accent-line: #c5d8fb;
+
+  /* --- Состояния --- */
+  --c-danger: #b42318;
+  --c-danger-soft: #fef3f2;
+  --c-danger-line: #f2c8c3;
+  --c-warn: #a35b06;
+  --c-warn-soft: #fff8ef;
+  --c-warn-line: #f0d9b8;
+
+  /* --- Радиусы. Четыре ступени, больше не заводить --- */
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-pill: 999px;
+
+  /* --- Тени. Крашены в фон: чистый чёрный на светлом даёт грязь --- */
+  --sh-sm: 0 1px 2px rgb(22 24 29 / 0.05);
+  --sh-md: 0 2px 6px rgb(22 24 29 / 0.06), 0 1px 2px rgb(22 24 29 / 0.04);
+  --sh-lg: 0 12px 32px rgb(22 24 29 / 0.10), 0 2px 8px rgb(22 24 29 / 0.05);
+
+  /* --- Текст --- */
+  --t-xs: 11px;
+  --t-sm: 12px;
+  --t-md: 13px;
+  --t-lg: 15px;
+  --t-xl: 19px;
+
+  /* --- Ритм --- */
+  --gap-1: 4px;
+  --gap-2: 8px;
+  --gap-3: 12px;
+  --gap-4: 16px;
+  --gap-5: 24px;
+
+  /* Одна кривая на все переходы: разнобой ощущается как разные приложения */
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+
   font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  color: #111418;
-  background: #fff;
+  /* Цифры в интерфейсе меряют, а не украшают: без табличных знаков
+     размеры прыгают при каждом изменении на миллиметр */
+  font-variant-numeric: tabular-nums;
+  color: var(--c-text);
+  background: var(--c-bg);
+}
+
+/* Ширина считается по внешней границе. Без этого padding и border
+   прибавляются к заданной ширине, и панель на 258 px занимает 282 */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
 
 html,
@@ -20,4 +104,55 @@ body {
   background: inherit;
   /* Резинка прокрутки поверх канваса ломает жесты на мобильных */
   overscroll-behavior: none;
+}
+
+/**
+ * Видимый фокус на всём приложении.
+ *
+ * Планировщиком пользуются с клавиатуры не меньше, чем мышью: поля
+ * размеров, каталог, панели. Браузерное кольцо по умолчанию местами
+ * теряется на светлом фоне.
+ */
+:where(button, a, input, select, [tabindex]):focus-visible {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 1px;
+  border-radius: var(--r-sm);
+}
+
+/* Тонкие полосы прокрутки в панелях: широкая системная съедает
+   ширину, которой в колонке 300 px и так мало */
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--c-line-strong) transparent;
+}
+.scroll-thin::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scroll-thin::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: var(--r-pill);
+  background-clip: content-box;
+  background-color: var(--c-line-strong);
+}
+.scroll-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/**
+ * Уважение к системной настройке анимации.
+ *
+ * Переходы в интерфейсе короткие и служат откликом на нажатие, но если
+ * человек попросил систему не двигать интерфейс — не двигаем. Анимация
+ * сцены живёт во вьюере и этой настройкой не управляется: там движение
+ * не украшение, а сам предмет работы.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }

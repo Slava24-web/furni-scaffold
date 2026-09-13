@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { onMounted } from 'vue';
 import type { CatalogProduct } from '@furni/shared';
 import { useCatalogStore } from '../stores/catalog';
 
@@ -7,7 +6,6 @@ const props = defineProps<{ dragging: CatalogProduct | null }>();
 const emit = defineEmits<{ dragStart: [CatalogProduct, PointerEvent] }>();
 
 const catalog = useCatalogStore();
-onMounted(() => void catalog.load());
 
 const price = (cents: number): string =>
   `${(cents / 100).toLocaleString('ru-RU', { maximumFractionDigits: 0 })} ₽`;
@@ -17,9 +15,7 @@ const size = (product: CatalogProduct): string =>
 </script>
 
 <template>
-  <aside class="catalog">
-    <h2 class="catalog__title">Каталог</h2>
-
+  <div class="catalog scroll-thin">
     <p v-if="catalog.loading" class="catalog__note">Загрузка…</p>
     <p v-else-if="catalog.error" class="catalog__note catalog__note--error">
       {{ catalog.error }}
@@ -62,7 +58,7 @@ const size = (product: CatalogProduct): string =>
         </li>
       </ul>
     </section>
-  </aside>
+  </div>
 </template>
 
 <style scoped>
@@ -76,18 +72,16 @@ const size = (product: CatalogProduct): string =>
      перехватит жест под прокрутку панели */
   touch-action: pan-y;
 }
-.catalog__title {
-  margin: 2px 0 14px;
-  font-size: 15px;
-  font-weight: 600;
-}
 .catalog__note {
   margin: 0 0 12px;
   font-size: 12px;
-  color: #6b7280;
+  color: var(--c-text-muted);
 }
 .catalog__note--error {
-  color: #b42318;
+  color: var(--c-danger);
+}
+.group:first-of-type .group__title {
+  margin-top: 2px;
 }
 .group__title {
   margin: 18px 0 8px;
@@ -95,7 +89,7 @@ const size = (product: CatalogProduct): string =>
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #8a909b;
+  color: var(--c-text-faint);
 }
 .group__items {
   margin: 0;
@@ -110,8 +104,8 @@ const size = (product: CatalogProduct): string =>
   align-items: center;
   gap: 10px;
   padding: 7px 9px;
-  border: 1px solid #e5e7ec;
-  border-radius: 10px;
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
   background: #fff;
   cursor: grab;
   user-select: none;
@@ -119,7 +113,7 @@ const size = (product: CatalogProduct): string =>
   transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
 .item:hover {
-  border-color: #c3cbd8;
+  border-color: var(--c-line-strong);
   box-shadow: 0 1px 3px rgb(16 24 40 / 0.06);
 }
 .item--dragging {
@@ -129,15 +123,15 @@ const size = (product: CatalogProduct): string =>
   display: block;
   width: 76px;
   height: 57px;
-  border-radius: 7px;
+  border-radius: var(--r-sm);
   /* Тёплая подложка: у превью прозрачный фон, и на белом светлые
      изделия сливались бы с карточкой */
-  background: #f1f2f5;
+  background: var(--c-bg-sunken);
   object-fit: contain;
   pointer-events: none;
 }
 .item__preview--empty {
-  background: repeating-linear-gradient(45deg, #f1f2f5, #f1f2f5 6px, #e9ebef 6px, #e9ebef 12px);
+  background: repeating-linear-gradient(45deg, var(--c-bg-sunken), var(--c-bg-sunken) 6px, var(--c-line) 6px, var(--c-line) 12px);
 }
 .item__text {
   display: grid;
@@ -150,7 +144,7 @@ const size = (product: CatalogProduct): string =>
 }
 .item__meta {
   font-size: 11px;
-  color: #8a909b;
+  color: var(--c-text-faint);
   font-variant-numeric: tabular-nums;
 }
 .item__bottom {
@@ -170,7 +164,7 @@ const size = (product: CatalogProduct): string =>
 .item__badge {
   flex: none;
   padding: 1px 6px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: #eef2ff;
   color: #3538cd;
   font-size: 10px;

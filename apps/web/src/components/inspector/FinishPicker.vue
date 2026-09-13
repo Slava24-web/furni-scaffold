@@ -35,7 +35,7 @@ function optionDelta(slot: FinishSlot, code: string): string | null {
 /** Кружок-образец: показывает цвет материала, а не только название. */
 function swatch(code: string): string {
   const colour = props.materials.get(code)?.baseColorFactor;
-  if (!colour) return '#d5d8dd';
+  if (!colour) return 'var(--c-line-strong)';
   const channel = (value: number) =>
     Math.round(Math.min(1, Math.max(0, value)) ** (1 / 2.2) * 255);
   return `rgb(${channel(colour[0])} ${channel(colour[1])} ${channel(colour[2])})`;
@@ -74,7 +74,7 @@ function swatch(code: string): string {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  color: #8a909b;
+  color: var(--c-text-faint);
 }
 
 .finish__options {
@@ -92,8 +92,8 @@ function swatch(code: string): string {
   align-items: center;
   gap: 8px;
   padding: 5px 8px;
-  border: 1px solid #e5e7ec;
-  border-radius: 8px;
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
   background: #fff;
   font: inherit;
   font-size: 12px;
@@ -102,12 +102,12 @@ function swatch(code: string): string {
 }
 
 .finish__option:hover {
-  border-color: #b6c2d4;
+  border-color: var(--c-text-faint);
 }
 
 .finish__option--active {
-  border-color: #2f6fed;
-  box-shadow: inset 0 0 0 1px #2f6fed;
+  border-color: var(--c-accent);
+  box-shadow: inset 0 0 0 1px var(--c-accent);
 }
 
 .finish__swatch {
@@ -125,7 +125,7 @@ function swatch(code: string): string {
 
 .finish__delta {
   font-size: 11px;
-  color: #6b7280;
+  color: var(--c-text-muted);
   font-variant-numeric: tabular-nums;
 }
 </style>

@@ -1,9 +1,14 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
+import { PhCaretDown, PhWarningCircle } from '@phosphor-icons/vue';
 import type { ErgonomicFinding } from '@furni/shared';
 
 /**
  * Замечания по эргономике.
+ *
+ * Свой блок у края сцены, а не строка в колонке каталога: замечания
+ * относятся к расстановке, а не к выбору товара, и по тапу подсвечивают
+ * объект в сцене — рядом с ней им и место.
  *
  * Показываются списком, а не всплывающим окном: это подсказки, а не
  * ошибки, и перебивать ими расстановку нельзя. Тап по замечанию
@@ -15,20 +20,33 @@ const emit = defineEmits<{ highlight: [readonly string[]] }>();
 
 const open = ref(true);
 
-const warnings = () => props.findings.filter((finding) => finding.severity === 'warning').length;
+const warnings = computed(
+  () => props.findings.filter((finding) => finding.severity === 'warning').length,
+);
 </script>
 
 <template>
-  <section v-if="props.findings.length > 0" class="ergo">
-    <button type="button" class="ergo__head" @click="open = !open">
-      <span class="ergo__title">Эргономика</span>
-      <span class="ergo__count" :class="{ 'ergo__count--warn': warnings() > 0 }">
+  <section v-if="props.findings.length > 0" class="dock" :class="{ 'dock--open': open }">
+    <button type="button" class="dock__head" :aria-expanded="open" @click="open = !open">
+      <PhWarningCircle
+        :size="15"
+        weight="regular"
+        class="dock__icon"
+        :class="{ 'dock__icon--warn': warnings > 0 }"
+      />
+      <span class="dock__title">Эргономика</span>
+      <span class="dock__count" :class="{ 'dock__count--warn': warnings > 0 }">
         {{ props.findings.length }}
       </span>
-      <span class="ergo__chevron" :class="{ 'ergo__chevron--open': open }">⌄</span>
+      <PhCaretDown
+        :size="13"
+        weight="bold"
+        class="dock__chevron"
+        :class="{ 'dock__chevron--open': open }"
+      />
     </button>
 
-    <ul v-if="open" class="ergo__list">
+    <ul v-if="open" class="dock__list scroll-thin">
       <li v-for="finding in props.findings" :key="finding.code + finding.instanceIds.join()">
         <button
           type="button"
@@ -44,84 +62,129 @@ const warnings = () => props.findings.filter((finding) => finding.severity === '
 </template>
 
 <style scoped>
-.ergo {
-  flex: none;
-  border-top: 1px solid #e5e7ec;
-  background: #fff;
-  max-height: 40%;
+/**
+ * Док прижат к левому нижнему углу сцены и не растёт выше половины
+ * её высоты: сцена важнее списка замечаний.
+ */
+.dock {
+  position: absolute;
+  left: var(--gap-3);
+  bottom: var(--gap-3);
+  z-index: 2;
+  width: min(296px, calc(100% - var(--gap-3) * 2));
+  max-height: min(46%, 380px);
   display: flex;
   flex-direction: column;
-  min-height: 0;
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-lg);
+  background: var(--c-bg);
+  box-shadow: var(--sh-lg);
+  overflow: hidden;
 }
-.ergo__head {
+
+.dock__head {
   display: grid;
-  grid-template-columns: 1fr auto auto;
-  gap: 8px;
+  grid-template-columns: auto 1fr auto auto;
+  gap: var(--gap-2);
   align-items: center;
-  padding: 9px 12px;
+  flex: none;
+  padding: 10px 12px;
   border: 0;
   background: none;
   font: inherit;
   cursor: pointer;
   text-align: left;
 }
-.ergo__title {
-  font-size: 12px;
+
+.dock--open .dock__head {
+  border-bottom: 1px solid var(--c-line);
+}
+
+.dock__icon {
+  color: var(--c-text-faint);
+}
+
+.dock__icon--warn {
+  color: var(--c-danger);
+}
+
+.dock__title {
+  font-size: var(--t-md);
   font-weight: 600;
+  color: var(--c-text);
 }
-.ergo__count {
-  min-width: 18px;
+
+.dock__count {
+  min-width: 20px;
   padding: 1px 6px;
-  border-radius: 999px;
-  background: #eef1f5;
-  color: #6b7280;
-  font-size: 11px;
+  border-radius: var(--r-pill);
+  background: var(--c-bg-active);
+  color: var(--c-text-muted);
+  font-size: var(--t-xs);
   text-align: center;
-  font-variant-numeric: tabular-nums;
 }
-.ergo__count--warn {
-  background: #fef3f2;
-  color: #b42318;
+
+.dock__count--warn {
+  background: var(--c-danger-soft);
+  color: var(--c-danger);
 }
-.ergo__chevron {
-  font-size: 12px;
-  color: #8a909b;
-  transition: transform 0.15s;
+
+.dock__chevron {
+  color: var(--c-text-faint);
+  transition: transform 0.18s var(--ease);
 }
-.ergo__chevron--open {
+
+.dock__chevron--open {
   transform: rotate(180deg);
 }
-.ergo__list {
+
+.dock__list {
   overflow-y: auto;
   margin: 0;
-  padding: 0 12px 12px;
+  padding: var(--gap-2);
   list-style: none;
   display: grid;
   gap: 5px;
 }
+
+/* Сами замечания оставлены как были: цветная полоса слева читается
+   с одного взгляда, и менять то, что работает, незачем */
 .finding {
   width: 100%;
   padding: 7px 9px;
   border: 0;
-  border-left: 3px solid #d5d8dd;
-  border-radius: 0 7px 7px 0;
-  background: #f7f8fa;
+  border-left: 3px solid var(--c-line-strong);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  background: var(--c-bg-sunken);
   font: inherit;
-  font-size: 11px;
-  line-height: 1.35;
+  font-size: var(--t-xs);
+  line-height: 1.4;
   text-align: left;
-  color: #4b5262;
+  color: var(--c-text-muted);
   cursor: pointer;
+  transition: background-color 0.13s var(--ease);
 }
+
 .finding:hover {
-  background: #eef1f5;
+  background: var(--c-bg-active);
 }
+
 .finding--warning {
-  border-left-color: #d92d20;
-  background: #fef6f5;
+  border-left-color: var(--c-danger);
+  background: var(--c-danger-soft);
   color: #7a2b22;
 }
+
 .finding--note {
-  border-left-color: #f0a92c;
+  border-left-color: #e0a04a;
+}
+
+/* Узкая сцена: док во всю её ширину, иначе он перекрывает модель */
+@media (max-width: 900px) {
+  .dock {
+    left: var(--gap-2);
+    right: var(--gap-2);
+    width: auto;
+  }
 }
 </style>

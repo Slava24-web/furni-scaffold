@@ -68,29 +68,29 @@ function apply(): void {
   /* Поле встаёт над точкой тапа, чтобы не закрывать саму размерную линию */
   transform: translate(-50%, -130%);
   padding: 3px 4px 3px 6px;
-  border: 1px solid #2f6fed;
-  border-radius: 8px;
+  border: 1px solid var(--c-accent);
+  border-radius: var(--r-md);
   background: #fff;
   box-shadow: 0 6px 16px rgb(16 24 40 / 0.16);
 }
 input {
   width: 62px;
   padding: 2px 4px;
-  border: 1px solid #d5d8dd;
-  border-radius: 5px;
+  border: 1px solid var(--c-line-strong);
+  border-radius: var(--r-sm);
   font: inherit;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 .dimension__units {
   font-size: 10px;
-  color: #6b7280;
+  color: var(--c-text-muted);
 }
 button {
   padding: 3px 6px;
-  border: 1px solid #2f6fed;
-  border-radius: 5px;
-  background: #2f6fed;
+  border: 1px solid var(--c-accent);
+  border-radius: var(--r-sm);
+  background: var(--c-accent);
   color: #fff;
   font: inherit;
   font-size: 12px;

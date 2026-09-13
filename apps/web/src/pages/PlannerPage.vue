@@ -14,10 +14,8 @@ import {
   type Placement,
 } from '@furni/shared';
 import SceneCanvas from '../components/SceneCanvas.vue';
-import CatalogPanel from '../components/CatalogPanel.vue';
 import RoomToolbar from '../components/RoomToolbar.vue';
 import ObjectInspector from '../components/ObjectInspector.vue';
-import EstimatePanel from '../components/EstimatePanel.vue';
 import DimensionEditor from '../components/DimensionEditor.vue';
 import OpeningInspector from '../components/OpeningInspector.vue';
 import { conflictMessage } from '../lib/conflictMessage';
@@ -34,9 +32,8 @@ import type { KitchenTemplate } from '@furni/shared';
 // планировки, замечания появляются только вместе с мебелью, а шаблоны
 // — это следующий шаг после запуска. Бюджет TTFF считается по первому
 // кадру сцены (LOAD_BUDGETS.timeToFirstFrameMs)
-const FloorPanel = defineAsyncComponent(() => import('../components/FloorPanel.vue'));
+const PlannerSidebar = defineAsyncComponent(() => import('../components/PlannerSidebar.vue'));
 const ErgonomicsPanel = defineAsyncComponent(() => import('../components/ErgonomicsPanel.vue'));
-const TemplatePanel = defineAsyncComponent(() => import('../components/TemplatePanel.vue'));
 const CutPlanView = defineAsyncComponent(() => import('../components/CutPlanView.vue'));
 const LeadForm = defineAsyncComponent(() => import('../components/LeadForm.vue'));
 const PlanView = defineAsyncComponent(() => import('../components/PlanView.vue'));
@@ -254,6 +251,9 @@ const hint = computed(() => {
 });
 
 onMounted(() => {
+  // Каталог грузится страницей, а не панелью: он нужен смете, шаблонам
+  // и сцене независимо от того, какая вкладка колонки сейчас открыта
+  void catalog.load();
   if (!testingEnabled.value) return;
   installTestingApi(() => canvas.value?.viewer ?? null);
 });
@@ -269,6 +269,7 @@ onBeforeUnmount(() => uninstallTestingApi());
       :drawing-active="drawing.active.value"
       :can-undo="scene.undoStack.length > 0"
       :can-redo="scene.redoStack.length > 0"
+      :has-scene="scene.doc.rooms.length > 0 || scene.doc.placements.length > 0"
       @create-room="createRoom"
       @set-mode="setMode"
       @finish-drawing="finishDrawing"
@@ -296,23 +297,19 @@ onBeforeUnmount(() => uninstallTestingApi());
     />
 
     <div class="planner__body">
-      <div class="planner__sidebar">
-        <CatalogPanel :dragging="drag.product.value" @drag-start="drag.start" />
-        <TemplatePanel
-          :ready="scene.doc.rooms.length > 0"
-          :placed="scene.doc.placements.length"
-          :problem="kitchenProblem"
-          @apply="applyTemplate"
-        />
-        <ErgonomicsPanel :findings="ergonomics" @highlight="highlightFinding" />
-        <FloorPanel
-          v-if="scene.doc.rooms.length > 0"
-          :groups="catalog.floorGroups"
-          :selected="scene.doc.rooms[0]?.floorMaterialId ?? null"
-          @pick="scene.setFloor"
-        />
-        <EstimatePanel :estimate="estimate" @order="leadOpen = true" />
-      </div>
+      <PlannerSidebar
+        :dragging="drag.product.value"
+        :templates-ready="scene.doc.rooms.length > 0"
+        :placed="scene.doc.placements.length"
+        :template-problem="kitchenProblem"
+        :floor-groups="catalog.floorGroups"
+        :floor-selected="scene.doc.rooms[0]?.floorMaterialId ?? null"
+        :estimate="estimate"
+        @drag-start="drag.start"
+        @apply-template="applyTemplate"
+        @pick-floor="scene.setFloor"
+        @order="leadOpen = true"
+      />
 
       <div class="planner__scene" :class="{ 'is-drop-target': drag.overScene.value }">
         <SceneCanvas
@@ -363,6 +360,8 @@ onBeforeUnmount(() => uninstallTestingApi());
           @close="leadOpen = false"
         />
 
+        <ErgonomicsPanel :findings="ergonomics" @highlight="highlightFinding" />
+
         <p v-if="conflict" class="planner__hint planner__hint--conflict">{{ conflict }}</p>
         <p v-else-if="previewReadout" class="planner__hint planner__hint--readout">
           {{ previewReadout }}
@@ -387,64 +386,83 @@ onBeforeUnmount(() => uninstallTestingApi());
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: #fff;
+  background: var(--c-bg);
 }
+
 .planner__body {
   display: flex;
   flex: 1;
   min-height: 0;
 }
-.planner__sidebar {
-  display: flex;
-  flex-direction: column;
-  width: 300px;
-  flex: none;
-  min-height: 0;
-  border-right: 1px solid #e5e7ec;
-  background: #fbfbfc;
-}
+
+/**
+ * Сцена — главное на экране, поэтому под ней своя подложка: на чистом
+ * белом трёхмерная комната висит в пустоте без края.
+ */
 .planner__scene {
   position: relative;
   flex: 1;
   min-width: 0;
+  background: var(--c-bg-sunken);
 }
+
 .planner__scene.is-drop-target::after {
   content: '';
   position: absolute;
-  inset: 8px;
-  border: 2px dashed #2f6fed;
-  border-radius: 10px;
+  inset: var(--gap-2);
+  z-index: 3;
+  border: 2px dashed var(--c-accent);
+  border-radius: var(--r-lg);
+  background: rgb(47 111 237 / 0.04);
   pointer-events: none;
 }
-.planner__hint--conflict {
-  background: rgb(217 45 32 / 0.92);
-}
-.planner__hint--readout {
-  background: rgb(47 111 237 / 0.92);
-  font-variant-numeric: tabular-nums;
-}
+
+/**
+ * Подсказка у верхнего края сцены.
+ *
+ * Внизу слева стоит док эргономики, и на узком экране они перекрывали
+ * друг друга. Сверху подсказка к тому же ближе к инструменту, который
+ * её вызвал.
+ */
 .planner__hint {
   position: absolute;
   left: 50%;
-  bottom: 16px;
+  top: var(--gap-3);
   transform: translateX(-50%);
+  z-index: 2;
+  max-width: min(420px, 60%);
   margin: 0;
-  padding: 7px 14px;
-  border-radius: 999px;
-  background: rgb(17 20 24 / 0.82);
+  padding: 8px 14px;
+  border-radius: var(--r-pill);
+  background: rgb(22 24 29 / 0.86);
+  backdrop-filter: blur(8px);
   color: #fff;
-  font-size: 12px;
+  font-size: var(--t-sm);
+  line-height: 1.35;
+  text-align: center;
+  box-shadow: var(--sh-md);
   pointer-events: none;
 }
+
+.planner__hint--conflict {
+  background: rgb(180 35 24 / 0.92);
+}
+
+.planner__hint--readout {
+  background: rgb(47 111 237 / 0.92);
+}
+
+/* Призрак переносимого товара: маленький ярлык под курсором */
 .ghost {
   position: fixed;
   z-index: 10;
   transform: translate(12px, 12px);
   padding: 6px 10px;
-  border-radius: 8px;
-  background: #2f6fed;
+  border-radius: var(--r-sm);
+  background: var(--c-accent);
   color: #fff;
-  font-size: 12px;
+  font-size: var(--t-sm);
+  box-shadow: var(--sh-md);
   pointer-events: none;
 }
 </style>

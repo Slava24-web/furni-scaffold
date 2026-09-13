@@ -72,16 +72,16 @@ const expanded = ref(false);
 <style scoped>
 .estimate {
   flex: none;
-  border-top: 1px solid #e5e7ec;
+  border-top: 1px solid var(--c-line);
   background: #fff;
 }
 .estimate__order {
   width: calc(100% - 24px);
   margin: 0 12px 12px;
   padding: 8px 12px;
-  border: 1px solid #2f6fed;
-  border-radius: 8px;
-  background: #2f6fed;
+  border: 1px solid var(--c-accent);
+  border-radius: var(--r-md);
+  background: var(--c-accent);
   color: #fff;
   font: inherit;
   font-size: 13px;
@@ -118,7 +118,7 @@ const expanded = ref(false);
 .estimate__count {
   font-size: 11px;
   font-weight: 400;
-  color: #8a909b;
+  color: var(--c-text-faint);
   font-variant-numeric: tabular-nums;
 }
 .estimate__total {
@@ -129,7 +129,7 @@ const expanded = ref(false);
 .estimate__chevron {
   display: inline-block;
   width: 12px;
-  color: #8a909b;
+  color: var(--c-text-faint);
   transform: rotate(180deg);
   transition: transform 0.15s ease;
 }
@@ -168,7 +168,7 @@ const expanded = ref(false);
 }
 .line__finish {
   font-size: 11px;
-  color: #8a909b;
+  color: var(--c-text-faint);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -178,7 +178,7 @@ const expanded = ref(false);
   font-variant-numeric: tabular-nums;
 }
 .line__qty {
-  color: #8a909b;
+  color: var(--c-text-faint);
 }
 .line__sum {
   font-weight: 600;
@@ -186,7 +186,7 @@ const expanded = ref(false);
 .estimate__warning {
   margin: 10px 0 0;
   padding: 7px 9px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: #fffaeb;
   color: #93601a;
   font-size: 11px;
@@ -196,6 +196,6 @@ const expanded = ref(false);
   margin: 10px 0 0;
   font-size: 10px;
   line-height: 1.4;
-  color: #8a909b;
+  color: var(--c-text-faint);
 }
 </style>

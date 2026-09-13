@@ -227,8 +227,8 @@ function setNumber(field: 'width' | 'height' | 'sillHeight', value: number): voi
   display: grid;
   gap: 12px;
   padding: 12px;
-  border: 1px solid #e5e7ec;
-  border-radius: 12px;
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-lg);
   background: rgb(255 255 255 / 0.96);
   box-shadow: 0 8px 24px rgb(16 24 40 / 0.1);
   backdrop-filter: blur(6px);
@@ -243,7 +243,7 @@ function setNumber(field: 'width' | 'height' | 'sillHeight', value: number): voi
 }
 .opening__size {
   font-size: 11px;
-  color: #8a909b;
+  color: var(--c-text-faint);
   font-variant-numeric: tabular-nums;
 }
 .field {
@@ -254,7 +254,7 @@ function setNumber(field: 'width' | 'height' | 'sillHeight', value: number): voi
   font-size: 10px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: #8a909b;
+  color: var(--c-text-faint);
 }
 .options {
   display: grid;
@@ -274,7 +274,7 @@ function setNumber(field: 'width' | 'height' | 'sillHeight', value: number): voi
   width: 100%;
   padding: 6px 8px;
   border: 1px solid #e2e4e9;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: #fff;
   font: inherit;
   font-size: 12px;
@@ -282,11 +282,11 @@ function setNumber(field: 'width' | 'height' | 'sillHeight', value: number): voi
   cursor: pointer;
 }
 .option:hover {
-  border-color: #b6c2d4;
+  border-color: var(--c-text-faint);
 }
 .option--active {
-  border-color: #2f6fed;
-  box-shadow: inset 0 0 0 1px #2f6fed;
+  border-color: var(--c-accent);
+  box-shadow: inset 0 0 0 1px var(--c-accent);
 }
 .option--swatch {
   flex-direction: column;
@@ -296,7 +296,7 @@ function setNumber(field: 'width' | 'height' | 'sillHeight', value: number): voi
 }
 .option__name {
   font-size: 10px;
-  color: #6b7280;
+  color: var(--c-text-muted);
   text-align: center;
   line-height: 1.2;
 }
@@ -317,30 +317,30 @@ function setNumber(field: 'width' | 'height' | 'sillHeight', value: number): voi
   font-size: 10px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: #8a909b;
+  color: var(--c-text-faint);
 }
 .number input {
   width: 100%;
   padding: 5px 7px;
-  border: 1px solid #d5d8dd;
-  border-radius: 6px;
+  border: 1px solid var(--c-line-strong);
+  border-radius: var(--r-sm);
   font: inherit;
   font-size: 13px;
-  color: #111418;
+  color: var(--c-text);
   font-variant-numeric: tabular-nums;
   text-transform: none;
 }
 .remove {
   padding: 7px 9px;
   border: 1px solid #f0c3bd;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: #fff;
-  color: #b42318;
+  color: var(--c-danger);
   font: inherit;
   font-size: 12px;
   cursor: pointer;
 }
 .remove:hover {
-  background: #fef3f2;
+  background: var(--c-danger-soft);
 }
 </style>
