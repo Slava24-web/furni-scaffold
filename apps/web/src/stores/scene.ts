@@ -137,6 +137,17 @@ export const useSceneStore = defineStore('scene', () => {
     commit({ ...doc.value, placements: [...doc.value.placements, ...items] });
   }
 
+  /**
+   * Замена сцены готовой кухней.
+   *
+   * Шаблоны выбирают, а не копят: применить второй шаблон поверх первого
+   * значит получить две кухни в одной комнате. Одним шагом истории —
+   * передумавшему достаточно отмены.
+   */
+  function replacePlacements(items: readonly Placement[]): void {
+    commit({ ...doc.value, placements: [...items] });
+  }
+
   function removePlacement(instanceId: string): void {
     commit({
       ...doc.value,
@@ -259,6 +270,7 @@ export const useSceneStore = defineStore('scene', () => {
     updatePlacement,
     addPlacement,
     addPlacements,
+    replacePlacements,
     removePlacement,
     setRoom,
     addWall,

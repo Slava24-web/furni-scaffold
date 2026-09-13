@@ -238,6 +238,14 @@ interface KitchenParts {
   hood: CatalogProduct | undefined;
 }
 
+/** Чем раскладку можно ограничить: шаблон берёт не всю технику подряд. */
+export interface KitchenOptions {
+  /** Роли техники, которые разрешено ставить. Не задано — вся, что есть */
+  appliances?: ReadonlySet<CatalogProduct['role']>;
+  /** Часть артикула или названия предпочтительной вытяжки */
+  hoodHint?: string | undefined;
+}
+
 /**
  * Подбор изделий под раскладку.
  *
@@ -245,9 +253,15 @@ interface KitchenParts {
  * любую кухню, а Side-by-Side на 900 в маленькой съедает половину ряда.
  * Широкое пусть ставят руками.
  */
-function selectParts(products: readonly CatalogProduct[]): KitchenParts {
+function selectParts(
+  products: readonly CatalogProduct[],
+  options: KitchenOptions = {},
+): KitchenParts {
+  const allowed = options.appliances;
+  const wanted = (role: CatalogProduct['role']): boolean => !allowed || allowed.has(role);
+
   const narrowest = (role: CatalogProduct['role']): CatalogProduct | undefined =>
-    pickByRole(products, role).at(-1);
+    wanted(role) ? pickByRole(products, role).at(-1) : undefined;
 
   const hob = narrowest('hob');
   return {
@@ -259,13 +273,36 @@ function selectParts(products: readonly CatalogProduct[]): KitchenParts {
     oven: narrowest('oven'),
     sink: narrowest('sink'),
     hob,
-    // Вытяжка подбирается под плиту: узкая над широкой плитой не тянет
-    hood: hob
-      ? [...pickByRole(products, 'hood')].sort(
-          (a, b) => Math.abs(a.widthMm - hob.widthMm) - Math.abs(b.widthMm - hob.widthMm),
-        )[0]
-      : undefined,
+    hood: hob && wanted('hood') ? pickHood(products, hob, options.hoodHint) : undefined,
   };
+}
+
+/**
+ * Вытяжка под плиту.
+ *
+ * Шаблон может попросить конкретный тип — купольную, наклонную,
+ * встраиваемую. Подсказка ищется в артикуле и названии: шаблоны не
+ * знают артикулов конкретного магазина, и не нашлось — не беда.
+ * По умолчанию берётся ближайшая по ширине: узкая над широкой плитой
+ * не тянет.
+ */
+function pickHood(
+  products: readonly CatalogProduct[],
+  hob: CatalogProduct,
+  hint: string | undefined,
+): CatalogProduct | undefined {
+  const hoods = pickByRole(products, 'hood');
+  const byWidth = [...hoods].sort(
+    (a, b) => Math.abs(a.widthMm - hob.widthMm) - Math.abs(b.widthMm - hob.widthMm),
+  );
+  if (!hint) return byWidth[0];
+
+  const needle = hint.toLowerCase();
+  const matches = byWidth.filter(
+    (hood) =>
+      hood.sku.toLowerCase().includes(needle) || hood.name.toLowerCase().includes(needle),
+  );
+  return matches[0] ?? byWidth[0];
 }
 
 /** Разложенные по местам изделия и то, что о них надо помнить дальше. */
@@ -335,7 +372,12 @@ function composeMainRun(
 
   // Мойка: под неё нужна отдельная тумба, и она первая после угла
   plan.sinkSlot = parts.sink ? put(widest) : null;
+
+  // Между мойкой и плитой нужна рабочая поверхность: ставить горячее
+  // некуда, и брызги летят на конфорку. Обычно её занимает посудомойка,
+  // а без неё — обычная тумба
   if (dishwasher) put(dishwasher);
+  else if (plan.sinkSlot && parts.hob) put(narrowest);
 
   // Плита встаёт над духовкой; без духовки — над обычной тумбой.
   // Между ней и холодильником обязана остаться тумба: холодильник рядом
@@ -390,14 +432,10 @@ function minimumWorkFrontMm(parts: KitchenParts): number {
   const cooking = parts.oven?.widthMm ?? (parts.hob ? narrow : 0);
   // Между плитой и холодильником нужна тумба — она тоже часть фронта
   const spacer = parts.fridge && cooking > 0 ? narrow : 0;
+  // Как и рабочая поверхность между мойкой и плитой
+  const prep = parts.sink && parts.hob ? (parts.dishwasher?.widthMm ?? narrow) : 0;
 
-  return (
-    (parts.sink ? narrow : 0) +
-    (parts.dishwasher?.widthMm ?? 0) +
-    cooking +
-    spacer +
-    (parts.fridge?.widthMm ?? 0)
-  );
+  return (parts.sink ? narrow : 0) + prep + cooking + spacer + (parts.fridge?.widthMm ?? 0);
 }
 
 /**
@@ -619,12 +657,13 @@ export function buildKitchen(
   kind: KitchenLayoutKind,
   room: Room,
   products: readonly CatalogProduct[],
+  options: KitchenOptions = {},
 ): KitchenResult {
   const bounds = roomBounds([room]);
   const layout = KITCHEN_LAYOUTS.find((item) => item.kind === kind);
   if (!bounds || !layout) return { placements: [], problems: ['Нет помещения'] };
 
-  const parts = selectParts(products);
+  const parts = selectParts(products, options);
   if (parts.bases.length === 0) {
     return { placements: [], problems: ['В каталоге нет нижних модулей'] };
   }

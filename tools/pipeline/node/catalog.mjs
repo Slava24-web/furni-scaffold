@@ -24,6 +24,12 @@ export const TEST_TENANT = {
 /**
  * Материалы тенанта. `texture` ссылается на процедурную карту из
  * textures.mjs; без неё материал одноцветный.
+ *
+ * `baseColorFactor` — ЛИНЕЙНОЕ пространство, как требует glTF. Это не
+ * тот же набор чисел, что в CSS: тёмные цвета, записанные как sRGB,
+ * выходят на экран вдвое светлее. Именно так «Графит» рендерился
+ * средне-серым — 0.19 линейных это 0.47 после гамма-кодирования.
+ * Соответствие sRGB указано рядом с каждым цветом.
  */
 export const MATERIALS = {
   oak: {
@@ -40,7 +46,8 @@ export const MATERIALS = {
   white: {
     code: 'white',
     name: 'Белый ЛДСП',
-    baseColorFactor: [0.92, 0.91, 0.89, 1],
+    // sRGB #edeae5
+    baseColorFactor: [0.8469, 0.8228, 0.7835, 1],
     roughness: 0.55,
     metallic: 0,
     texture: null,
@@ -49,7 +56,8 @@ export const MATERIALS = {
   graphite: {
     code: 'graphite',
     name: 'Графит',
-    baseColorFactor: [0.19, 0.2, 0.22, 1],
+    // sRGB #31343a
+    baseColorFactor: [0.0307, 0.0343, 0.0423, 1],
     roughness: 0.5,
     metallic: 0,
     texture: null,
@@ -58,7 +66,8 @@ export const MATERIALS = {
   fabric: {
     code: 'fabric',
     name: 'Рогожка серая',
-    baseColorFactor: [0.94, 0.95, 0.94, 1],
+    // sRGB #d8d6d0: рогожка светлая, но не белая
+    baseColorFactor: [0.6867, 0.6724, 0.6308, 1],
     roughness: 0.92,
     metallic: 0,
     texture: 'fabric',
@@ -67,7 +76,8 @@ export const MATERIALS = {
   steel: {
     code: 'steel',
     name: 'Сталь матовая',
-    baseColorFactor: [0.62, 0.64, 0.66, 1],
+    // sRGB #9aa2ad
+    baseColorFactor: [0.3231, 0.3613, 0.4179, 1],
     roughness: 0.35,
     metallic: 0.9,
     texture: null,
@@ -76,7 +86,8 @@ export const MATERIALS = {
   stone: {
     code: 'stone',
     name: 'Камень серый',
-    baseColorFactor: [0.42, 0.43, 0.45, 1],
+    // sRGB #6b6d70
+    baseColorFactor: [0.147, 0.1529, 0.162, 1],
     roughness: 0.28,
     metallic: 0.05,
     texture: null,

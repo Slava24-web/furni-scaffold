@@ -7,6 +7,7 @@ export * from './scene/bounds';
 export * from './scene/resize';
 export * from './scene/services';
 export * from './scene/kitchenLayout';
+export * from './scene/kitchenTemplates';
 export * from './scene/openingStyles';
 export * from './scene/openingPlacement';
 export * from './scene/box';

@@ -1,9 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import {
-  KITCHEN_LAYOUTS,
   SERVICE_KINDS,
-  type KitchenLayoutKind,
   type ServicePointKind,
 } from '@furni/shared';
 import type { PlannerMode } from '../composables/useSceneEditing';
@@ -26,7 +24,6 @@ const emit = defineEmits<{
   redo: [];
   showCut: [];
   showPlan: [];
-  buildKitchen: [KitchenLayoutKind];
   pickService: [ServicePointKind];
 }>();
 
@@ -97,19 +94,6 @@ function toggleMode(mode: PlannerMode): void {
         @click="emit('pickService', service.kind)"
       >
         {{ service.name }}
-      </button>
-    </div>
-
-    <div class="toolbar__group">
-      <span class="toolbar__label">Собрать кухню</span>
-      <button
-        v-for="layout in KITCHEN_LAYOUTS"
-        :key="layout.kind"
-        type="button"
-        :title="layout.description"
-        @click="emit('buildKitchen', layout.kind)"
-      >
-        {{ layout.name }}
       </button>
     </div>
 

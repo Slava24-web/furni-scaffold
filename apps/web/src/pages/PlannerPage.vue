@@ -2,7 +2,7 @@
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import {
-  buildKitchen,
+  buildKitchenTemplate,
   createRectangularRoom,
   checkErgonomics,
   checkServices,
@@ -18,11 +18,10 @@ import CatalogPanel from '../components/CatalogPanel.vue';
 import RoomToolbar from '../components/RoomToolbar.vue';
 import ObjectInspector from '../components/ObjectInspector.vue';
 import EstimatePanel from '../components/EstimatePanel.vue';
-import FloorPanel from '../components/FloorPanel.vue';
-import ErgonomicsPanel from '../components/ErgonomicsPanel.vue';
 import DimensionEditor from '../components/DimensionEditor.vue';
 import OpeningInspector from '../components/OpeningInspector.vue';
 import { conflictMessage } from '../lib/conflictMessage';
+import type { KitchenTemplate } from '@furni/shared';
 
 /**
  * Раскрой и форма заявки грузятся по требованию.
@@ -31,6 +30,13 @@ import { conflictMessage } from '../lib/conflictMessage';
  * и клиент API. В первом кадре планировщика им делать нечего — бюджет
  * TTFF считается по нему (LOAD_BUDGETS.timeToFirstFrameMs).
  */
+// Панели сайдбара до первого кадра не нужны: пол выбирают после
+// планировки, замечания появляются только вместе с мебелью, а шаблоны
+// — это следующий шаг после запуска. Бюджет TTFF считается по первому
+// кадру сцены (LOAD_BUDGETS.timeToFirstFrameMs)
+const FloorPanel = defineAsyncComponent(() => import('../components/FloorPanel.vue'));
+const ErgonomicsPanel = defineAsyncComponent(() => import('../components/ErgonomicsPanel.vue'));
+const TemplatePanel = defineAsyncComponent(() => import('../components/TemplatePanel.vue'));
 const CutPlanView = defineAsyncComponent(() => import('../components/CutPlanView.vue'));
 const LeadForm = defineAsyncComponent(() => import('../components/LeadForm.vue'));
 const PlanView = defineAsyncComponent(() => import('../components/PlanView.vue'));
@@ -40,7 +46,6 @@ import { useOpeningEditing } from '../composables/useOpeningEditing';
 import { installTestingApi, uninstallTestingApi } from '../dev/testingApi';
 import { useCatalogStore } from '../stores/catalog';
 import { useSceneStore } from '../stores/scene';
-import type { KitchenLayoutKind } from '@furni/shared';
 
 const route = useRoute();
 const scene = useSceneStore();
@@ -122,21 +127,22 @@ function createRoom(size: { widthMm: number; depthMm: number }): void {
 }
 
 /**
- * Готовый сценарий кухни.
+ * Готовая кухня по шаблону.
  *
  * Раскладка добавляется к сцене одним шагом истории: передумавшему
  * достаточно отмены, а разбирать её по модулю никто не станет.
+ * Прежняя кухня при этом снимается — шаблоны выбирают, а не копят.
  */
-function assembleKitchen(kind: KitchenLayoutKind): void {
+function applyTemplate(template: KitchenTemplate): void {
   const [room] = scene.doc.rooms;
   if (!room) {
     kitchenProblem.value = 'Сначала постройте помещение';
     return;
   }
 
-  const result = buildKitchen(kind, room, catalog.products);
+  const result = buildKitchenTemplate(template, room, catalog.products);
   kitchenProblem.value = result.problems[0] ?? null;
-  scene.addPlacements(result.placements);
+  scene.replacePlacements(result.placements);
 }
 
 const kitchenProblem = ref<string | null>(null);
@@ -271,7 +277,6 @@ onBeforeUnmount(() => uninstallTestingApi());
       @redo="scene.redo()"
       @show-cut="cutOpen = true"
       @show-plan="planOpen = true"
-      @build-kitchen="assembleKitchen"
       @pick-service="pickServiceKind"
     />
 
@@ -293,6 +298,12 @@ onBeforeUnmount(() => uninstallTestingApi());
     <div class="planner__body">
       <div class="planner__sidebar">
         <CatalogPanel :dragging="drag.product.value" @drag-start="drag.start" />
+        <TemplatePanel
+          :ready="scene.doc.rooms.length > 0"
+          :placed="scene.doc.placements.length"
+          :problem="kitchenProblem"
+          @apply="applyTemplate"
+        />
         <ErgonomicsPanel :findings="ergonomics" @highlight="highlightFinding" />
         <FloorPanel
           v-if="scene.doc.rooms.length > 0"

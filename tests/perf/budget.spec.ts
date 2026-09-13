@@ -62,11 +62,25 @@ test.describe('Бюджет производительности сцены', ()
     expect(snapshot.fpsP95, 'fps p95').toBeGreaterThanOrEqual(budget.floorFps);
   });
 
+  /**
+   * Время до первого кадра берётся ИЗ СТРАНИЦЫ, а не по часам теста.
+   *
+   * Раньше замерялась разница Date.now() вокруг page.goto — в неё
+   * попадал запуск браузера самим Playwright, полторы секунды, которых
+   * пользователь не платит. Гейт держался на этой постоянной и падал
+   * от загрузки хоста, а не от регрессий. firstFrameAt — это
+   * performance.now() в момент первого кадра, то есть время от начала
+   * навигации: ровно то, что описывает бюджет.
+   *
+   * Дросселирование сети и процессора включено в beforeEach: бюджет
+   * задан для 4G и mid-устройства (LOAD_BUDGETS.timeToFirstFrameMs).
+   */
   test('первый кадр укладывается в бюджет', async ({ page }) => {
-    const start = Date.now();
     await page.goto('/planner?forceTier=mid&perf=1');
-    await page.waitForFunction(() => window.__furni?.firstFrameAt != null, { timeout: 10_000 });
-    const ttff = Date.now() - start;
+    await page.waitForFunction(() => window.__furni?.firstFrameAt != null, { timeout: 20_000 });
+
+    const ttff = await page.evaluate(() => window.__furni!.firstFrameAt!);
+    console.log(`TTFF: ${Math.round(ttff)} мс из ${LOAD_BUDGETS.timeToFirstFrameMs}`);
     expect(ttff, 'TTFF').toBeLessThanOrEqual(LOAD_BUDGETS.timeToFirstFrameMs);
   });
 
