@@ -10,7 +10,16 @@
  *   низ верхнего ряда 1450 от пола
  * Всё в миллиметрах целыми (CLAUDE.md).
  */
-import { cylinder, mergeGeometries, roundedBox, segmentedBox, translate } from './geometry.mjs';
+import {
+  cylinder,
+  mergeGeometries,
+  ring,
+  roundedBox,
+  segmentedBox,
+  translate,
+  tubeX,
+  tubeZ,
+} from './geometry.mjs';
 import { carcassPanels, openBoxPanels } from './carcass.mjs';
 import { flatFacade, panelFacade } from './facade.mjs';
 
@@ -31,25 +40,22 @@ export const FACADE_GAP = 4;
 export function bracketHandle(centreXMm, centreYMm, frontZMm, spanMm = 224) {
   const postHeight = 32;
   const parts = [];
+
+  // Стойки — точёные, а не брусковые: за ручку берутся рукой, и грань
+  // на ней видна с любого ракурса
   for (const side of [-1, 1]) {
     parts.push(
       translate(
-        segmentedBox(14, 14, postHeight, 1),
+        tubeZ(7, postHeight, 8),
         centreXMm + (side * spanMm) / 2,
         centreYMm,
         frontZMm + postHeight / 2,
       ),
     );
   }
-  // Рейлинг: цилиндр строится вдоль Y, поэтому берём брусок со скруглением
-  parts.push(
-    translate(
-      roundedBox(spanMm + 14, 16, 16, 8, 4),
-      centreXMm,
-      centreYMm,
-      frontZMm + postHeight,
-    ),
-  );
+
+  // Рейлинг: настоящая труба вдоль X с заглушками по торцам
+  parts.push(translate(tubeX(8, spanMm + 16, 12), centreXMm, centreYMm, frontZMm + postHeight));
   return parts;
 }
 
@@ -73,15 +79,38 @@ export function carcass(widthMm, heightMm, depthMm, bottomMm, shelves = 1) {
   return carcassPanels(widthMm, heightMm, depthMm, { bottomMm, shelves });
 }
 
+/**
+ * Цоколь: планка, утопленная под фасад.
+ *
+ * Раньше это был брусок во всю глубину — снаружи он читался как продолжение
+ * корпуса до пола. Настоящий цоколь стоит с отступом назад, и его выдаёт
+ * именно тень в нише: под гарнитуром видна тёмная щель, а не сплошной борт.
+ */
+export const PLINTH_RECESS = 55;
+
 export function plinth(widthMm, depthMm) {
-  return translate(segmentedBox(widthMm - 20, PLINTH, depthMm - 60, 1), 0, PLINTH / 2, -10);
+  const front = depthMm / 2 - PLINTH_RECESS;
+
+  return [
+    // Лицевая планка
+    translate(segmentedBox(widthMm - 4, PLINTH, 16, 1), 0, PLINTH / 2, front - 8),
+    // Опорные бруски по бокам: держат планку и видны из ниши краем
+    ...[-1, 1].map((side) =>
+      translate(
+        segmentedBox(16, PLINTH, PLINTH_RECESS, 1),
+        (side * (widthMm - 60)) / 2,
+        PLINTH / 2,
+        front - PLINTH_RECESS / 2 - 8,
+      ),
+    ),
+  ];
 }
 
 /** Нижний шкаф с распашным фасадом. Корпус неподвижен, дверца — узел. */
 export function baseCabinet(widthMm) {
   return {
     white: carcass(widthMm, BASE_CARCASS, BASE_DEPTH, PLINTH),
-    graphite: [plinth(widthMm, BASE_DEPTH)],
+    graphite: plinth(widthMm, BASE_DEPTH),
   };
 }
 
@@ -126,7 +155,7 @@ export function baseDrawers(widthMm) {
   return {
     // У шкафа с ящиками полок нет: внутренний объём занимают короба
     white: carcass(widthMm, BASE_CARCASS, BASE_DEPTH, PLINTH, 0),
-    graphite: [plinth(widthMm, BASE_DEPTH)],
+    graphite: plinth(widthMm, BASE_DEPTH),
   };
 }
 
@@ -158,7 +187,16 @@ export function baseDrawerParts(widthMm) {
 
 /** Верхний шкаф. Origin остаётся внизу модели, подъём задаёт mountHeightMm. */
 export function wallCabinet(widthMm, heightMm) {
-  return { white: carcass(widthMm, heightMm, WALL_DEPTH, 0) };
+  return {
+    white: carcass(widthMm, heightMm, WALL_DEPTH, 0),
+    // Световая планка по низу: под ней прячут подсветку рабочей зоны,
+    // и без неё низ навесного ряда выглядит обрезанным. Целиком выше
+    // нуля — origin модели по контракту лежит на её низу (CLAUDE.md)
+    graphite: [
+      translate(segmentedBox(widthMm - 40, 12, WALL_DEPTH - 40, 1), 0, 6, 6),
+      translate(segmentedBox(widthMm, 18, 14, 1), 0, 9, WALL_DEPTH / 2 + FACADE_THICKNESS + 3),
+    ],
+  };
 }
 
 export function wallCabinetDoor(widthMm, heightMm) {
@@ -184,7 +222,7 @@ export function tallCabinet(widthMm) {
   return {
     // Пенал высокий: полок больше
     white: carcass(widthMm, height, BASE_DEPTH, PLINTH, 4),
-    graphite: [plinth(widthMm, BASE_DEPTH)],
+    graphite: plinth(widthMm, BASE_DEPTH),
   };
 }
 
@@ -223,18 +261,26 @@ export function tallCabinetDoors(widthMm) {
  *
  * Плинтус закрывает стык со стеной: без него столешница выглядит
  * положенной сверху доской, а не частью кухни.
+ *
+ * Передняя кромка скруглена крупнее остальных: именно её видно с любого
+ * места кухни и об неё опираются, а прямой угол на срезе ЛДСП выдаёт
+ * необработанную деталь.
  */
 export function worktop(widthMm) {
   const depth = 600;
   const offsetZ = (depth - BASE_DEPTH) / 2 - 20;
   const skirtHeight = 60;
   const skirtThickness = 18;
+  const front = offsetZ + depth / 2;
 
   return {
     stone: [
-      translate(roundedBox(widthMm, WORKTOP_THICKNESS, depth, 4, 3), 0, WORKTOP_THICKNESS / 2, offsetZ),
+      translate(roundedBox(widthMm, WORKTOP_THICKNESS, depth, 6, 4), 0, WORKTOP_THICKNESS / 2, offsetZ),
+      // Валик передней кромки: труба по всей длине заподлицо со срезом
+      translate(tubeX(WORKTOP_THICKNESS / 2, widthMm, 10), 0, WORKTOP_THICKNESS / 2, front - WORKTOP_THICKNESS / 2),
+      // Пристенный плинтус со скруглённой верхней кромкой
       translate(
-        segmentedBox(widthMm, skirtHeight, skirtThickness, 1),
+        roundedBox(widthMm, skirtHeight, skirtThickness, 5, 3),
         0,
         WORKTOP_THICKNESS + skirtHeight / 2,
         offsetZ - (depth - skirtThickness) / 2,
@@ -248,6 +294,11 @@ export function worktop(widthMm) {
  *
  * Ставится на столешницу: собственной отметки нет, высоту даёт опора
  * под указателем.
+ *
+ * Смеситель собран трубами, а не брусками: изогнутый излив — единственная
+ * округлая вещь на всей кухне, и гранёный он читается как деталь
+ * конструктора. Слив и перелив показаны кольцами: без них дно чаши
+ * выглядит глухой ванночкой.
  */
 export function sink() {
   const width = 500;
@@ -273,38 +324,70 @@ export function sink() {
     );
   }
 
+  // Слив: кольцо решётки на дне чаши
+  parts.push(translate(ring(42, 9, 8, 12), 0, wall + 4, 0));
+  // Перелив на заднем борту
+  parts.push(translate(ring(16, 6, 6, 8), 0, wallHeight - 34, -(depth / 2 - wall - 3)));
+
   // Бортик по периметру: им мойка ложится на столешницу
   parts.push(
     translate(roundedBox(width + rim * 2, 10, depth + rim * 2, 3, 2), 0, wallHeight + 5, 0),
   );
 
-  // Смеситель: стойка и излив
+  // Смеситель: стойка, изогнутый излив и рычаг
   const tapZ = -(depth / 2 + rim / 2);
-  parts.push(translate(cylinder(19, 300, 12), 0, wallHeight + 150, tapZ));
-  parts.push(translate(roundedBox(24, 24, 190, 12, 4), 0, wallHeight + 290, tapZ + 95));
+  const tapBase = wallHeight + 10;
+  parts.push(translate(cylinder(26, 16, 14), 0, tapBase + 8, tapZ));
+  parts.push(translate(cylinder(17, 250, 14), 0, tapBase + 125, tapZ));
+
+  // Излив выгибается тремя звеньями: колено, дуга и носик вниз
+  parts.push(translate(tubeZ(15, 60, 12), 0, tapBase + 268, tapZ + 22));
+  parts.push(translate(tubeZ(15, 120, 12), 0, tapBase + 252, tapZ + 100));
+  parts.push(translate(cylinder(14, 46, 12), 0, tapBase + 228, tapZ + 158));
+  // Аэратор на конце носика
+  parts.push(translate(cylinder(16, 12, 12), 0, tapBase + 200, tapZ + 158));
+
+  // Рычаг: наклонная ручка сбоку от стойки
+  parts.push(translate(tubeZ(9, 96, 8), 0, tapBase + 150, tapZ + 44));
 
   return { steel: parts };
 }
 
 /**
- * Варочная панель: стеклянная плита с конфорками.
+ * Индукционная варочная панель: стекло с контурами зон и сенсорами.
+ *
+ * Диски вместо контуров читались как четыре монеты, положенные сверху:
+ * у индукционной панели зона обозначена НАРИСОВАННЫМ кольцом заподлицо
+ * со стеклом, а не выступающей блямбой. Отсюда кольца, а не цилиндры.
+ *
  * Как и мойка, встаёт на ту поверхность, в которую целятся.
  */
 export function hob() {
   const width = 580;
   const depth = 510;
+  const glassHeight = 12;
 
-  const glass = [translate(roundedBox(width, 12, depth, 3, 2), 0, 6, 0)];
-  const burners = [];
+  // Рамка из стали по периметру: ею панель прижата к столешнице
+  const frame = [translate(roundedBox(width, 8, depth, 3, 2), 0, 4, 0)];
+  const glass = [translate(roundedBox(width - 16, glassHeight, depth - 16, 2, 2), 0, 8, 0)];
+
+  const marks = [];
   for (const dx of [-1, 1]) {
     for (const dz of [-1, 1]) {
-      burners.push(
-        translate(cylinder(88, 5, 20), dx * (width / 4), 14, dz * (depth / 4)),
-      );
+      const x = dx * (width / 4);
+      const z = dz * (depth / 4 - 10);
+      // Контур зоны нагрева и точка её центра
+      marks.push(translate(ring(88, 5, 3, 12), x, glassHeight + 3, z));
+      marks.push(translate(ring(20, 4, 3, 8), x, glassHeight + 3, z));
     }
   }
 
-  return { graphite: glass, steel: burners };
+  // Сенсорная панель управления по переднему краю
+  marks.push(
+    translate(segmentedBox(width - 200, 3, 44, 1), 0, glassHeight + 3, depth / 2 - 44),
+  );
+
+  return { graphite: glass, steel: [...frame, ...marks] };
 }
 
 /** Отдельная деталь: фасад или дверца с ручкой. */

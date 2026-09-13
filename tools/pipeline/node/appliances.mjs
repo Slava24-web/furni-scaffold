@@ -9,7 +9,15 @@
  *
  * Все размеры в миллиметрах, origin — низ-центр габарита (CLAUDE.md).
  */
-import { cylinder, roundedBox, rotateX, segmentedBox, translate } from './geometry.mjs';
+import {
+  cylinder,
+  roundedBox,
+  rotateX,
+  segmentedBox,
+  translate,
+  tubeX,
+  tubeZ,
+} from './geometry.mjs';
 
 /** Стандартный фронт встраиваемой техники и глубина ниши. */
 const NICHE_WIDTH = 600;
@@ -22,21 +30,24 @@ function boxAt(w, h, d, x, y, z, radius = 4, segments = 3) {
   return translate(roundedBox(w, h, d, radius, segments), x, y, z);
 }
 
-/** Горизонтальная ручка-рейлинг на фронте техники. */
+/**
+ * Горизонтальная ручка-рейлинг на фронте техники.
+ * Труба, а не брусок: за ручку берутся, и грань на ней видно вблизи.
+ */
 function bar(lengthMm, x, y, z) {
   return [
-    translate(roundedBox(lengthMm, 20, 20, 9, 4), x, y, z + 26),
-    translate(segmentedBox(18, 18, 26, 1), x - lengthMm / 2 + 20, y, z + 13),
-    translate(segmentedBox(18, 18, 26, 1), x + lengthMm / 2 - 20, y, z + 13),
+    translate(tubeX(10, lengthMm, 12), x, y, z + 26),
+    translate(tubeZ(8, 26, 8), x - lengthMm / 2 + 20, y, z + 13),
+    translate(tubeZ(8, 26, 8), x + lengthMm / 2 - 20, y, z + 13),
   ];
 }
 
 /** Вертикальная ручка холодильника. */
 function verticalBar(lengthMm, x, y, z) {
   return [
-    translate(roundedBox(20, lengthMm, 20, 9, 4), x, y, z + 26),
-    translate(segmentedBox(18, 18, 26, 1), x, y - lengthMm / 2 + 20, z + 13),
-    translate(segmentedBox(18, 18, 26, 1), x, y + lengthMm / 2 - 20, z + 13),
+    translate(cylinder(10, lengthMm, 12), x, y, z + 26),
+    translate(tubeZ(8, 26, 8), x, y - lengthMm / 2 + 20, z + 13),
+    translate(tubeZ(8, 26, 8), x, y + lengthMm / 2 - 20, z + 13),
   ];
 }
 
@@ -78,7 +89,28 @@ function fridge(widthMm, heightMm, depthMm, freezerShare = 0.36) {
       ...verticalBar(Math.min(700, fridgeHeight - 120), widthMm / 2 - 70, fridgeCentre, front),
       ...verticalBar(Math.min(300, freezer - 80), widthMm / 2 - 70, freezer / 2, front),
     ],
+    // Уплотнитель по контуру дверец и вентиляционная решётка цоколя:
+    // ими разрез фронта читается как две камеры, а не как проведённая линия
+    graphite: [
+      ...gasketAround(doorWidth - 24, fridgeHeight - 24, 14, fridgeCentre, front - doorDepth - 2),
+      ...gasketAround(doorWidth - 24, freezer - 24, 14, freezer / 2, front - doorDepth - 2),
+      boxAt(widthMm - 60, 44, 12, 0, 34, front - doorDepth / 2, 2, 2),
+    ],
   };
+}
+
+/** Уплотнитель по контуру дверцы: четыре планки заподлицо с фронтом. */
+function gasketAround(widthMm, heightMm, thicknessMm, centreYMm, zMm) {
+  const parts = [];
+  for (const side of [-1, 1]) {
+    parts.push(
+      boxAt(widthMm, thicknessMm, 10, 0, centreYMm + (side * (heightMm - thicknessMm)) / 2, zMm, 2, 2),
+    );
+    parts.push(
+      boxAt(thicknessMm, heightMm, 10, (side * (widthMm - thicknessMm)) / 2, centreYMm, zMm, 2, 2),
+    );
+  }
+  return parts;
 }
 
 /**
@@ -153,18 +185,46 @@ function oven() {
   const depth = 550;
   const front = depth / 2;
 
+  const doorHeight = height - 190;
+  const doorCentre = doorHeight / 2 + 20;
+  const inset = 46;
+
   return {
     white: [boxAt(width, height, depth - 30, 0, height / 2, -15, 4, 4)],
     graphite: [
       // Стекло дверцы во всю ширину — главная деталь духовки
-      boxAt(width - GAP * 2, height - 190, 30, 0, (height - 190) / 2 + 20, front - 15, 4, 3),
+      boxAt(width - GAP * 2, doorHeight, 30, 0, doorCentre, front - 15, 4, 3),
+      // Тёмная камера в глубине: без неё за стеклом виден корпус
+      boxAt(width - inset * 2 - 40, doorHeight - inset * 2 - 20, 10, 0, doorCentre, front - 60, 2, 2),
     ],
     steel: [
       boxAt(width, 120, 32, 0, height - 60, front - 16, 4, 3),
       ...bar(width - 120, 0, height - 150, front - 2),
       ...knobs(2, width - 200, 0, height - 60, front),
+      // Рамка стекла: по ней дверца читается дверцей, а не тёмной плитой
+      ...frameAround(width - GAP * 2 - 12, doorHeight - 12, 12, doorCentre, front - 2, 6),
+      // Дисплей таймера между переключателями
+      boxAt(150, 34, 8, 0, height - 60, front + 1, 2, 2),
     ],
   };
+}
+
+/**
+ * Рамка по контуру прямоугольника: четыре планки.
+ * Ею обводят стекло дверцы и вставки — контур даёт тень, и плоскость
+ * перестаёт читаться наклейкой.
+ */
+function frameAround(widthMm, heightMm, thicknessMm, centreYMm, zMm, depthMm) {
+  const parts = [];
+  for (const side of [-1, 1]) {
+    parts.push(
+      boxAt(widthMm, thicknessMm, depthMm, 0, centreYMm + (side * (heightMm - thicknessMm)) / 2, zMm, 2, 2),
+    );
+    parts.push(
+      boxAt(thicknessMm, heightMm, depthMm, (side * (widthMm - thicknessMm)) / 2, centreYMm, zMm, 2, 2),
+    );
+  }
+  return parts;
 }
 
 /** Микроволновая печь: ставится на столешницу. */

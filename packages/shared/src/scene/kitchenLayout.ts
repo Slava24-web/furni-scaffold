@@ -1,4 +1,5 @@
 import { roomBounds } from './bounds';
+import { SINK_LANDING_MAIN_MM } from '../rules/landing';
 import { deterministicUuid, randomUUID } from './uuid';
 import type { CatalogProduct } from '../catalog/schema';
 import type { Placement, Room } from './schema';
@@ -275,20 +276,32 @@ interface RunPlan {
   assigned: Map<Slot, CatalogProduct>;
   /** Места, занятые высокой техникой: столешница и верхний ряд их обходят */
   tallSlots: Set<Slot>;
+  /** Под какими местами врезаны мойка и плита */
+  sinkSlot: Slot | null;
+  hobSlot: Slot | null;
 }
 
 /**
  * Порядок изделий в главном ряду.
  *
- * Мойка ближе к началу, посудомойка сразу за ней — их подключают к
- * одному сливу. Духовка отдельным местом, плита встаёт над ней.
- * Холодильник уходит в конец: посреди ряда он разрывает столешницу.
+ * Угол ряда отдаётся обычным тумбам. Мойку и посудомойку в углу ставить
+ * нельзя: рядом с мойкой нужна поверхность под мокрую посуду, а перед
+ * открытой посудомойкой — место для человека (NKBA 11 и 13). Угловая
+ * тумба — это норма, и она же даёт нужный отступ.
+ *
+ * Дальше мойка, сразу за ней посудомойка — их подключают к одному сливу.
+ * Духовка отдельным местом, плита встаёт над ней. Холодильник уходит в
+ * конец: посреди ряда он разрывает столешницу.
  */
-function composeMainRun(run: Run, parts: KitchenParts, plan: RunPlan): Slot[] {
+function composeMainRun(
+  run: Run,
+  parts: KitchenParts,
+  plan: RunPlan,
+  cornerReserveMm: number,
+): Slot[] {
   const { bases, dishwasher, oven, fridge } = parts;
-  const wish: CatalogProduct[] = [bases.at(-1) ?? bases[0]!];
-  if (dishwasher) wish.push(dishwasher);
-  if (oven) wish.push(oven);
+  const widest = bases[0]!;
+  const narrowest = bases.at(-1) ?? widest;
 
   const reserveMm = fridge ? fridge.widthMm : 0;
   const laid: Slot[] = [];
@@ -296,28 +309,95 @@ function composeMainRun(run: Run, parts: KitchenParts, plan: RunPlan): Slot[] {
 
   // Место под холодильник держится в резерве, пока ряд набирается:
   // сам он этим резервом и является, поэтому себе его не прибавляет
-  const put = (product: CatalogProduct, keepReserve = true): boolean => {
-    const reserve = keepReserve ? reserveMm : 0;
-    if (cursor + product.widthMm + reserve > run.lengthMm) return false;
+  const put = (product: CatalogProduct, reserve = reserveMm): Slot | null => {
+    if (cursor + product.widthMm + reserve > run.lengthMm) return null;
 
     const slot: Slot = { run, alongMm: cursor, widthMm: product.widthMm };
     laid.push(slot);
     plan.assigned.set(slot, product);
     cursor += product.widthMm;
-    return true;
+    return slot;
   };
 
-  for (const product of wish) put(product);
+  // Угловая зона: тумбы, пока не наберётся отступ от угла. На короткий
+  // ряд отступ не натягивается — тогда кухня соберётся с замечанием,
+  // а не откажется собираться вовсе
+  const guardMm = Math.min(
+    cornerReserveMm + SINK_LANDING_MAIN_MM,
+    Math.max(0, run.lengthMm - minimumWorkFrontMm(parts)),
+  );
+  for (let step = 0; step < 8 && cursor < guardMm; step++) {
+    // Только то, что помещается В зону: тумба, вылезшая за неё, съедает
+    // место у мойки, ради которого зона и заводилась
+    const filler = bases.find((base) => cursor + base.widthMm <= guardMm);
+    if (!filler || !put(filler)) break;
+  }
+
+  // Мойка: под неё нужна отдельная тумба, и она первая после угла
+  plan.sinkSlot = parts.sink ? put(widest) : null;
+  if (dishwasher) put(dishwasher);
+
+  // Плита встаёт над духовкой; без духовки — над обычной тумбой.
+  // Между ней и холодильником обязана остаться тумба: холодильник рядом
+  // с источником тепла греется (NKBA и здравый смысл), а вытяжка шире
+  // плиты и иначе въезжает в его колонну
+  const cooking = oven ?? (parts.hob ? widest : null);
+  const spacer = fridge && cooking ? narrowest : null;
+  let cookingSlot: Slot | null = null;
+  let fridgeFits = Boolean(fridge);
+
+  if (cooking) {
+    cookingSlot = put(cooking, reserveMm + (spacer?.widthMm ?? 0));
+    if (cookingSlot && spacer) put(spacer);
+    if (!cookingSlot) {
+      // Ряд короткий: плита важнее холодильника, его поставят вручную
+      cookingSlot = put(cooking, 0);
+      fridgeFits = false;
+    }
+  }
 
   // Остаток ряда добирается обычными модулями
+  const tailReserve = fridgeFits ? reserveMm : 0;
   for (let guard = 0; guard < 32; guard++) {
-    const base = bases.find((candidate) => cursor + candidate.widthMm + reserveMm <= run.lengthMm);
+    const base = bases.find((candidate) => cursor + candidate.widthMm + tailReserve <= run.lengthMm);
     if (!base) break;
     put(base);
   }
 
-  if (fridge && put(fridge, false)) plan.tallSlots.add(laid.at(-1)!);
+  if (fridge && fridgeFits && put(fridge, 0)) plan.tallSlots.add(laid.at(-1)!);
+
+  plan.hobSlot = parts.hob ? cookingSlot : null;
+  // Если мойка не влезла после угла, она встаёт на первую тумбу: кухня
+  // без мойки бессмысленна, а о тесноте скажет проверка эргономики
+  if (parts.sink && !plan.sinkSlot) {
+    plan.sinkSlot = laid.find((slot) => plan.assigned.get(slot)?.role === 'base') ?? null;
+  }
+  if (parts.hob && !plan.hobSlot) {
+    plan.hobSlot = laid.filter((slot) => !plan.tallSlots.has(slot)).at(-1) ?? null;
+  }
+
   return laid;
+}
+
+/**
+ * Сколько ряда нужно оставить под рабочую зону.
+ *
+ * Отступ от угла не может съесть ряд целиком: если мойке, посудомойке и
+ * плите после него уже не хватит места, отступ урезается.
+ */
+function minimumWorkFrontMm(parts: KitchenParts): number {
+  const narrow = parts.bases.at(-1)?.widthMm ?? 600;
+  const cooking = parts.oven?.widthMm ?? (parts.hob ? narrow : 0);
+  // Между плитой и холодильником нужна тумба — она тоже часть фронта
+  const spacer = parts.fridge && cooking > 0 ? narrow : 0;
+
+  return (
+    (parts.sink ? narrow : 0) +
+    (parts.dishwasher?.widthMm ?? 0) +
+    cooking +
+    spacer +
+    (parts.fridge?.widthMm ?? 0)
+  );
 }
 
 /**
@@ -344,16 +424,22 @@ function absorbRemainder(runs: readonly Run[], plan: RunPlan): void {
 }
 
 /** Раскладка мест по рядам с уже назначенными изделиями. */
-function planRuns(runs: readonly Run[], parts: KitchenParts): RunPlan {
+function planRuns(
+  runs: readonly Run[],
+  parts: KitchenParts,
+  cornerReserveMm: number,
+): RunPlan {
   const plan: RunPlan = {
     slots: [],
     mainSlots: [],
     assigned: new Map<Slot, CatalogProduct>(),
     tallSlots: new Set<Slot>(),
+    sinkSlot: null,
+    hobSlot: null,
   };
 
   plan.slots = runs.map((run, index) =>
-    index === 0 ? composeMainRun(run, parts, plan) : planSlots(run, parts.bases),
+    index === 0 ? composeMainRun(run, parts, plan, cornerReserveMm) : planSlots(run, parts.bases),
   );
   plan.mainSlots = plan.slots[0] ?? [];
 
@@ -506,6 +592,24 @@ function placeUpperRow(
 }
 
 /**
+ * Помещается ли вытяжка над плитой, не задевая высокую технику.
+ *
+ * Вытяжка бывает шире плиты, а колонна холодильника идёт от пола
+ * до потолка: над соседним местом ей уже не хватает.
+ */
+function hoodFits(hood: CatalogProduct, hobSlot: Slot, plan: RunPlan): boolean {
+  const centre = hobSlot.alongMm + hobSlot.widthMm / 2;
+  const from = centre - hood.widthMm / 2;
+  const to = centre + hood.widthMm / 2;
+
+  for (const slot of plan.tallSlots) {
+    if (slot.run !== hobSlot.run) continue;
+    if (from < slot.alongMm + slot.widthMm && to > slot.alongMm) return false;
+  }
+  return true;
+}
+
+/**
  * Сборка кухни по сценарию.
  *
  * Возвращает готовые размещения, а не меняет документ: решение,
@@ -534,15 +638,14 @@ export function buildKitchen(
     return { placements: [], problems: ['Помещение слишком мало для этой раскладки'] };
   }
 
-  const plan = planRuns(runs, parts);
+  // Соседний ряд занимает начало главного: место под мойку и посудомойку
+  // отсчитывается от его края, а не от стены
+  const plan = planRuns(runs, parts, runs.length > 1 ? cornerDepth : 0);
   const assembly = new Assembly();
   const problems: string[] = [];
 
-  // Мойка над первым обычным модулем, плита — над духовкой
-  const sinkSlot = plan.mainSlots.find((slot) => plan.assigned.get(slot)?.role === 'base');
-  const hobSlot =
-    plan.mainSlots.find((slot) => plan.assigned.get(slot)?.role === 'oven') ??
-    plan.mainSlots.filter((slot) => !plan.tallSlots.has(slot)).at(-1);
+  const sinkSlot = plan.sinkSlot ?? undefined;
+  const hobSlot = plan.hobSlot ?? undefined;
 
   placeModules(plan, assembly);
   if (parts.worktop) placeWorktops(plan, parts.worktop, assembly);
@@ -559,14 +662,20 @@ export function buildKitchen(
   if (parts.hob && hobSlot) {
     assembly.add(parts.hob, slotCentre(hobSlot, baseDepth), facing(hobSlot.run.normal), surfaceMm);
   }
-  // Вытяжка строго над плитой: смещённая не тянет, и центр у них общий
+  // Вытяжка строго над плитой: смещённая не тянет, и центр у них общий.
+  // Если она при этом въезжает в колонну холодильника — не ставим вовсе:
+  // сдвинуть её нельзя, а модель внутри модели хуже отсутствующей
   if (parts.hood && hobSlot) {
-    assembly.add(
-      parts.hood,
-      slotCentre(hobSlot, baseDepth),
-      facing(hobSlot.run.normal),
-      parts.hood.mountHeightMm,
-    );
+    if (hoodFits(parts.hood, hobSlot, plan)) {
+      assembly.add(
+        parts.hood,
+        slotCentre(hobSlot, baseDepth),
+        facing(hobSlot.run.normal),
+        parts.hood.mountHeightMm,
+      );
+    } else {
+      problems.push('Вытяжка не встала: рядом с плитой колонна');
+    }
   }
 
   return { placements: assembly.placements, problems };

@@ -113,6 +113,84 @@ export function rotateX(geometry, radians) {
 }
 
 /**
+ * Поворот вокруг оси Z.
+ *
+ * Нужен горизонтальным цилиндрам: cylinder строит трубу вдоль Y, а
+ * рейлинг ручки и излив смесителя лежат вдоль X. Брусок со скруглением
+ * вместо трубы виден на просвет — у него по контуру восемь граней,
+ * а не окружность.
+ */
+export function rotateZ(geometry, radians) {
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+
+  for (const buffer of [geometry.positions, geometry.normals]) {
+    for (let i = 0; i < buffer.length; i += 3) {
+      const x = buffer[i];
+      const y = buffer[i + 1];
+      buffer[i] = x * cos - y * sin;
+      buffer[i + 1] = x * sin + y * cos;
+    }
+  }
+  return geometry;
+}
+
+/**
+ * Труба вдоль оси X: цилиндр, положенный набок.
+ * Ею собираются рейлинги ручек и трубчатые опоры.
+ */
+export function tubeX(radiusMm, lengthMm, radialSegments = 12) {
+  return rotateZ(cylinder(radiusMm, lengthMm, radialSegments), Math.PI / 2);
+}
+
+/**
+ * Труба вдоль оси Z: цилиндр, положенный вдоль глубины.
+ * Ею собираются излив смесителя и вертикальные ручки в плане.
+ */
+export function tubeZ(radiusMm, lengthMm, radialSegments = 12) {
+  return rotateX(cylinder(radiusMm, lengthMm, radialSegments), Math.PI / 2);
+}
+
+/**
+ * Кольцо: труба, положенная плашмя. Строится из сегментов-брусков.
+ *
+ * Нужно контурам конфорок и сливному отверстию мойки — деталям, которые
+ * читаются именно как окружность, а не как диск.
+ */
+export function ring(radiusMm, thicknessMm, heightMm, segments = 16) {
+  const parts = [];
+  const step = (Math.PI * 2) / segments;
+  // Хорда чуть длиннее шага дуги: иначе между сегментами видны щели
+  const chord = 2 * radiusMm * Math.tan(step / 2) + thicknessMm / 2;
+
+  for (let i = 0; i < segments; i++) {
+    const angle = i * step;
+    const piece = segmentedBox(chord, heightMm, thicknessMm, 1);
+    rotateY(piece, -angle);
+    translate(piece, Math.sin(angle) * radiusMm, 0, Math.cos(angle) * radiusMm);
+    parts.push(piece);
+  }
+
+  return mergeGeometries(parts);
+}
+
+/** Поворот вокруг вертикальной оси. */
+export function rotateY(geometry, radians) {
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+
+  for (const buffer of [geometry.positions, geometry.normals]) {
+    for (let i = 0; i < buffer.length; i += 3) {
+      const x = buffer[i];
+      const z = buffer[i + 2];
+      buffer[i] = x * cos + z * sin;
+      buffer[i + 2] = -x * sin + z * cos;
+    }
+  }
+  return geometry;
+}
+
+/**
  * Грани параллелепипеда: [нормаль, ось U, ось V].
  *
  * Для каждой грани обязано выполняться U x V = нормаль. Вместе с порядком

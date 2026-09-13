@@ -5,6 +5,7 @@ import { placementBox } from './box';
 import { boxesOverlap } from './overlap';
 import { placementProductSize } from './resize';
 import { worldHalfExtents } from './bounds';
+import { checkErgonomics } from '../rules/ergonomics';
 import type { CatalogProduct } from '../catalog/schema';
 
 const product = (
@@ -245,5 +246,48 @@ describe('кухня с техникой', () => {
         );
       }
     }
+  });
+});
+
+/**
+ * Готовая раскладка обязана проходить собственные правила эргономики.
+ *
+ * Планировщик, который сам собирает кухню с мойкой в углу, а потом на
+ * неё же ругается, доверия не вызывает.
+ */
+describe('раскладка проходит проверку эргономики', () => {
+  const full: CatalogProduct[] = [
+    ...catalog,
+    product('FRIDGE', 'fridge', 600, 2000, 650),
+    product('DISH', 'dishwasher', 600, 820, 570),
+    product('OVEN', 'oven', 596, 595, 550),
+    product('HOOD', 'hood', 600, 900, 500, { mountHeightMm: 1550 }),
+  ];
+  const bySku = new Map(full.map((item) => [item.sku, item]));
+
+  const cornerFindings = (kind: Parameters<typeof buildKitchen>[0], widthMm: number, depthMm: number) => {
+    const place = createRectangularRoom({ widthMm, depthMm });
+    const { placements } = buildKitchen(kind, place, full);
+    return checkErgonomics(placements, bySku, [place]).map((finding) => finding.code);
+  };
+
+  for (const [kind, widthMm, depthMm] of [
+    ['corner', 4200, 3400],
+    ['corner', 4000, 3200],
+    ['u-shape', 4200, 3400],
+    ['linear', 4200, 3400],
+  ] as const) {
+    it(`${kind} ${widthMm}×${depthMm}: мойка и посудомойка не в углу`, () => {
+      const codes = cornerFindings(kind, widthMm, depthMm);
+      expect(codes).not.toContain('sink-in-corner');
+      expect(codes).not.toContain('dishwasher-standing');
+      expect(codes).not.toContain('hob-in-corner');
+    });
+  }
+
+  it('в собранной кухне нет предупреждений о рабочих зонах', () => {
+    const codes = cornerFindings('corner', 4200, 3400);
+    expect(codes).not.toContain('sink-landing');
+    expect(codes).not.toContain('hob-landing');
   });
 });
