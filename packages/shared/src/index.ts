@@ -25,4 +25,5 @@ export { randomUUID, deterministicUuid } from './scene/uuid';
 export * from './rules/dsl';
 export * from './rules/evaluate';
 export * from './rules/ergonomics';
+export { kitchenItems, type KitchenItem } from './rules/items';
 export { checkServices, MAX_SERVICE_REACH_MM, MAX_VENT_REACH_MM } from './rules/services';

@@ -170,7 +170,8 @@ const selected = computed(() => {
  * о котором надо вспомнить и нажать, не работает.
  */
 const ergonomics = computed(() => [
-  ...checkErgonomics(scene.doc.placements, catalog.bySku),
+  // Комната нужна правилам рабочих зон: угол образует и стена тоже
+  ...checkErgonomics(scene.doc.placements, catalog.bySku, scene.doc.rooms),
   // Подключения проверяются вместе с эргономикой: и то и другое
   // всплывает на монтаже, когда кухня уже привезена
   ...checkServices(scene.doc.placements, catalog.bySku, scene.doc.services),

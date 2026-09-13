@@ -1,8 +1,12 @@
-import { boxAxes, placementBox, type Box } from '../scene/box';
+import { boxAxes, type Box } from '../scene/box';
 import type { CatalogProduct } from '../catalog/schema';
-import { placementProductSize } from '../scene/resize';
-import type { Placement } from '../scene/schema';
-import type { Vec2 } from '../scene/walls';
+import type { Placement, Room } from '../scene/schema';
+import { roundMm, severityRank, type ErgonomicFinding } from './finding';
+import { checkLanding } from './landing';
+import { FRONTED, distanceMm, kitchenItems, pickRole, type KitchenItem } from './items';
+
+export type { ErgonomicFinding, FindingSeverity } from './finding';
+export * from './landing';
 
 /**
  * Правила эргономики кухни.
@@ -16,9 +20,13 @@ import type { Vec2 } from '../scene/walls';
  * бывают комнаты, где иначе не получается, и заблокированная расстановка
  * ощущается как поломка.
  *
- * Числа взяты из практики кухонных салонов и СП: рабочий треугольник
- * 3.6–6.6 м, разрыв между мойкой и плитой от 400 мм, проход между
- * фронтами от 900 мм.
+ * Здесь живут правила об отношениях изделий друг к другу; правила
+ * о рабочей поверхности вокруг изделия — в landing.ts.
+ *
+ * Числа взяты из NKBA Kitchen Planning Guidelines и практики кухонных
+ * салонов: рабочий треугольник 3.6–6.6 м (NKBA допускает до 7.9 м
+ * по сумме), разрыв между мойкой и плитой от 400 мм, проход между
+ * фронтами от 900 мм (NKBA — 1070 мм на одного готовящего).
  */
 
 /** Минимальная рабочая поверхность между мойкой и плитой. */
@@ -39,27 +47,6 @@ export const MAX_TRIANGLE_MM = 6600;
 /** Вытяжка должна стоять над плитой. */
 export const MAX_HOOD_OFFSET_MM = 200;
 
-export type FindingSeverity = 'warning' | 'note';
-
-export interface ErgonomicFinding {
-  code: string;
-  severity: FindingSeverity;
-  message: string;
-  /** Кого подсветить, чтобы стало понятно, о чём речь */
-  instanceIds: string[];
-}
-
-interface Item {
-  instanceId: string;
-  role: CatalogProduct['role'];
-  product: CatalogProduct;
-  placement: Placement;
-  box: Box;
-  centre: Vec2;
-}
-
-const distance = (a: Vec2, b: Vec2): number => Math.hypot(a.x - b.x, a.y - b.y);
-const round = (value: number): number => Math.round(value / 10) * 10;
 
 /**
  * Проверка расстановки.
@@ -72,21 +59,9 @@ const round = (value: number): number => Math.round(value / 10) * 10;
 export function checkErgonomics(
   placements: readonly Placement[],
   products: ReadonlyMap<string, CatalogProduct>,
+  rooms: readonly Room[] = [],
 ): ErgonomicFinding[] {
-  const items: Item[] = [];
-  for (const placement of placements) {
-    const product = products.get(placement.sku);
-    if (!product) continue;
-    const box = placementBox(placement, placementProductSize(placement, product));
-    items.push({
-      instanceId: placement.instanceId,
-      role: product.role,
-      product,
-      placement,
-      box,
-      centre: box.centre,
-    });
-  }
+  const items = kitchenItems(placements, products);
 
   const findings: ErgonomicFinding[] = [
     ...triangle(items),
@@ -95,15 +70,12 @@ export function checkErgonomics(
     ...hoodOverHob(items),
     ...dishwasherNearSink(items),
     ...aisles(items),
+    // Рабочие зоны считаются от комнаты: угол образует и стена, и ряд
+    ...checkLanding(items, rooms),
   ];
 
   return findings.sort((a, b) => severityRank(a.severity) - severityRank(b.severity));
 }
-
-const severityRank = (severity: FindingSeverity): number => (severity === 'warning' ? 0 : 1);
-
-const pick = (items: readonly Item[], role: CatalogProduct['role']): Item[] =>
-  items.filter((item) => item.role === role);
 
 /**
  * Рабочий треугольник мойка — плита — холодильник.
@@ -111,16 +83,16 @@ const pick = (items: readonly Item[], role: CatalogProduct['role']): Item[] =>
  * Самое известное правило кухни и единственное, которое проверяет
  * расстановку целиком, а не пару соседей.
  */
-function triangle(items: readonly Item[]): ErgonomicFinding[] {
-  const sink = pick(items, 'sink')[0];
-  const hob = pick(items, 'hob')[0];
-  const fridge = pick(items, 'fridge')[0];
+function triangle(items: readonly KitchenItem[]): ErgonomicFinding[] {
+  const sink = pickRole(items, 'sink')[0];
+  const hob = pickRole(items, 'hob')[0];
+  const fridge = pickRole(items, 'fridge')[0];
   if (!sink || !hob || !fridge) return [];
 
   const legs =
-    distance(sink.centre, hob.centre) +
-    distance(hob.centre, fridge.centre) +
-    distance(fridge.centre, sink.centre);
+    distanceMm(sink.centre, hob.centre) +
+    distanceMm(hob.centre, fridge.centre) +
+    distanceMm(fridge.centre, sink.centre);
   const ids = [sink.instanceId, hob.instanceId, fridge.instanceId];
 
   if (legs < MIN_TRIANGLE_MM) {
@@ -128,7 +100,7 @@ function triangle(items: readonly Item[]): ErgonomicFinding[] {
       {
         code: 'triangle-tight',
         severity: 'note',
-        message: `Рабочий треугольник ${round(legs)} мм — тесно. Мойке, плите и холодильнику нужно от ${MIN_TRIANGLE_MM} мм по сумме сторон`,
+        message: `Рабочий треугольник ${roundMm(legs)} мм — тесно. Мойке, плите и холодильнику нужно от ${MIN_TRIANGLE_MM} мм по сумме сторон`,
         instanceIds: ids,
       },
     ];
@@ -139,7 +111,7 @@ function triangle(items: readonly Item[]): ErgonomicFinding[] {
       {
         code: 'triangle-wide',
         severity: 'note',
-        message: `Рабочий треугольник ${round(legs)} мм — далеко ходить. Комфортный предел ${MAX_TRIANGLE_MM} мм`,
+        message: `Рабочий треугольник ${roundMm(legs)} мм — далеко ходить. Комфортный предел ${MAX_TRIANGLE_MM} мм`,
         instanceIds: ids,
       },
     ];
@@ -149,11 +121,11 @@ function triangle(items: readonly Item[]): ErgonomicFinding[] {
 }
 
 /** Между мойкой и плитой нужна рабочая поверхность. */
-function sinkAndHob(items: readonly Item[]): ErgonomicFinding[] {
+function sinkAndHob(items: readonly KitchenItem[]): ErgonomicFinding[] {
   const findings: ErgonomicFinding[] = [];
 
-  for (const sink of pick(items, 'sink')) {
-    for (const hob of pick(items, 'hob')) {
+  for (const sink of pickRole(items, 'sink')) {
+    for (const hob of pickRole(items, 'hob')) {
       const gap = gapBetween(sink.box, hob.box);
       const ids = [sink.instanceId, hob.instanceId];
 
@@ -161,14 +133,14 @@ function sinkAndHob(items: readonly Item[]): ErgonomicFinding[] {
         findings.push({
           code: 'sink-hob-close',
           severity: 'warning',
-          message: `Между мойкой и плитой ${round(gap)} мм. Нужна рабочая поверхность от ${MIN_SINK_HOB_MM} мм: ставить горячее некуда, и брызги летят на плиту`,
+          message: `Между мойкой и плитой ${roundMm(gap)} мм. Нужна рабочая поверхность от ${MIN_SINK_HOB_MM} мм: ставить горячее некуда, и брызги летят на плиту`,
           instanceIds: ids,
         });
       } else if (gap < GOOD_SINK_HOB_MM) {
         findings.push({
           code: 'sink-hob-tight',
           severity: 'note',
-          message: `Между мойкой и плитой ${round(gap)} мм. Удобно от ${GOOD_SINK_HOB_MM} мм`,
+          message: `Между мойкой и плитой ${roundMm(gap)} мм. Удобно от ${GOOD_SINK_HOB_MM} мм`,
           instanceIds: ids,
         });
       }
@@ -179,18 +151,18 @@ function sinkAndHob(items: readonly Item[]): ErgonomicFinding[] {
 }
 
 /** Холодильник рядом с плитой греется и тратит больше. */
-function fridgeAndHob(items: readonly Item[]): ErgonomicFinding[] {
+function fridgeAndHob(items: readonly KitchenItem[]): ErgonomicFinding[] {
   const findings: ErgonomicFinding[] = [];
 
-  for (const fridge of pick(items, 'fridge')) {
-    for (const hob of [...pick(items, 'hob'), ...pick(items, 'oven')]) {
+  for (const fridge of pickRole(items, 'fridge')) {
+    for (const hob of [...pickRole(items, 'hob'), ...pickRole(items, 'oven')]) {
       const gap = gapBetween(fridge.box, hob.box);
       if (gap >= MIN_FRIDGE_HOB_MM) continue;
 
       findings.push({
         code: 'fridge-heat',
         severity: 'warning',
-        message: `Холодильник в ${round(gap)} мм от источника тепла. Нужно от ${MIN_FRIDGE_HOB_MM} мм, иначе он греется и работает вхолостую`,
+        message: `Холодильник в ${roundMm(gap)} мм от источника тепла. Нужно от ${MIN_FRIDGE_HOB_MM} мм, иначе он греется и работает вхолостую`,
         instanceIds: [fridge.instanceId, hob.instanceId],
       });
     }
@@ -200,9 +172,9 @@ function fridgeAndHob(items: readonly Item[]): ErgonomicFinding[] {
 }
 
 /** Вытяжка обязана стоять над плитой. */
-function hoodOverHob(items: readonly Item[]): ErgonomicFinding[] {
-  const hobs = pick(items, 'hob');
-  const hoods = pick(items, 'hood');
+function hoodOverHob(items: readonly KitchenItem[]): ErgonomicFinding[] {
+  const hobs = pickRole(items, 'hob');
+  const hoods = pickRole(items, 'hood');
   if (hobs.length === 0) return [];
 
   if (hoods.length === 0) {
@@ -219,14 +191,14 @@ function hoodOverHob(items: readonly Item[]): ErgonomicFinding[] {
   const findings: ErgonomicFinding[] = [];
   for (const hood of hoods) {
     const nearest = hobs
-      .map((hob) => ({ hob, offset: distance(hood.centre, hob.centre) }))
+      .map((hob) => ({ hob, offset: distanceMm(hood.centre, hob.centre) }))
       .sort((a, b) => a.offset - b.offset)[0]!;
 
     if (nearest.offset > MAX_HOOD_OFFSET_MM) {
       findings.push({
         code: 'hood-offset',
         severity: 'warning',
-        message: `Вытяжка смещена от плиты на ${round(nearest.offset)} мм. Она обязана стоять над ней, иначе не тянет`,
+        message: `Вытяжка смещена от плиты на ${roundMm(nearest.offset)} мм. Она обязана стоять над ней, иначе не тянет`,
         instanceIds: [hood.instanceId, nearest.hob.instanceId],
       });
     }
@@ -236,35 +208,25 @@ function hoodOverHob(items: readonly Item[]): ErgonomicFinding[] {
 }
 
 /** Посудомойку подключают к мойке: длинный шланг — это протечка. */
-function dishwasherNearSink(items: readonly Item[]): ErgonomicFinding[] {
-  const sinks = pick(items, 'sink');
+function dishwasherNearSink(items: readonly KitchenItem[]): ErgonomicFinding[] {
+  const sinks = pickRole(items, 'sink');
   if (sinks.length === 0) return [];
 
   const findings: ErgonomicFinding[] = [];
-  for (const dishwasher of pick(items, 'dishwasher')) {
-    const nearest = Math.min(...sinks.map((sink) => distance(dishwasher.centre, sink.centre)));
+  for (const dishwasher of pickRole(items, 'dishwasher')) {
+    const nearest = Math.min(...sinks.map((sink) => distanceMm(dishwasher.centre, sink.centre)));
     if (nearest <= MAX_DISHWASHER_SINK_MM) continue;
 
     findings.push({
       code: 'dishwasher-far',
       severity: 'note',
-      message: `Посудомойка в ${round(nearest)} мм от мойки. Её подключают к тому же сливу — дальше ${MAX_DISHWASHER_SINK_MM} мм тянуть неудобно`,
+      message: `Посудомойка в ${roundMm(nearest)} мм от мойки. Её подключают к тому же сливу — дальше ${MAX_DISHWASHER_SINK_MM} мм тянуть неудобно`,
       instanceIds: [dishwasher.instanceId, ...sinks.map((sink) => sink.instanceId)],
     });
   }
 
   return findings;
 }
-
-/** Роли, у которых есть фронт: между ними и ходят. */
-const FRONTED: ReadonlySet<CatalogProduct['role']> = new Set([
-  'base',
-  'tall',
-  'fridge',
-  'oven',
-  'dishwasher',
-  'washer',
-]);
 
 /**
  * Проход между рядами.
@@ -273,7 +235,7 @@ const FRONTED: ReadonlySet<CatalogProduct['role']> = new Set([
  * именно там открывают дверцы и расходятся вдвоём. Ряды, стоящие
  * спиной к спине или в одну линию, друг другу не мешают.
  */
-function aisles(items: readonly Item[]): ErgonomicFinding[] {
+function aisles(items: readonly KitchenItem[]): ErgonomicFinding[] {
   const fronted = items.filter((item) => FRONTED.has(item.role));
   const findings: ErgonomicFinding[] = [];
   let worst: { gap: number; ids: string[] } | null = null;
@@ -309,13 +271,13 @@ function aisles(items: readonly Item[]): ErgonomicFinding[] {
       ? {
           code: 'aisle-narrow',
           severity: 'warning',
-          message: `Проход между рядами ${round(worst.gap)} мм. Нужно от ${MIN_AISLE_MM} мм, иначе не открыть дверцы`,
+          message: `Проход между рядами ${roundMm(worst.gap)} мм. Нужно от ${MIN_AISLE_MM} мм, иначе не открыть дверцы`,
           instanceIds: worst.ids,
         }
       : {
           code: 'aisle-tight',
           severity: 'note',
-          message: `Проход между рядами ${round(worst.gap)} мм. Вдвоём разойтись от ${GOOD_AISLE_MM} мм`,
+          message: `Проход между рядами ${roundMm(worst.gap)} мм. Вдвоём разойтись от ${GOOD_AISLE_MM} мм`,
           instanceIds: worst.ids,
         },
   );
