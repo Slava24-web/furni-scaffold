@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { KITCHEN_LAYOUTS, buildKitchen } from './kitchenLayout';
 import { createRectangularRoom } from './walls';
-import { boxesOverlap, placementBox } from './collision';
+import { placementBox } from './box';
+import { boxesOverlap } from './overlap';
 import { placementProductSize } from './resize';
 import { worldHalfExtents } from './bounds';
 import type { CatalogProduct } from '../catalog/schema';

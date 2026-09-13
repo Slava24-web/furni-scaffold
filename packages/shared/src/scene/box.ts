@@ -1,3 +1,4 @@
+import type { Placement } from './schema';
 import type { Vec2 } from './walls';
 
 /**
@@ -74,7 +75,7 @@ export function boxCorners(box: Box): Vec2[] {
 }
 
 /** Лежит ли точка плана внутри габарита. */
-export function insideBox(box: Box, point: Vec2): boolean {
+export function insideBox(box: Box, point: Vec2, toleranceMm = 0): boolean {
   const { right, forward } = boxAxes(box);
   const dx = point.x - box.centre.x;
   const dy = point.y - box.centre.y;
@@ -82,7 +83,10 @@ export function insideBox(box: Box, point: Vec2): boolean {
   // Проекции на локальные оси: в них проверка сводится к сравнению
   const alongRight = dx * right.x + dy * right.y;
   const alongForward = dx * forward.x + dy * forward.y;
-  return Math.abs(alongRight) <= box.halfWidthMm && Math.abs(alongForward) <= box.halfDepthMm;
+  return (
+    Math.abs(alongRight) <= box.halfWidthMm + toleranceMm &&
+    Math.abs(alongForward) <= box.halfDepthMm + toleranceMm
+  );
 }
 
 /**
@@ -101,4 +105,51 @@ export function verticallyOverlapping(
   if (restsOnB || restsOnA) return false;
 
   return a.bottomMm < b.topMm - toleranceMm && b.bottomMm < a.topMm - toleranceMm;
+}
+
+/**
+ * Угол направления в плане, градусы.
+ *
+ * Ноль соответствует направлению +Z, потому что поворот объекта вокруг Y
+ * на φ переводит его локальную +Z именно туда. Возвращать atan2(z, x)
+ * значило бы держать в коде постоянную поправку на 90°.
+ */
+export function planAngleDeg(dx: number, dz: number): number {
+  return (Math.atan2(dx, dz) * 180) / Math.PI;
+}
+
+/** Разница углов, приведённая к диапазону (-180, 180]. */
+export function normalizeAngleDeg(deg: number): number {
+  const wrapped = (((deg + 180) % 360) + 360) % 360 - 180;
+  return wrapped === -180 ? 180 : wrapped;
+}
+
+/** Габариты изделия из каталога, мм. */
+export interface ProductSize {
+  widthMm: number;
+  heightMm: number;
+  depthMm: number;
+  /** Высота рабочей поверхности, если она ниже габарита */
+  surfaceHeightMm?: number | undefined;
+}
+
+/**
+ * Габарит размещённого объекта.
+ *
+ * Низ берётся из позиции: высота установки хранится там, и навесной
+ * модуль по документу висит, а не стоит на полу.
+ */
+export function placementBox(
+  placement: Pick<Placement, 'position' | 'rotationY'>,
+  size: ProductSize,
+): Box {
+  return {
+    centre: { x: placement.position.x, y: placement.position.z },
+    halfWidthMm: size.widthMm / 2,
+    halfDepthMm: size.depthMm / 2,
+    rotationDeg: placement.rotationY,
+    bottomMm: placement.position.y,
+    topMm: placement.position.y + size.heightMm,
+    surfaceTopMm: placement.position.y + (size.surfaceHeightMm ?? size.heightMm),
+  };
 }

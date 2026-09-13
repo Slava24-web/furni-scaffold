@@ -1,4 +1,4 @@
-import { boxAxes, boxCorners, placementBox } from '../scene/collision';
+import { boxAxes, boxCorners, placementBox } from '../scene/box';
 import { placementProductSize } from '../scene/resize';
 import { roomDimensions, type WallDimension } from '../scene/dimensions';
 import { swingArc, swingZones } from '../scene/swing';

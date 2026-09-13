@@ -1,4 +1,4 @@
-import { boxAxes, placementBox, type Box } from '../scene/collision';
+import { boxAxes, placementBox, type Box } from '../scene/box';
 import type { CatalogProduct } from '../catalog/schema';
 import { placementProductSize } from '../scene/resize';
 import type { Placement } from '../scene/schema';

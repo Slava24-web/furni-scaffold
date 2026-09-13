@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { boxesOverlap, resolveOverlaps, separationVector, type Box } from './collision';
+import type { Box } from './box';
+import { boxesOverlap, resolveOverlaps, separationVector } from './overlap';
 
 const box = (x: number, z: number, over: Partial<Box> = {}): Box => ({
   centre: { x, y: z },

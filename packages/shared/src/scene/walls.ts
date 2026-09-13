@@ -257,3 +257,26 @@ export function isClosedContour(walls: readonly Wall[], toleranceMm = 1): boolea
     return Math.hypot(wall.end.x - next.start.x, wall.end.y - next.start.y) <= toleranceMm;
   });
 }
+
+/**
+ * Лежит ли точка внутри контура стен.
+ *
+ * Луч вправо и подсчёт пересечений: контур может быть невыпуклым,
+ * а проверка по габаритному прямоугольнику дала бы ложный ответ
+ * для Г-образной комнаты.
+ */
+export function isInsideContour(point: Vec2, walls: readonly Wall[]): boolean {
+  if (walls.length < 3) return false;
+
+  let inside = false;
+  for (const wall of walls) {
+    const a = wall.start;
+    const b = wall.end;
+    const crossesRay = a.y > point.y !== b.y > point.y;
+    if (!crossesRay) continue;
+
+    const intersectX = a.x + ((point.y - a.y) / (b.y - a.y)) * (b.x - a.x);
+    if (point.x < intersectX) inside = !inside;
+  }
+  return inside;
+}

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { drawerZone, hasDrawers } from './drawerZone';
-import { boxesOverlap, findConflicts, placementBox, type Box } from './collision';
+import { placementBox, type Box } from './box';
+import { boxesOverlap } from './overlap';
+import { findConflicts } from './conflicts';
 import type { Placement } from './schema';
 
 const spec = { widthMm: 600, depthMm: 560, heightMm: 820, drawerCount: 3, drawerTravelMm: 360 };

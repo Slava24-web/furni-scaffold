@@ -1,4 +1,4 @@
-import { computed, markRaw, ref, shallowRef, watch, type Ref, type ShallowRef } from 'vue';
+import { markRaw, ref, shallowRef, watch, type Ref, type ShallowRef } from 'vue';
 import { Vector2, Vector3 } from 'three';
 import {
   CameraController,
@@ -6,28 +6,18 @@ import {
   GestureController,
   SnapEngine,
   type GestureEvent,
-  type SnapTarget,
   type Viewer,
 } from '@furni/viewer';
 import {
-  EMPTY_CONFLICTS,
   placementProductSize,
   roomBounds,
-  findConflicts,
-  groupIntoChains,
-  hasConflicts,
-  innerNormal,
   normalizeAngleDeg,
   planAngleDeg,
-  drawerZone,
   restingHeightMm,
   type Box,
   type CatalogProduct,
-  type ConflictReport,
   type Placement,
   type RoomBoundsMm,
-  type SwingZone,
-  type Wall,
 } from '@furni/shared';
 import { useCatalogStore } from '../stores/catalog';
 import { useSceneStore } from '../stores/scene';
@@ -40,15 +30,26 @@ import {
   neighbourBoxes,
   neighbourDrawerZones as drawerZonesOf,
 } from '../lib/sceneBoxes';
+import { snapTargets } from '../lib/snapTargets';
+import { ScreenProjector, type FloorPoint } from '../lib/ScreenProjector';
+import { routeTap, type TapAction } from '../lib/tapRouting';
+import { useSceneConflicts, type ConflictEnvironment } from './useSceneConflicts';
+import { useDropPreview, type DropPoint } from './useDropPreview';
 
-/** Габариты и стены сцены считаются в lib/sceneBoxes: там они чистые. */
+export type { FloorPoint } from '../lib/ScreenProjector';
 
 /**
  * Связка жестов, камеры, выделения и снаппинга.
  *
  * ПРАВИЛО 3 из CLAUDE.md: во время перетаскивания позиция в Pinia НЕ пишется.
  * Объект двигается напрямую в Three.js, стор обновляется один раз на dragEnd.
+ *
+ * Всё, что можно вынести, вынесено: габариты сцены — в lib/sceneBoxes,
+ * цели привязки — в lib/snapTargets, проекция указателя — в
+ * lib/ScreenProjector, разбор тапа — в lib/tapRouting, конфликты и
+ * призрак переноса — в соседние composables. Здесь остался сам жест.
  */
+
 /** Режим работы планировщика: что делает тап по сцене. */
 export type PlannerMode =
   | 'select'
@@ -57,11 +58,6 @@ export type PlannerMode =
   | 'add-window'
   /** Разметка инженерии: тап ставит точку выбранного вида */
   | 'add-service';
-
-export interface FloorPoint {
-  x: number;
-  z: number;
-}
 
 /** Тап по размерной линии: ключ подписи, её значение и место для поля ввода. */
 export interface DimensionHit {
@@ -93,30 +89,61 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
 
   const selectedId = ref<string | null>(null);
   const isSnapping = ref(false);
-  const conflicts = shallowRef<ConflictReport>(EMPTY_CONFLICTS);
-  const hasConflict = computed(() => hasConflicts(conflicts.value));
   const snapEngine = shallowRef(markRaw(new SnapEngine()));
+  const projector = new ScreenProjector();
+  const conflictState = useSceneConflicts(viewer);
 
   let gestures: GestureController | null = null;
-  let camera: CameraController | null = null;
   let element: HTMLElement | null = null;
-  /** Прямоугольник канваса кэшируется: getBoundingClientRect на каждое
-   *  движение указателя — это принудительный reflow в горячем пути. */
-  let rect: DOMRect | null = null;
   let resizeObserver: ResizeObserver | null = null;
 
-  const ndc = new Vector2();
   const desiredMm = new Vector2();
+
+  const planning = (): boolean => (options.mode?.value ?? 'select') !== 'select';
+
+  // -------------------------------------------------------------------
+  // Окружение сцены
+  // -------------------------------------------------------------------
+
+  /** Всё, относительно чего проверяется объект, одним снимком. */
+  function documentEnvironment(exceptId: string | null): ConflictEnvironment {
+    return {
+      neighbours: neighbourBoxes(scene.doc.placements, catalog.bySku, exceptId).map((entry) => ({
+        id: entry.instanceId,
+        box: entry.box,
+      })),
+      walls: wallsOf(scene.doc.rooms),
+      swings: swingsOf(scene.doc.rooms),
+      drawerZones: drawerZonesOf(scene.doc.placements, catalog.bySku, exceptId),
+    };
+  }
+
+  const zoneOf = (placement: Placement) => drawerZoneOf(placement, catalog.bySku);
+
+  /**
+   * Снимок окружения на время жеста.
+   *
+   * Ни цели привязки, ни габариты соседей во время перетаскивания
+   * не меняются, а пересчёт на каждое движение указателя означал бы
+   * обход всей сцены в горячем пути. Список препятствий держится
+   * готовым: он нужен каждый кадр, и пересобирать его нельзя.
+   */
+  let dragEnv: ConflictEnvironment | null = null;
+  let dragObstacles: Box[] = [];
+  let dragBounds: RoomBoundsMm | null = null;
+
+  // -------------------------------------------------------------------
+  // Подключение к канвасу
+  // -------------------------------------------------------------------
 
   function attach(target: HTMLElement): void {
     element = target;
     const v = viewer.value;
     if (!v) return;
 
-    camera = markRaw(new CameraController(v.camera));
-    refreshRect();
+    projector.attach(target, markRaw(new CameraController(v.camera)));
 
-    resizeObserver = new ResizeObserver(refreshRect);
+    resizeObserver = new ResizeObserver(refreshViewport);
     resizeObserver.observe(target);
 
     gestures = markRaw(
@@ -135,16 +162,28 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     target.addEventListener('pointerleave', onPointerLeave);
   }
 
-  function refreshRect(): void {
-    if (!element) return;
-    rect = element.getBoundingClientRect();
-    camera?.setViewport(rect.width, rect.height);
+  function refreshViewport(): void {
+    projector.refresh();
     viewer.value?.invalidate();
   }
 
+  function detach(): void {
+    if (rotationCommitTimer) clearTimeout(rotationCommitTimer);
+    rotationCommitTimer = null;
+    element?.removeEventListener('wheel', onWheel);
+    element?.removeEventListener('pointermove', onPointerMove);
+    element?.removeEventListener('pointerleave', onPointerLeave);
+    resizeObserver?.disconnect();
+    resizeObserver = null;
+    gestures?.dispose();
+    gestures = null;
+    projector.detach();
+    element = null;
+  }
+
   function onPointerMove(event: PointerEvent): void {
-    if ((options.mode?.value ?? 'select') === 'select' || !options.onAim) return;
-    options.onAim(floorPointAt(new Vector2(event.clientX, event.clientY)));
+    if (!planning() || !options.onAim) return;
+    options.onAim(projector.floorPointAt(new Vector2(event.clientX, event.clientY)));
   }
 
   function onPointerLeave(): void {
@@ -153,14 +192,8 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
 
   function onWheel(event: WheelEvent): void {
     event.preventDefault();
-    camera?.dolly(event.deltaY);
+    projector.camera?.dolly(event.deltaY);
     viewer.value?.invalidate();
-  }
-
-  /** Клиентские координаты указателя -> NDC канваса. */
-  function toNdc(point: Vector2): Vector2 {
-    if (!rect || !camera) return ndc.set(0, 0);
-    return camera.toNdc(point.x - rect.left, point.y - rect.top, ndc);
   }
 
   /**
@@ -173,10 +206,14 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     const v = viewer.value;
     if (!selectedId.value || !v) return false;
 
-    const ndc = toNdc(point);
+    const ndc = projector.toNdc(point);
     if (v.intersects(ndc, v.rotation.mesh)) return true;
     return v.pick(ndc)?.instanceId === selectedId.value;
   }
+
+  // -------------------------------------------------------------------
+  // Выделение
+  // -------------------------------------------------------------------
 
   function select(instanceId: string | null): void {
     const v = viewer.value;
@@ -194,17 +231,6 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     v.invalidate();
   }
 
-  const allWalls = (): Wall[] => wallsOf(scene.doc.rooms);
-  const allSwings = (): SwingZone[] => swingsOf(scene.doc.rooms);
-  const otherBoxes = (exceptId: string | null) =>
-    neighbourBoxes(scene.doc.placements, catalog.bySku, exceptId).map((entry) => ({
-      id: entry.instanceId,
-      box: entry.box,
-    }));
-  const neighbourDrawerZones = (exceptId: string | null) =>
-    drawerZonesOf(scene.doc.placements, catalog.bySku, exceptId);
-  const zoneOf = (placement: Placement) => drawerZoneOf(placement, catalog.bySku);
-
   /** Размещение выделенного объекта из документа сцены. */
   function selectedPlacement(): Placement | undefined {
     return scene.doc.placements.find((p) => p.instanceId === selectedId.value);
@@ -220,203 +246,9 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     v.invalidate();
   }
 
-  /**
-   * Кэш соседей на время жеста.
-   *
-   * Ни цели привязки, ни габариты соседей во время перетаскивания
-   * не меняются, а пересчёт на каждое движение указателя означал бы
-   * обход всей сцены в горячем пути.
-   */
-  let staticBoxes: { id: string; box: Box }[] = [];
-  let dragWalls: Wall[] = [];
-  let dragSwings: SwingZone[] = [];
-  let dragDrawerZones: { instanceId: string; box: Box }[] = [];
-  /** Границы комнаты на время жеста: стены за жест не двигаются. */
-  let dragBounds: RoomBoundsMm | null = null;
-
-  /** Что делает текущий жест: двигает объект или вращает его. */
-  let dragKind: 'move' | 'rotate' = 'move';
-  const rotateCentreMm = new Vector2();
-  let rotatePointerStartDeg = 0;
-  let rotateObjectStartDeg = 0;
-
-  /**
-   * Смещение между центром объекта и точкой захвата, мм.
-   *
-   * Без него объект прыгает центром под курсор в момент касания: взяли
-   * за угол шкафа — шкаф скакнул на пол-ширины. При взгляде вдоль пола
-   * такой прыжок измеряется метрами.
-   */
-  const grabOffsetMm = new Vector2();
-
-  /**
-   * Цели привязки: стены помещения и габариты остальных объектов.
-   * Габарит превращает соседа в цель СТЫКОВКИ: модуль встаёт грань
-   * в грань, а не центром в центр.
-   */
-  function beginDrag(
-    exceptId: string | null = selectedId.value,
-    grabPoint?: Vector2,
-  ): void {
-    // Прямоугольник канваса обновляется на старте жеста, а не на каждое
-    // движение: ResizeObserver ловит не всё — панель каталога может
-    // подгрузиться и сдвинуть сцену без изменения её размеров, и тогда
-    // луч уходит мимо цели, в которую целится пользователь
-    refreshRect();
-    captureGrabOffset(grabPoint);
-
-    const targets: SnapTarget[] = [];
-
-    for (const room of scene.doc.rooms) {
-      for (const wall of room.walls) {
-        const normal = innerNormal(room, wall);
-        targets.push({
-          kind: 'wall',
-          a: new Vector2(wall.start.x, wall.start.y),
-          b: new Vector2(wall.end.x, wall.end.y),
-          normal: new Vector2(normal.x, normal.y),
-          halfThicknessMm: wall.thickness / 2,
-          sourceId: wall.id,
-        });
-      }
-    }
-
-    staticBoxes = otherBoxes(exceptId);
-
-    // Цели строятся по ЦЕПОЧКАМ, а не по отдельным модулям: ряд кухни
-    // это один фронт, и столешницу выравнивают по краю всего ряда,
-    // а не по краю случайной тумбы внутри него. Одиночный модуль —
-    // цепочка из одного, поэтому для отдельной мебели ничего не меняется.
-    for (const chain of groupIntoChains(staticBoxes)) {
-      targets.push({
-        kind: 'object',
-        position: new Vector2(chain.box.centre.x, chain.box.centre.y),
-        rotation: chain.box.rotationDeg,
-        sourceId: chain.memberIds[0] ?? '',
-        footprint: {
-          halfWidthMm: chain.box.halfWidthMm,
-          halfDepthMm: chain.box.halfDepthMm,
-          // Высоты решают, стыковать сбоку или выравнивать поверх:
-          // столешница и верхний шкаф ложатся НАД нижним рядом
-          bottomMm: chain.box.bottomMm,
-          topMm: chain.box.topMm,
-        },
-      });
-    }
-
-    snapEngine.value.setTargets(targets);
-    dragWalls = allWalls();
-    dragSwings = allSwings();
-    dragDrawerZones = neighbourDrawerZones(exceptId);
-    dragBounds = roomBounds(scene.doc.rooms);
-  }
-
-  /**
-   * Высота, на которой окажется объект под указателем.
-   *
-   * Опора выбирается ЛУЧОМ по тому, во что целится пользователь, а не
-   * габаритами в плане: иначе мелочь, брошенная под навесным шкафом,
-   * забиралась бы ему на верх, потому что в плане шкаф оказывается
-   * «под точкой». Пользователь видит поверхность — на неё и кладём.
-   *
-   * На опору забирается только помеченное stackable: корпусная мебель
-   * стоит на своей отметке.
-   */
-  function restingHeightUnder(
-    clientPoint: Vector2,
-    product: Pick<CatalogProduct, 'mountHeightMm' | 'stackable'> | undefined,
-    excludeInstanceId?: string,
-  ): number {
-    const v = viewer.value;
-    if (!product) return 0;
-    if (!product.stackable || !v) return product.mountHeightMm;
-
-    return restingHeightMm(
-      product.mountHeightMm,
-      v.supportTopMm(toNdc(clientPoint), excludeInstanceId),
-    );
-  }
-
-  /** Запоминает, за какую точку объекта взялись. */
-  function captureGrabOffset(grabPoint?: Vector2): void {
-    grabOffsetMm.set(0, 0);
-
-    const instance = selectedId.value ? viewer.value?.registry.get(selectedId.value) : undefined;
-    if (!instance || !grabPoint) return;
-
-    // Захват меряется в плоскости, где объект сейчас стоит: для вещи
-    // на столешнице пол это не та плоскость
-    const hit = floorPointAt(grabPoint, instance.root.position.y * 1000);
-    if (!hit) return;
-
-    grabOffsetMm.set(
-      instance.root.position.x * 1000 - hit.x,
-      instance.root.position.z * 1000 - hit.z,
-    );
-  }
-
-  /**
-   * Пересчёт конфликтов выделенного объекта.
-   *
-   * Во время жеста габарит берётся из живого Three.js: в документ
-   * позиция ещё не записана (CLAUDE.md, правило 3). Вне жеста —
-   * из документа, так работает и отмена, и загрузка сцены.
-   */
-  function updateConflicts(subject?: Box): void {
-    const v = viewer.value;
-    const id = selectedId.value;
-
-    if (!id) {
-      conflicts.value = EMPTY_CONFLICTS;
-      v?.selection.setConflict(false);
-      v?.conflicts.clear();
-      return;
-    }
-
-    const box = subject ?? documentBox(id);
-    if (!box) {
-      conflicts.value = EMPTY_CONFLICTS;
-      v?.selection.setConflict(false);
-      v?.conflicts.clear();
-      return;
-    }
-
-    const neighbours = subject ? staticBoxes : otherBoxes(id);
-    const walls = subject ? dragWalls : allWalls();
-    const swings = subject ? dragSwings : allSwings();
-
-    const placement = scene.doc.placements.find((p) => p.instanceId === id);
-    // Зона выдвижения считается по тому же габариту, что и проверка:
-    // во время перетаскивания это позиция под указателем, а не в документе
-    const own = placement
-      ? zoneOf({
-          ...placement,
-          position: subject
-            ? { x: box.centre.x, y: box.bottomMm, z: box.centre.y }
-            : placement.position,
-          rotationY: box.rotationDeg,
-        })
-      : null;
-
-    conflicts.value = findConflicts(box, neighbours, walls, undefined, swings, {
-      own,
-      neighbours: subject ? dragDrawerZones : neighbourDrawerZones(id),
-    });
-    v?.selection.setConflict(hasConflicts(conflicts.value));
-    highlightConflicting([...conflicts.value.objectIds, ...conflicts.value.blockedDrawerIds]);
-    v?.invalidate();
-  }
-
-  /** Подсветить сами конфликтующие объекты, а не только рамку выделения. */
-  function highlightConflicting(instanceIds: readonly string[]): void {
-    const v = viewer.value;
-    if (!v) return;
-
-    const roots = instanceIds
-      .map((id) => v.registry.get(id)?.root)
-      .filter((root): root is NonNullable<typeof root> => root !== undefined);
-    v.conflicts.show(roots);
-  }
+  // -------------------------------------------------------------------
+  // Габариты
+  // -------------------------------------------------------------------
 
   function documentBox(instanceId: string): Box | null {
     const placement = scene.doc.placements.find((p) => p.instanceId === instanceId);
@@ -424,12 +256,12 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
   }
 
   /** Габарит объекта по его текущему положению в сцене. */
-  function liveBox(instanceId: string): Box | null {
+  function liveBox(instanceId: string): Box | undefined {
     const v = viewer.value;
     const instance = v?.registry.get(instanceId);
     const placement = scene.doc.placements.find((p) => p.instanceId === instanceId);
     const product = placement && catalog.bySku.get(placement.sku);
-    if (!instance || !product) return null;
+    if (!instance || !product) return undefined;
 
     const bottomMm = instance.root.position.y * 1000;
     const size = placementProductSize(placement, product);
@@ -444,8 +276,46 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     };
   }
 
+  /**
+   * Пересчёт конфликтов выделенного объекта.
+   *
+   * Во время жеста габарит берётся из живого Three.js: в документ
+   * позиция ещё не записана (CLAUDE.md, правило 3). Вне жеста —
+   * из документа, так работает и отмена, и загрузка сцены.
+   */
+  function updateConflicts(subject?: Box): void {
+    const id = selectedId.value;
+    const box = id ? (subject ?? documentBox(id)) : null;
+    if (!id || !box) {
+      conflictState.clear();
+      viewer.value?.invalidate();
+      return;
+    }
+
+    const env = subject && dragEnv ? dragEnv : documentEnvironment(id);
+    const placement = scene.doc.placements.find((p) => p.instanceId === id);
+    // Зона выдвижения считается по тому же габариту, что и проверка:
+    // во время перетаскивания это позиция под указателем, а не в документе
+    const own = placement
+      ? zoneOf({
+          ...placement,
+          position: subject
+            ? { x: box.centre.x, y: box.bottomMm, z: box.centre.y }
+            : placement.position,
+          rotationY: box.rotationDeg,
+        })
+      : null;
+
+    conflictState.evaluate(box, env, own);
+  }
+
+  // -------------------------------------------------------------------
+  // Жесты
+  // -------------------------------------------------------------------
+
   function handleGesture(e: GestureEvent): void {
     const v = viewer.value;
+    const camera = projector.camera;
     if (!v || !camera) return;
 
     switch (e.type) {
@@ -453,69 +323,22 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
         // Двойным тапом заканчивают ломаную во всех планировщиках.
         // Он же приходит вместо второго 'tap', если тапнули быстро,
         // поэтому в режиме планировки его нельзя игнорировать
-        if ((options.mode?.value ?? 'select') !== 'select') options.onFloorDoubleTap?.();
+        if (planning()) options.onFloorDoubleTap?.();
         break;
 
-      case 'tap': {
-        // Метка инженерии проверяется первой: она мелкая, лежит на стене
-        // и на полу, и попасть по ней иначе невозможно
-        const service = v.pickService(toNdc(e.point));
-        if (service) {
-          options.onServiceTap?.(service);
-          break;
-        }
-
-        // В режимах планировки тап адресован полу, а не объектам:
-        // иначе рисование стены выделяло бы мебель под курсором
-        if ((options.mode?.value ?? 'select') !== 'select') {
-          const point = floorPointAt(e.point);
-          if (point) options.onFloorTap?.(point);
-          break;
-        }
-        // Размер проверяется раньше объектов: плашка нарисована поверх
-        // мебели, и тап по видимой подписи должен попадать в неё
-        const dimension = v.pickDimension(toNdc(e.point));
-        options.onDimensionTap?.(
-          dimension ? { ...dimension, clientX: e.point.x, clientY: e.point.y } : null,
+      case 'tap':
+        applyTap(
+          routeTap(v, projector.toNdc(e.point), {
+            planning: planning(),
+            selectedId: selectedId.value,
+          }),
+          e.point,
         );
-        if (dimension) break;
-
-        // Дверь и окно выбираются раньше мебели: они нарисованы в
-        // плоскости стены, и мебель у стены иначе перехватывала бы тап
-        const opening = v.pickOpening(toNdc(e.point));
-        options.onOpeningTap?.(opening);
-        if (opening) {
-          select(null);
-          break;
-        }
-
-        const hit = v.pick(toNdc(e.point));
-        // Ящик выдвигается тапом по уже выделенному изделию: первый тап
-        // выбирает объект, и открывать ящик заодно с выбором нельзя —
-        // пользователь ещё не показал, что хочет заглянуть внутрь
-        if (hit && hit.instanceId === selectedId.value) {
-          const drawer = v.pickDrawer(toNdc(e.point), hit.root);
-          if (drawer) {
-            v.drawers.toggle(drawer);
-            v.invalidate();
-            break;
-          }
-
-          const door = v.pickDoor(toNdc(e.point), hit.root);
-          if (door) {
-            v.doors.toggle(door);
-            v.invalidate();
-            break;
-          }
-        }
-
-        select(hit?.instanceId ?? null);
         break;
-      }
 
       case 'dragStart':
         if (!e.onSelection) break;
-        dragKind = v.intersects(toNdc(e.point), v.rotation.mesh) ? 'rotate' : 'move';
+        dragKind = v.intersects(projector.toNdc(e.point), v.rotation.mesh) ? 'rotate' : 'move';
         if (dragKind === 'rotate') beginRotate(e.point);
         else beginDrag(selectedId.value, e.point);
         break;
@@ -531,9 +354,7 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
         break;
 
       case 'dragEnd':
-        if (e.onSelection && selectedId.value) {
-          commitSelectedPosition();
-        }
+        if (e.onSelection && selectedId.value) commitSelectedPosition();
         dragKind = 'move';
         isSnapping.value = false;
         break;
@@ -558,8 +379,131 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     }
   }
 
+  /** Исполнение разобранного тапа. Порядок разбора — в lib/tapRouting. */
+  function applyTap(action: TapAction, point: Vector2): void {
+    const v = viewer.value;
+    if (!v) return;
+
+    switch (action.kind) {
+      case 'service':
+        options.onServiceTap?.(action.serviceId);
+        return;
+      case 'floor': {
+        const floor = projector.floorPointAt(point);
+        if (floor) options.onFloorTap?.(floor);
+        return;
+      }
+      case 'dimension':
+        options.onDimensionTap?.({ ...action.dimension, clientX: point.x, clientY: point.y });
+        return;
+    }
+
+    // Тап адресован не размеру — поле ввода размера пора закрыть
+    options.onDimensionTap?.(null);
+
+    if (action.kind === 'opening') {
+      options.onOpeningTap?.(action.openingId);
+      select(null);
+      return;
+    }
+    options.onOpeningTap?.(null);
+
+    switch (action.kind) {
+      case 'drawer':
+        v.drawers.toggle(action.node);
+        v.invalidate();
+        return;
+      case 'door':
+        v.doors.toggle(action.node);
+        v.invalidate();
+        return;
+      case 'select':
+        select(action.instanceId);
+    }
+  }
+
+  // -------------------------------------------------------------------
+  // Перетаскивание
+  // -------------------------------------------------------------------
+
+  /** Что делает текущий жест: двигает объект или вращает его. */
+  let dragKind: 'move' | 'rotate' = 'move';
+  const rotateCentreMm = new Vector2();
+  let rotatePointerStartDeg = 0;
+  let rotateObjectStartDeg = 0;
+
+  /**
+   * Смещение между центром объекта и точкой захвата, мм.
+   *
+   * Без него объект прыгает центром под курсор в момент касания: взяли
+   * за угол шкафа — шкаф скакнул на пол-ширины. При взгляде вдоль пола
+   * такой прыжок измеряется метрами.
+   */
+  const grabOffsetMm = new Vector2();
+
+  /** Снимок окружения и целей привязки на один жест. */
+  function beginDrag(exceptId: string | null = selectedId.value, grabPoint?: Vector2): void {
+    // Прямоугольник канваса обновляется на старте жеста, а не на каждое
+    // движение: ResizeObserver ловит не всё — панель каталога может
+    // подгрузиться и сдвинуть сцену без изменения её размеров, и тогда
+    // луч уходит мимо цели, в которую целится пользователь
+    projector.refresh();
+    captureGrabOffset(grabPoint);
+
+    const env = documentEnvironment(exceptId);
+    dragEnv = env;
+    dragObstacles = env.neighbours.map((entry) => entry.box);
+    dragBounds = roomBounds(scene.doc.rooms);
+    snapEngine.value.setTargets(snapTargets(scene.doc.rooms, env.neighbours));
+  }
+
+  /** Запоминает, за какую точку объекта взялись. */
+  function captureGrabOffset(grabPoint?: Vector2): void {
+    grabOffsetMm.set(0, 0);
+
+    const instance = selectedId.value ? viewer.value?.registry.get(selectedId.value) : undefined;
+    if (!instance || !grabPoint) return;
+
+    // Захват меряется в плоскости, где объект сейчас стоит: для вещи
+    // на столешнице пол это не та плоскость
+    const hit = projector.floorPointAt(grabPoint, instance.root.position.y * 1000);
+    if (!hit) return;
+
+    grabOffsetMm.set(
+      instance.root.position.x * 1000 - hit.x,
+      instance.root.position.z * 1000 - hit.z,
+    );
+  }
+
+  /**
+   * Высота, на которой окажется объект под указателем.
+   *
+   * Опора выбирается ЛУЧОМ по тому, во что целится пользователь, а не
+   * габаритами в плане: иначе мелочь, брошенная под навесным шкафом,
+   * забиралась бы ему на верх, потому что в плане шкаф оказывается
+   * «под точкой». Пользователь видит поверхность — на неё и кладём.
+   *
+   * На опору забирается только помеченное stackable: корпусная мебель
+   * стоит на своей отметке.
+   */
+  function restingHeightUnder(
+    clientPoint: Vector2,
+    product: Pick<CatalogProduct, 'mountHeightMm' | 'stackable'> | undefined,
+    excludeInstanceId?: string,
+  ): number {
+    const v = viewer.value;
+    if (!product) return 0;
+    if (!product.stackable || !v) return product.mountHeightMm;
+
+    return restingHeightMm(
+      product.mountHeightMm,
+      v.supportTopMm(projector.toNdc(clientPoint), excludeInstanceId),
+    );
+  }
+
   function moveSelected(screenPoint: Vector2): void {
     const v = viewer.value;
+    const camera = projector.camera;
     if (!v || !camera || !selectedId.value) return;
     const instance = v.registry.get(selectedId.value);
     if (!instance || instance.locked) return;
@@ -577,7 +521,7 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     // объект из луча исключён — он следует за курсором и перекрыл бы опору.
     const bottomMm = restingHeightUnder(screenPoint, product, selectedId.value);
 
-    const hit = floorPointAt(screenPoint, bottomMm);
+    const hit = projector.floorPointAt(screenPoint, bottomMm);
     if (!hit) return; // луч ушёл выше горизонта — движения нет
 
     // Точка захвата сохраняется: тянут за то место, за которое взялись
@@ -607,7 +551,7 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
       rotationDeg,
       bottomMm,
       topMm: bottomMm + (product?.heightMm ?? 0),
-      obstacles: staticBoxes.map((entry) => entry.box),
+      obstacles: dragObstacles,
       bounds: dragBounds,
     });
 
@@ -618,7 +562,7 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     }
     v.selection.refresh(instance.root);
     v.rotation.update(instance.root);
-    updateConflicts(liveBox(selectedId.value) ?? undefined);
+    updateConflicts(liveBox(selectedId.value));
   }
 
   /**
@@ -629,14 +573,14 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
   function beginRotate(point: Vector2): void {
     const v = viewer.value;
     const instance = selectedId.value ? v?.registry.get(selectedId.value) : undefined;
-    const floor = floorPointAt(point);
+    const floor = projector.floorPointAt(point);
     if (!instance || !floor) return;
 
     rotateCentreMm.set(instance.root.position.x * 1000, instance.root.position.z * 1000);
     rotatePointerStartDeg = planAngleDeg(floor.x - rotateCentreMm.x, floor.z - rotateCentreMm.y);
     rotateObjectStartDeg = (instance.root.rotation.y * 180) / Math.PI;
 
-    // Соседи на время жеста не меняются: конфликты считаются по кэшу
+    // Соседи на время жеста не меняются: конфликты считаются по снимку
     beginDrag();
   }
 
@@ -648,20 +592,20 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
    */
   function rotateSelected(point: Vector2): void {
     const v = viewer.value;
-    const instance = selectedId.value ? v?.registry.get(selectedId.value) : undefined;
-    const floor = floorPointAt(point);
-    if (!v || !instance || !floor || instance.locked) return;
+    const id = selectedId.value;
+    const instance = id ? v?.registry.get(id) : undefined;
+    const floor = projector.floorPointAt(point);
+    if (!v || !id || !instance || !floor || instance.locked) return;
 
     const pointerDeg = planAngleDeg(floor.x - rotateCentreMm.x, floor.z - rotateCentreMm.y);
     const delta = normalizeAngleDeg(pointerDeg - rotatePointerStartDeg);
-    const next = rotateObjectStartDeg + delta;
 
     // Прямая мутация Three.js: в Pinia пишем один раз на dragEnd
-    instance.root.rotation.y = (next * Math.PI) / 180;
+    instance.root.rotation.y = ((rotateObjectStartDeg + delta) * Math.PI) / 180;
 
     v.selection.refresh(instance.root);
     v.rotation.update(instance.root);
-    updateConflicts(liveBox(selectedId.value!) ?? undefined);
+    updateConflicts(liveBox(id));
   }
 
   /** У двупальцевого жеста нет явного конца, поэтому фиксируем по паузе. */
@@ -679,13 +623,13 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     const instance = id ? v?.registry.get(id) : undefined;
     if (!v || !id || !instance || instance.locked) return;
 
-    // Первое событие серии: обновляем кэш соседей для проверки конфликтов
+    // Первое событие серии: обновляем снимок соседей для проверки конфликтов
     if (rotationCommitTimer === null) beginDrag(id);
 
     instance.root.rotation.y += (deltaDeg * Math.PI) / 180;
     v.selection.refresh(instance.root);
     v.rotation.update(instance.root);
-    updateConflicts(liveBox(id) ?? undefined);
+    updateConflicts(liveBox(id));
 
     if (rotationCommitTimer) clearTimeout(rotationCommitTimer);
     rotationCommitTimer = setTimeout(() => {
@@ -711,19 +655,9 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     });
   }
 
-  /**
-   * Точка под координатой окна на горизонтальной плоскости высоты
-   * `heightMm`, в мм. null — луч ушёл выше горизонта.
-   *
-   * Высота плоскости обязана совпадать с высотой постановки: луч,
-   * нацеленный на крышку тумбы, пересекает пол далеко за ней, и позиция,
-   * посчитанная по полу, уехала бы на метры от точки прицеливания.
-   */
-  function floorPointAt(clientPoint: Vector2, heightMm = 0): FloorPoint | null {
-    if (!camera) return null;
-    const hit = camera.projectToPlane(toNdc(clientPoint), heightMm / 1000);
-    return hit ? { x: hit.x * 1000, z: hit.z * 1000 } : null;
-  }
+  // -------------------------------------------------------------------
+  // Перенос из каталога
+  // -------------------------------------------------------------------
 
   /**
    * Точка постановки для объекта, брошенного из каталога.
@@ -739,9 +673,10 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     >,
     clientX: number,
     clientY: number,
-  ): { x: number; z: number; y: number; rotationY: number } | null {
-    const clientPoint = new Vector2(clientX, clientY);
+  ): DropPoint | null {
+    const camera = projector.camera;
     if (!camera) return null;
+    const clientPoint = new Vector2(clientX, clientY);
 
     // Исключать нечего: бросаемого объекта в документе ещё нет, а ранее
     // выделенный сосед — как раз тот, к которому надо пристыковаться
@@ -749,8 +684,9 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
 
     // Сначала высота, потом позиция в плоскости этой высоты
     const bottomMm = restingHeightUnder(clientPoint, product);
-    const point = floorPointAt(clientPoint, bottomMm);
+    const point = projector.floorPointAt(clientPoint, bottomMm);
     if (!point) return null;
+
     const result = snapEngine.value.snap(new Vector2(point.x, point.z), {
       ...DEFAULT_SNAP,
       mmPerPixel: camera.mmPerPixel,
@@ -770,119 +706,27 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
       rotationDeg: rotationY,
       bottomMm,
       topMm: bottomMm + product.heightMm,
-      obstacles: staticBoxes.map((entry) => entry.box),
-      bounds: roomBounds(scene.doc.rooms),
+      obstacles: dragObstacles,
+      bounds: dragBounds,
     });
 
     return { x: inside.x, z: inside.y, y: bottomMm, rotationY };
   }
 
-  // ---------------------------------------------------------------------
-  // Предварительное положение при переносе из каталога
-  // ---------------------------------------------------------------------
+  const dropPreview = useDropPreview(viewer, {
+    place: (product, clientX, clientY) => snapDropPoint(product, clientX, clientY),
+    environment: () => documentEnvironment(null),
+    probe: conflictState.probe,
+    highlight: conflictState.highlight,
+  });
 
-  /** Куда встанет объект и с каким разворотом. null — переноса нет. */
-  const preview = shallowRef<{
-    xMm: number;
-    yMm: number;
-    zMm: number;
-    rotationDeg: number;
-  } | null>(null);
-  const previewConflicts = shallowRef<ConflictReport>(EMPTY_CONFLICTS);
-
-  let previewSku: string | null = null;
-  let previewRef: { productId: string; urlTemplate: string } | null = null;
-
-  /**
-   * Обновление призрака под указателем.
-   *
-   * Точка отпускания и место постановки различаются: работают привязка
-   * к стене, стыковка с соседом и высота установки. Без призрака перенос
-   * получается вслепую.
-   */
-  async function updatePreview(
-    product: CatalogProduct,
-    clientX: number,
-    clientY: number,
-  ): Promise<void> {
-    const v = viewer.value;
-    if (!v) return;
-
-    const point = snapDropPoint(product, clientX, clientY);
-    if (!point) {
-      hidePreview();
-      return;
-    }
-
-    if (previewSku !== product.sku) {
-      previewSku = product.sku;
-      const ref = { productId: product.sku, urlTemplate: product.urlTemplate };
-      // Превью грузится в самом лёгком LOD: оно живёт доли секунды,
-      // а полная модель на слабом устройстве не успеет появиться
-      const group = await v.assets.load(ref, 2);
-      // Пока грузили, пользователь мог схватить другой товар
-      if (previewSku !== product.sku) return;
-
-      releasePreviewAsset();
-      previewRef = ref;
-      v.preview.show(group);
-    }
-
-    v.preview.setTransform(point.x, point.y, point.z, point.rotationY);
-    preview.value = {
-      xMm: Math.round(point.x),
-      yMm: Math.round(point.y),
-      zMm: Math.round(point.z),
-      rotationDeg: Math.round(point.rotationY),
-    };
-
-    const box: Box = {
-      centre: { x: point.x, y: point.z },
-      halfWidthMm: product.widthMm / 2,
-      halfDepthMm: product.depthMm / 2,
-      rotationDeg: point.rotationY,
-      bottomMm: point.y,
-      topMm: point.y + product.heightMm,
-    };
-    previewConflicts.value = findConflicts(
-      box,
-      otherBoxes(null),
-      allWalls(),
-      undefined,
-      allSwings(),
-      {
-        own: drawerZone({ position: { x: point.x, y: point.y, z: point.z }, rotationY: point.rotationY }, product),
-        neighbours: neighbourDrawerZones(null),
-      },
-    );
-    v.preview.setConflict(hasConflicts(previewConflicts.value));
-    // Виновник подсвечивается и до отпускания: пользователь видит, во что
-    // упрётся объект, ещё на подлёте
-    highlightConflicting(previewConflicts.value.objectIds);
-    v.invalidate();
-  }
-
-  function hidePreview(): void {
-    const v = viewer.value;
-    v?.preview.hide();
-    v?.conflicts.clear();
-    releasePreviewAsset();
-    previewSku = null;
-    preview.value = null;
-    previewConflicts.value = EMPTY_CONFLICTS;
-    v?.invalidate();
-  }
-
-  /** Счётчик ссылок загрузчика: без возврата модель никогда не вытеснится. */
-  function releasePreviewAsset(): void {
-    if (previewRef) viewer.value?.assets.release(previewRef, 2);
-    previewRef = null;
-  }
+  // -------------------------------------------------------------------
+  // Камера
+  // -------------------------------------------------------------------
 
   /** Показать помещение целиком: вызывается после создания планировки. */
   function focusArea(centreMm: FloorPoint, radiusMm: number): void {
-    if (!camera) return;
-    camera.focus(
+    projector.camera?.focus(
       new Vector3(centreMm.x / 1000, 0.4, centreMm.z / 1000),
       Math.max(1, radiusMm / 1000),
     );
@@ -891,22 +735,7 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
 
   /** Для сброса объекта из каталога: координаты окна -> точка пола. */
   function screenToFloorMm(clientX: number, clientY: number): FloorPoint | null {
-    return floorPointAt(new Vector2(clientX, clientY));
-  }
-
-  function detach(): void {
-    if (rotationCommitTimer) clearTimeout(rotationCommitTimer);
-    rotationCommitTimer = null;
-    element?.removeEventListener('wheel', onWheel);
-    element?.removeEventListener('pointermove', onPointerMove);
-    element?.removeEventListener('pointerleave', onPointerLeave);
-    resizeObserver?.disconnect();
-    resizeObserver = null;
-    gestures?.dispose();
-    gestures = null;
-    camera = null;
-    element = null;
-    rect = null;
+    return projector.floorPointAt(new Vector2(clientX, clientY));
   }
 
   // Вне жеста конфликты пересчитываются по документу: так они верны
@@ -916,12 +745,12 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
   return {
     selectedId,
     isSnapping,
-    conflicts,
-    hasConflict,
-    preview,
-    previewConflicts,
-    updatePreview,
-    hidePreview,
+    conflicts: conflictState.conflicts,
+    hasConflict: conflictState.hasConflict,
+    preview: dropPreview.preview,
+    previewConflicts: dropPreview.previewConflicts,
+    updatePreview: dropPreview.update,
+    hidePreview: dropPreview.hide,
     attach,
     detach,
     select,

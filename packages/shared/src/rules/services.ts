@@ -1,5 +1,5 @@
 import { nearestServiceMm } from '../scene/services';
-import { placementBox } from '../scene/collision';
+import { placementBox } from '../scene/box';
 import { placementProductSize } from '../scene/resize';
 import type { CatalogProduct } from '../catalog/schema';
 import type { Placement, ServicePoint, ServicePointKind } from '../scene/schema';
