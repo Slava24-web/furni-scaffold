@@ -6,6 +6,7 @@ import {
   rotateX,
   roundedBox,
   segmentedBox,
+  taperedBox,
   translate,
   triangleCount,
 } from './geometry.mjs';
@@ -148,5 +149,71 @@ describe('поворот вокруг оси X', () => {
     const before = segmentedBox(200, 300, 400, 1);
     const after = rotateX(segmentedBox(200, 300, 400, 1), 0);
     expect(after.positions).toEqual(before.positions);
+  });
+});
+
+describe('усечённая пирамида', () => {
+  const normalsOf = (geometry) => {
+    const at = (index) => [
+      geometry.positions[index * 3],
+      geometry.positions[index * 3 + 1],
+      geometry.positions[index * 3 + 2],
+    ];
+    const out = [];
+    for (let t = 0; t < geometry.indices.length; t += 3) {
+      const [i, j, k] = [geometry.indices[t], geometry.indices[t + 1], geometry.indices[t + 2]];
+      const [a, b, c] = [at(i), at(j), at(k)];
+      const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+      const ac = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+      out.push({
+        cross: [
+          ab[1] * ac[2] - ab[2] * ac[1],
+          ab[2] * ac[0] - ab[0] * ac[2],
+          ab[0] * ac[1] - ab[1] * ac[0],
+        ],
+        stored: [geometry.normals[i * 3], geometry.normals[i * 3 + 1], geometry.normals[i * 3 + 2]],
+      });
+    }
+    return out;
+  };
+
+  it('габарит берётся по широкому основанию, origin по низу', () => {
+    const box = taperedBox(600, 500, 280, 300, 240);
+    expect(boundsMm(box)).toEqual({ widthMm: 600, heightMm: 240, depthMm: 500, minYMm: 0 });
+  });
+
+  it('ни один треугольник не вывернут наизнанку', () => {
+    // Вывернутый треугольник отсекается как задняя грань, и сквозь
+    // модель видно фон — с одной стороны и только под некоторым углом
+    for (const { cross, stored } of normalsOf(taperedBox(600, 500, 280, 300, 240, { segments: 3 }))) {
+      const dot = cross[0] * stored[0] + cross[1] * stored[1] + cross[2] * stored[2];
+      expect(dot).toBeGreaterThan(0);
+    }
+  });
+
+  it('нормали единичные: иначе скос светится ярче остальной модели', () => {
+    const box = taperedBox(600, 500, 280, 300, 240, { segments: 2 });
+    for (let i = 0; i < box.normals.length; i += 3) {
+      const length = Math.hypot(box.normals[i], box.normals[i + 1], box.normals[i + 2]);
+      expect(length).toBeCloseTo(1, 6);
+    }
+  });
+
+  it('нормаль скоса наклонена, а не смотрит по оси', () => {
+    // У осевой нормали скос освещается как вертикальная стенка
+    const sloped = taperedBox(600, 500, 280, 300, 240, { segments: 1 });
+    const upward = [];
+    for (let i = 0; i < sloped.normals.length; i += 3) upward.push(sloped.normals[i + 1]);
+    expect(Math.max(...upward)).toBeGreaterThan(0.3);
+  });
+
+  it('без скоса это обычная призма', () => {
+    const straight = taperedBox(400, 400, 400, 400, 300, { segments: 1 });
+    for (let i = 0; i < straight.normals.length; i += 3) {
+      // У прямой стенки вертикальной составляющей нет
+      if (Math.abs(straight.normals[i]) > 0.5 || Math.abs(straight.normals[i + 2]) > 0.5) {
+        expect(straight.normals[i + 1]).toBeCloseTo(0, 6);
+      }
+    }
   });
 });

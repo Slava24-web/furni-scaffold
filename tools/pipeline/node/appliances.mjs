@@ -14,6 +14,7 @@ import {
   roundedBox,
   rotateX,
   segmentedBox,
+  taperedBox,
   translate,
   tubeX,
   tubeZ,
@@ -276,41 +277,140 @@ function gasHob() {
  */
 function domeHood(widthMm) {
   const depth = 500;
-  const skirt = 120;
-  const domeHeight = 240;
-  const ductHeight = 540;
+  const rim = 34;
+  const canopy = 250;
+  const ductHeight = 520;
+  const ductWidth = 260;
+  const ductDepth = 280;
+
+  // Труба уходит к стене, а не стоит по центру глубины: так её ставят
+  const ductZ = -(depth - ductDepth) / 2 + 40;
+
+  const body = [
+    // Нижний обод: прямой бортик, которым купол опирается на воздух.
+    // С него начинается силуэт, и он обязан быть резким
+    translate(roundedBox(widthMm, rim, depth, 3, 2), 0, rim / 2, 0),
+    // Купол одной сплошной плоскостью от обода до трубы
+    translate(
+      taperedBox(widthMm - 8, depth - 8, ductWidth, ductDepth, canopy, { segments: 3, capTop: false }),
+      0,
+      rim,
+      0,
+    ),
+    // Труба со слабым сужением: строго прямая читается водосточной
+    translate(
+      taperedBox(ductWidth, ductDepth, ductWidth - 26, ductDepth - 26, ductHeight, {
+        segments: 2,
+        capBottom: false,
+      }),
+      0,
+      rim + canopy,
+      ductZ,
+    ),
+  ];
 
   return {
-    steel: [
-      boxAt(widthMm, skirt, depth, 0, skirt / 2, 0, 5, 3),
-      // Купол: сужение от фартука к трубе двумя ступенями
-      boxAt(widthMm - 120, domeHeight, depth - 120, 0, skirt + domeHeight / 2, -20, 6, 3),
-      boxAt(280, ductHeight, 300, 0, skirt + domeHeight + ductHeight / 2, -60, 4, 3),
-    ],
-    graphite: [boxAt(widthMm - 40, 26, depth - 40, 0, 13, 0, 3, 3)],
+    steel: [...body, ...controlStrip(widthMm, rim, depth)],
+    graphite: greaseFilter(widthMm - 70, depth - 70, 6),
   };
 }
 
-/** Наклонная вытяжка: стеклянный экран под углом. */
+/**
+ * Жироулавливающий фильтр: параллельные ламели в рамке.
+ *
+ * Низ вытяжки — единственная её часть, которую видно с рабочего места,
+ * и сплошная пластина там читается как заглушка. Ламели дают тень,
+ * по которой узнают вытяжку.
+ */
+function greaseFilter(widthMm, depthMm, count) {
+  const frame = 14;
+  const parts = [
+    // Рамка фильтра
+    translate(segmentedBox(widthMm, 8, frame, 1), 0, 4, (depthMm - frame) / 2),
+    translate(segmentedBox(widthMm, 8, frame, 1), 0, 4, -(depthMm - frame) / 2),
+  ];
+
+  const span = depthMm - frame * 2;
+  const step = span / count;
+  for (let i = 0; i < count; i++) {
+    const z = -span / 2 + step * (i + 0.5);
+    parts.push(translate(segmentedBox(widthMm - 6, 10, step * 0.52, 1), 0, 5, z));
+  }
+  return parts;
+}
+
+/** Панель управления: узкая полоса кнопок по переднему краю обода. */
+function controlStrip(widthMm, rimMm, depthMm) {
+  const parts = [];
+  for (let i = 0; i < 4; i++) {
+    parts.push(
+      translate(
+        roundedBox(30, 6, 10, 3, 2),
+        widthMm / 2 - 60 - i * 42,
+        rimMm / 2,
+        depthMm / 2 + 1,
+      ),
+    );
+  }
+  return parts;
+}
+
+/**
+ * Наклонная вытяжка: стеклянный экран под углом к корпусу.
+ *
+ * Главное в ней — сплошное стекло без рамки по краям и тонкая светящаяся
+ * кромка внизу. Корпус за стеклом сужается к трубе.
+ */
 function inclinedHood(widthMm) {
-  const depth = 380;
-  const bodyHeight = 180;
-  const ductHeight = 620;
+  const depth = 400;
+  const bodyHeight = 190;
+  const ductHeight = 600;
+  const ductWidth = 230;
+  const ductDepth = 190;
   const tilt = (34 * Math.PI) / 180;
-  const screen = 420;
+  const screen = 430;
+  const glassThickness = 22;
 
   // Экран висит на переднем крае корпуса: нижняя кромка ложится ровно
   // на отметку низа модели, иначе стекло уходит под пол
-  const glass = rotateX(roundedBox(widthMm - 20, screen, 24, 6, 4), tilt);
-  const halfDrop = (screen * Math.cos(tilt) + 24 * Math.sin(tilt)) / 2;
-  translate(glass, 0, halfDrop, depth / 2 - 40);
+  const glass = rotateX(roundedBox(widthMm - 16, screen, glassThickness, 5, 4), tilt);
+  const drop = (screen * Math.cos(tilt) + glassThickness * Math.sin(tilt)) / 2;
+  const glassZ = depth / 2 - 46;
+  translate(glass, 0, drop, glassZ);
+
+  // Светящаяся кромка по нижнему краю стекла: у наклонных вытяжек
+  // подсветка рабочей зоны идёт именно оттуда
+  const lip = translate(
+    roundedBox(widthMm - 40, 12, 26, 5, 3),
+    0,
+    10,
+    glassZ + (screen / 2) * Math.sin(tilt) - 6,
+  );
 
   return {
     steel: [
-      boxAt(widthMm, bodyHeight, depth, 0, bodyHeight / 2, -40, 5, 3),
-      boxAt(240, ductHeight, 200, 0, bodyHeight + ductHeight / 2, -depth / 2 + 100, 4, 3),
+      // Корпус скошен к трубе: прямая коробка выглядит ящиком на стене
+      translate(
+        taperedBox(widthMm, depth, ductWidth + 60, ductDepth + 40, bodyHeight, {
+          segments: 2,
+          capTop: false,
+        }),
+        0,
+        0,
+        -30,
+      ),
+      translate(
+        taperedBox(ductWidth + 60, ductDepth + 40, ductWidth, ductDepth, ductHeight, {
+          segments: 2,
+          capBottom: false,
+        }),
+        0,
+        bodyHeight,
+        -depth / 2 + ductDepth / 2 + 26,
+      ),
+      lip,
     ],
-    graphite: [glass],
+    graphite: [glass, ...greaseFilter(widthMm - 90, depth - 150, 5)],
   };
 }
 
@@ -321,17 +421,25 @@ function inclinedHood(widthMm) {
 function builtInHood(widthMm) {
   const depth = 300;
   const height = 380;
-  const slider = 120;
+  const slider = 130;
 
   return {
     white: [boxAt(widthMm, height, depth, 0, height / 2, -slider / 2, 4, 3)],
     steel: [
-      boxAt(widthMm - 20, 90, slider, 0, 45, depth / 2 - 10, 4, 3),
-      ...bar(widthMm - 180, 0, 45, depth / 2 + slider / 2 - 12),
+      // Выдвижная панель со скошенной передней кромкой: за неё берутся
+      translate(
+        taperedBox(widthMm - 16, slider, widthMm - 16, slider - 26, 86, { segments: 1 }),
+        0,
+        6,
+        depth / 2 - slider / 2 + 6,
+      ),
+      ...bar(widthMm - 180, 0, 46, depth / 2 + slider / 2 - 26),
     ],
     // Жироулавливающий фильтр смотрит вниз, на плиту: сверху вытяжка
     // закрыта шкафом, и деталь там не видна вообще
-    graphite: [boxAt(widthMm - 60, 20, depth - 60, 0, 14, -slider / 2, 3, 3)],
+    graphite: greaseFilter(widthMm - 60, depth - 80, 5).map((part) =>
+      translate(part, 0, 2, -slider / 2),
+    ),
   };
 }
 

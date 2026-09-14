@@ -251,6 +251,123 @@ export function segmentedBox(widthMm, heightMm, depthMm, segments = 1) {
   return geometry;
 }
 
+/**
+ * Усечённая пирамида с прямоугольным основанием.
+ *
+ * Купол вытяжки, свод камина, ножка-конус с прямыми гранями — всё, что
+ * сужается кверху. Раньше такие формы собирались из двух коробок друг
+ * на друге, и ступенька между ними читалась как ошибка сборки, а не как
+ * скос: у настоящей вытяжки грань идёт одной сплошной плоскостью.
+ *
+ * Нормали боковых граней считаются по наклону, а не берутся по осям:
+ * с осевой нормалью скос освещается как вертикальная стенка и выглядит
+ * плоским пятном.
+ *
+ * @param {number} bottomWidthMm ширина у основания
+ * @param {number} bottomDepthMm глубина у основания
+ * @param {number} topWidthMm ширина у вершины
+ * @param {number} topDepthMm глубина у вершины
+ * @param {number} heightMm высота
+ * @param {{segments?: number, capTop?: boolean, capBottom?: boolean}} [options]
+ */
+export function taperedBox(
+  bottomWidthMm,
+  bottomDepthMm,
+  topWidthMm,
+  topDepthMm,
+  heightMm,
+  options = {},
+) {
+  const { segments = 4, capTop = true, capBottom = true } = options;
+  const geometry = emptyGeometry();
+
+  const h = heightMm / MM;
+  const bw = bottomWidthMm / MM / 2;
+  const bd = bottomDepthMm / MM / 2;
+  const tw = topWidthMm / MM / 2;
+  const td = topDepthMm / MM / 2;
+
+  // Стороны обходятся по кругу: +X, +Z, -X, -Z
+  const sides = [
+    { axis: 'x', sign: 1 },
+    { axis: 'z', sign: 1 },
+    { axis: 'x', sign: -1 },
+    { axis: 'z', sign: -1 },
+  ];
+
+  for (const side of sides) {
+    const base = geometry.positions.length / 3;
+    const alongX = side.axis === 'z';
+
+    // Наклон грани: на сколько она уходит внутрь по высоте
+    const halfBottom = side.axis === 'x' ? bw : bd;
+    const halfTop = side.axis === 'x' ? tw : td;
+    const run = halfBottom - halfTop;
+    const length = Math.hypot(run, h) || 1;
+    // Нормаль перпендикулярна образующей: (h, run) повёрнутое наружу
+    const nOut = (h / length) * side.sign;
+    const nUp = run / length;
+
+    for (let iv = 0; iv <= segments; iv++) {
+      const t = iv / segments;
+      const half = halfBottom + (halfTop - halfBottom) * t;
+      const other = alongX
+        ? bw + (tw - bw) * t
+        : bd + (td - bd) * t;
+      const y = h * t;
+
+      for (let iu = 0; iu <= segments; iu++) {
+        const u = iu / segments - 0.5;
+        // Направление обхода разворачивается вместе со стороной: иначе
+        // треугольники дальних граней смотрят внутрь, и модель видно
+        // насквозь с одной стороны
+        const across = u * 2 * other * side.sign;
+
+        if (alongX) {
+          geometry.positions.push(across, y, side.sign * half);
+          geometry.normals.push(0, nUp, nOut);
+        } else {
+          geometry.positions.push(side.sign * half, y, -across);
+          geometry.normals.push(nOut, nUp, 0);
+        }
+        geometry.uvs.push(u + 0.5, t);
+      }
+    }
+
+    const stride = segments + 1;
+    for (let iv = 0; iv < segments; iv++) {
+      for (let iu = 0; iu < segments; iu++) {
+        const a = base + iv * stride + iu;
+        geometry.indices.push(a, a + 1, a + stride, a + 1, a + stride + 1, a + stride);
+      }
+    }
+  }
+
+  if (capBottom) {
+    geometry.indices.push(...quad(geometry, [
+      [-bw, 0, -bd], [bw, 0, -bd], [bw, 0, bd], [-bw, 0, bd],
+    ], [0, -1, 0]));
+  }
+  if (capTop) {
+    geometry.indices.push(...quad(geometry, [
+      [-tw, h, -td], [-tw, h, td], [tw, h, td], [tw, h, -td],
+    ], [0, 1, 0]));
+  }
+
+  return geometry;
+}
+
+/** Четырёхугольник с общей нормалью: крышка и дно усечённой пирамиды. */
+function quad(geometry, corners, normal) {
+  const base = geometry.positions.length / 3;
+  for (const [x, y, z] of corners) {
+    geometry.positions.push(x, y, z);
+    geometry.normals.push(...normal);
+    geometry.uvs.push(x + 0.5, z + 0.5);
+  }
+  return [base, base + 1, base + 2, base, base + 2, base + 3];
+}
+
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
 /**
