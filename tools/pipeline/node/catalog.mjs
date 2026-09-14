@@ -83,6 +83,115 @@ export const MATERIALS = {
     texture: null,
     priceModifierCents: 0,
   },
+  /**
+   * Мойки и смесители: две независимые линейки отделки.
+   *
+   * Чаша и кран красятся раздельно — так их и выбирают в салоне:
+   * гранитная мойка песочного цвета с чёрным матовым смесителем это
+   * обычный заказ, а один слот на оба заставил бы их совпадать.
+   *
+   * Цвета композитных моек и покрытий смесителей взяты из ходового ряда.
+   */
+  sinkSteel: {
+    code: 'sinkSteel',
+    name: 'Мойка: сталь матовая',
+    // sRGB #c3c8cc
+    baseColorFactor: [0.5457, 0.5776, 0.6038, 1],
+    roughness: 0.34,
+    metallic: 0.85,
+    texture: null,
+    priceModifierCents: 0,
+  },
+  sinkGraphite: {
+    code: 'sinkGraphite',
+    name: 'Мойка: гранит графит',
+    // sRGB #3a3d42
+    baseColorFactor: [0.0423, 0.0467, 0.0545, 1],
+    roughness: 0.62,
+    metallic: 0,
+    texture: null,
+    priceModifierCents: 180000,
+  },
+  sinkSand: {
+    code: 'sinkSand',
+    name: 'Мойка: гранит песок',
+    // sRGB #c4b49a
+    baseColorFactor: [0.552, 0.4564, 0.3231, 1],
+    roughness: 0.66,
+    metallic: 0,
+    texture: null,
+    priceModifierCents: 180000,
+  },
+  sinkWhite: {
+    code: 'sinkWhite',
+    name: 'Мойка: гранит белый',
+    // sRGB #e8e6e1
+    baseColorFactor: [0.807, 0.7913, 0.7529, 1],
+    roughness: 0.6,
+    metallic: 0,
+    texture: null,
+    priceModifierCents: 180000,
+  },
+  sinkTerracotta: {
+    code: 'sinkTerracotta',
+    name: 'Мойка: гранит терракота',
+    // sRGB #9c5f46
+    baseColorFactor: [0.3325, 0.1144, 0.0612, 1],
+    roughness: 0.64,
+    metallic: 0,
+    texture: null,
+    priceModifierCents: 240000,
+  },
+  tapChrome: {
+    code: 'tapChrome',
+    name: 'Смеситель: хром',
+    // sRGB #d5d9dd
+    baseColorFactor: [0.6654, 0.6939, 0.7231, 1],
+    roughness: 0.12,
+    metallic: 1,
+    texture: null,
+    priceModifierCents: 0,
+  },
+  tapBlack: {
+    code: 'tapBlack',
+    name: 'Смеситель: чёрный матовый',
+    // sRGB #2a2c30
+    baseColorFactor: [0.0232, 0.0252, 0.0296, 1],
+    roughness: 0.55,
+    metallic: 0.2,
+    texture: null,
+    priceModifierCents: 120000,
+  },
+  tapBrass: {
+    code: 'tapBrass',
+    name: 'Смеситель: латунь',
+    // sRGB #b5913f
+    baseColorFactor: [0.4621, 0.2831, 0.0497, 1],
+    roughness: 0.25,
+    metallic: 1,
+    texture: null,
+    priceModifierCents: 190000,
+  },
+  tapCopper: {
+    code: 'tapCopper',
+    name: 'Смеситель: медь',
+    // sRGB #a5623c
+    baseColorFactor: [0.3763, 0.1221, 0.0452, 1],
+    roughness: 0.28,
+    metallic: 1,
+    texture: null,
+    priceModifierCents: 190000,
+  },
+  tapWhite: {
+    code: 'tapWhite',
+    name: 'Смеситель: белый матовый',
+    // sRGB #eceae6
+    baseColorFactor: [0.8388, 0.8228, 0.7913, 1],
+    roughness: 0.5,
+    metallic: 0.1,
+    texture: null,
+    priceModifierCents: 120000,
+  },
   stone: {
     code: 'stone',
     name: 'Камень серый',
@@ -124,6 +233,21 @@ const WORKTOP_FINISH = {
   options: ['stone', 'graphite', 'white'],
 };
 
+/** Чаша и кран красятся раздельно: это два разных заказа. */
+const SINK_FINISH = {
+  code: 'sink',
+  label: 'Чаша',
+  slotMaterial: 'sinkSteel',
+  options: ['sinkSteel', 'sinkGraphite', 'sinkSand', 'sinkWhite', 'sinkTerracotta'],
+};
+
+const TAP_FINISH = {
+  code: 'tap',
+  label: 'Смеситель',
+  slotMaterial: 'tapChrome',
+  options: ['tapChrome', 'tapBlack', 'tapBrass', 'tapCopper', 'tapWhite'],
+};
+
 /**
  * Слоты отделки по фактическому составу модели.
  *
@@ -133,8 +257,8 @@ const WORKTOP_FINISH = {
  */
 export function finishesFor(materialCodes) {
   const present = new Set(materialCodes);
-  return [FACADE_FINISH, UPHOLSTERY_FINISH, WORKTOP_FINISH].filter((finish) =>
-    present.has(finish.slotMaterial),
+  return [FACADE_FINISH, UPHOLSTERY_FINISH, WORKTOP_FINISH, SINK_FINISH, TAP_FINISH].filter(
+    (finish) => present.has(finish.slotMaterial),
   );
 }
 
@@ -147,6 +271,9 @@ export const PRODUCTS = [...FURNITURE, ...KITCHEN_PRODUCTS, ...APPLIANCE_PRODUCT
   type: 'static',
   mountHeightMm: 0,
   snapToWall: true,
+  // Насколько изделие утоплено в опору. Врезается только мойка,
+  // остальное стоит сверху
+  recessMm: 0,
   // По умолчанию объект на другие не ставится: корпусная мебель стоит
   // на полу, и «взлёт» на случайную опору был бы неожиданностью
   stackable: false,

@@ -131,6 +131,8 @@ export interface ProductSize {
   depthMm: number;
   /** Высота рабочей поверхности, если она ниже габарита */
   surfaceHeightMm?: number | undefined;
+  /** Насколько изделие утоплено в опору: в габарит коллизий не входит */
+  recessMm?: number | undefined;
 }
 
 /**
@@ -143,12 +145,17 @@ export function placementBox(
   placement: Pick<Placement, 'position' | 'rotationY'>,
   size: ProductSize,
 ): Box {
+  // Утопленная часть исключается: чаша мойки занимает объём внутри
+  // тумбы, которая под неё и рассчитана, и считать это столкновением
+  // со столешницей нельзя
+  const recess = size.recessMm ?? 0;
+
   return {
     centre: { x: placement.position.x, y: placement.position.z },
     halfWidthMm: size.widthMm / 2,
     halfDepthMm: size.depthMm / 2,
     rotationDeg: placement.rotationY,
-    bottomMm: placement.position.y,
+    bottomMm: placement.position.y + recess,
     topMm: placement.position.y + size.heightMm,
     surfaceTopMm: placement.position.y + (size.surfaceHeightMm ?? size.heightMm),
   };

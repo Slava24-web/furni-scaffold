@@ -43,6 +43,7 @@ const product = (over: Partial<CatalogProduct> = {}): CatalogProduct => ({
   doorCount: 0,
   panels: [],
   role: 'base',
+  recessMm: 0,
   resize: {},
   urlTemplate: '/x/lod{lod}.glb',
   lods: [{ lod: 0, bytes: 1, triangles: 1 }],

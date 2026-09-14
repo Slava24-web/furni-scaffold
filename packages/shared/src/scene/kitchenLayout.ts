@@ -696,7 +696,14 @@ export function buildKitchen(
     : 858;
 
   if (parts.sink && sinkSlot) {
-    assembly.add(parts.sink, slotCentre(sinkSlot, baseDepth), facing(sinkSlot.run.normal), surfaceMm);
+    // Мойка врезная: бортик ложится заподлицо со столешницей, а чаша
+    // уходит вниз, в тумбу
+    assembly.add(
+      parts.sink,
+      slotCentre(sinkSlot, baseDepth),
+      facing(sinkSlot.run.normal),
+      surfaceMm - (parts.sink.recessMm ?? 0),
+    );
   }
   if (parts.hob && hobSlot) {
     assembly.add(parts.hob, slotCentre(hobSlot, baseDepth), facing(hobSlot.run.normal), surfaceMm);

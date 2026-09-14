@@ -9,6 +9,13 @@
  * реэкспортируются оттуда: на них ссылаются техника и тесты.
  */
 import {
+  doubleSink,
+  drainerSink,
+  roundSink,
+  squareSink,
+  SINK_RECESS,
+} from './sinks.mjs';
+import {
   baseCabinet,
   baseCabinetDoor,
   baseDrawers,
@@ -17,7 +24,6 @@ import {
   handle,
   hob,
   loosePanel,
-  sink,
   tallCabinet,
   tallCabinetDoors,
   wallCabinet,
@@ -158,16 +164,58 @@ export const KITCHEN_PRODUCTS = [
     snapToWall: true,
     build: () => worktop(2000),
   },
+  /**
+   * Мойки врезные: бортик ложится заподлицо со столешницей, а чаша
+   * уходит вниз, в тумбу. Насколько именно — говорит recessMm.
+   * Чаша и смеситель красятся раздельно: это два разных заказа.
+   */
   {
-    sku: 'TEST-KIT-SINK-500',
+    sku: 'TEST-KIT-SINK-SQ-500',
     role: 'sink',
-    name: 'Кухня: мойка 500 со смесителем',
-    category: 'Кухня / Техника и мойки',
+    name: 'Мойка врезная 500, одна чаша',
+    category: 'Кухня / Мойки',
     basePriceCents: 1450000,
     mountHeightMm: 0,
     snapToWall: false,
     stackable: true,
-    build: sink,
+    recessMm: SINK_RECESS.square,
+    build: squareSink,
+  },
+  {
+    sku: 'TEST-KIT-SINK-RND-460',
+    role: 'sink',
+    name: 'Мойка врезная круглая 460',
+    category: 'Кухня / Мойки',
+    basePriceCents: 1290000,
+    mountHeightMm: 0,
+    snapToWall: false,
+    stackable: true,
+    recessMm: SINK_RECESS.round,
+    build: roundSink,
+  },
+  {
+    sku: 'TEST-KIT-SINK-DBL-790',
+    role: 'sink',
+    name: 'Мойка врезная 790, две чаши',
+    category: 'Кухня / Мойки',
+    basePriceCents: 2190000,
+    mountHeightMm: 0,
+    snapToWall: false,
+    stackable: true,
+    recessMm: SINK_RECESS.double,
+    build: doubleSink,
+  },
+  {
+    sku: 'TEST-KIT-SINK-WING-830',
+    role: 'sink',
+    name: 'Мойка врезная 830 с крылом',
+    category: 'Кухня / Мойки',
+    basePriceCents: 1890000,
+    mountHeightMm: 0,
+    snapToWall: false,
+    stackable: true,
+    recessMm: SINK_RECESS.drainer,
+    build: drainerSink,
   },
   {
     sku: 'TEST-KIT-HOB-580',

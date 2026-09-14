@@ -67,8 +67,14 @@ export function supportTopMm(
  * шкаф остаётся на своей отметке над тумбой, а вещь с нулевой отметкой
  * поднимается на неё.
  */
-export function restingHeightMm(mountHeightMm: number, supportTop: number): number {
-  return Math.max(mountHeightMm, supportTop);
+export function restingHeightMm(
+  mountHeightMm: number,
+  supportTop: number,
+  recessMm = 0,
+): number {
+  // Утопленное изделие садится НИЖЕ опоры ровно на глубину врезки:
+  // бортик мойки должен лечь заподлицо с камнем, а не на него
+  return Math.max(mountHeightMm, supportTop - recessMm);
 }
 
 export interface SettleItem {
@@ -142,5 +148,9 @@ function settledHeight(
 ): number {
   const current = item.placement.position.y;
   if (restsOnSomething(centre, current, settled)) return current;
-  return restingHeightMm(item.mountHeightMm, supportTopMm(centre, settled, current));
+  return restingHeightMm(
+    item.mountHeightMm,
+    supportTopMm(centre, settled, current),
+    item.size.recessMm ?? 0,
+  );
 }

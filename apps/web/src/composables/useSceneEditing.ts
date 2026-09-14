@@ -506,7 +506,7 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
    */
   function restingHeightUnder(
     clientPoint: Vector2,
-    product: Pick<CatalogProduct, 'mountHeightMm' | 'stackable'> | undefined,
+    product: Pick<CatalogProduct, 'mountHeightMm' | 'stackable' | 'recessMm'> | undefined,
     excludeInstanceId?: string,
   ): number {
     const v = viewer.value;
@@ -516,6 +516,8 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
     return restingHeightMm(
       product.mountHeightMm,
       v.supportTopMm(projector.toNdc(clientPoint), excludeInstanceId),
+      // Мойка врезается в столешницу: её бортик ложится заподлицо
+      product.recessMm ?? 0,
     );
   }
 
@@ -688,7 +690,13 @@ export function useSceneEditing(viewer: ShallowRef<Viewer | null>, options: {
   function snapDropPoint(
     product: Pick<
       CatalogProduct,
-      'widthMm' | 'heightMm' | 'depthMm' | 'mountHeightMm' | 'snapToWall' | 'stackable'
+      | 'widthMm'
+      | 'heightMm'
+      | 'depthMm'
+      | 'mountHeightMm'
+      | 'snapToWall'
+      | 'stackable'
+      | 'recessMm'
     >,
     clientX: number,
     clientY: number,

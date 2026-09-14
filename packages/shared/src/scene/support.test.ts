@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { placementBox } from './box';
 import type { Box } from './box';
 import { restingHeightMm, restsOnSomething, settlePlacements, supportTopMm } from './support';
 
@@ -243,5 +244,34 @@ describe('осадка и опоры выше своей поверхности'
 
   it('опора в стороне не считается', () => {
     expect(restsOnSomething({ x: 5000, y: 0 }, 858, [worktop()])).toBe(false);
+  });
+});
+
+describe('врезка в опору', () => {
+  it('утопленное изделие садится ниже опоры на глубину врезки', () => {
+    // Мойка с чашей 185 мм на столешнице 858: бортик ложится заподлицо
+    expect(restingHeightMm(0, 858, 185)).toBe(673);
+  });
+
+  it('без врезки поведение прежнее', () => {
+    expect(restingHeightMm(0, 858)).toBe(858);
+  });
+
+  it('собственная отметка изделия сильнее врезки', () => {
+    // Навесной шкаф висит на своей высоте, а не проваливается под опору
+    expect(restingHeightMm(1450, 858, 185)).toBe(1450);
+  });
+});
+
+describe('габарит утопленного изделия', () => {
+  it('чаша внутри тумбы в габарит коллизий не входит', () => {
+    const box = placementBox(
+      { position: { x: 0, y: 673, z: 0 }, rotationY: 0 },
+      { widthMm: 500, heightMm: 194, depthMm: 440, recessMm: 185 },
+    );
+
+    // Низ габарита — бортик на уровне столешницы, а не дно чаши
+    expect(box.bottomMm).toBe(858);
+    expect(box.topMm).toBe(867);
   });
 });

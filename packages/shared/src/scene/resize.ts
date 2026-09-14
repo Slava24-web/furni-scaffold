@@ -96,10 +96,13 @@ export function sizeFactors(
 export function placementProductSize(
   placement: Partial<Pick<Placement, 'size'>>,
   product: CatalogProduct,
-): SizeMm & { surfaceHeightMm: number } {
+): SizeMm & { surfaceHeightMm: number; recessMm: number } {
   return {
     ...placementSize(placement, product),
     surfaceHeightMm: placementSurfaceHeightMm(placement, product),
+    // Утопление не тянется вместе с изделием: глубина чаши задана
+    // самим изделием, а не тем, как его растянули
+    recessMm: product.recessMm ?? 0,
   };
 }
 
