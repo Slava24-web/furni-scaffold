@@ -157,7 +157,9 @@ function pickFinish(slot: FinishSlot, code: string): void {
   top: var(--gap-3);
   right: var(--gap-3);
   z-index: 2;
-  width: min(258px, calc(100% - var(--gap-3) * 2));
+  /* Не больше сорока процентов сцены: панель поверх неё не должна
+     закрывать то, ради чего её открыли */
+  width: min(258px, 40%);
   max-height: calc(100% - var(--gap-3) * 2);
   overflow-y: auto;
   display: grid;
@@ -312,5 +314,23 @@ function pickFinish(slot: FinishSlot, code: string): void {
   text-transform: uppercase;
   letter-spacing: 0.03em;
   color: var(--c-text-faint);
+}
+
+/**
+ * Узкая сцена: панель уезжает вниз листом во всю ширину.
+ *
+ * Справа она занимала две трети сцены, и кликнуть по соседнему объекту
+ * было уже некуда — пользователь жал по мебели и попадал в панель.
+ * Внизу она отнимает высоту, но оставляет всю ширину видимой.
+ */
+@media (max-width: 900px) {
+  .inspector {
+    top: auto;
+    right: var(--gap-2);
+    bottom: var(--gap-2);
+    left: var(--gap-2);
+    width: auto;
+    max-height: 46%;
+  }
 }
 </style>

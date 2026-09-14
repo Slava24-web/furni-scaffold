@@ -18,7 +18,15 @@ import type { ErgonomicFinding } from '@furni/shared';
 const props = defineProps<{ findings: readonly ErgonomicFinding[] }>();
 const emit = defineEmits<{ highlight: [readonly string[]] }>();
 
-const open = ref(true);
+/**
+ * Свёрнут по умолчанию.
+ *
+ * Развёрнутый список замечаний закрывал шестую часть сцены и съедал
+ * клики по мебели под собой: пользователь жал по шкафу и попадал
+ * в панель. Замечания важны, но сцена важнее — счётчик виден всегда,
+ * список открывается по нажатию.
+ */
+const open = ref(false);
 
 const warnings = computed(
   () => props.findings.filter((finding) => finding.severity === 'warning').length,
@@ -72,7 +80,7 @@ const warnings = computed(
   bottom: var(--gap-3);
   z-index: 2;
   width: min(296px, calc(100% - var(--gap-3) * 2));
-  max-height: min(46%, 380px);
+  max-height: min(46%, 340px);
   display: flex;
   flex-direction: column;
   border: 1px solid var(--c-line);
@@ -179,10 +187,19 @@ const warnings = computed(
   border-left-color: #e0a04a;
 }
 
-/* Узкая сцена: док во всю её ширину, иначе он перекрывает модель */
+/* Свёрнутый док — плашка по содержимому: она не должна занимать
+   ширину списка, которого сейчас не видно */
+.dock:not(.dock--open) {
+  width: auto;
+}
+
 @media (max-width: 900px) {
   .dock {
     left: var(--gap-2);
+    bottom: var(--gap-2);
+  }
+
+  .dock--open {
     right: var(--gap-2);
     width: auto;
   }

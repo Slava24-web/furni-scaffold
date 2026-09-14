@@ -77,7 +77,7 @@ function setNumber(field: 'width' | 'height' | 'sillHeight', value: number): voi
 </script>
 
 <template>
-  <section class="opening">
+  <section class="opening scroll-thin">
     <header class="opening__head">
       <span class="opening__name">{{ style.name }}</span>
       <span class="opening__size">
@@ -221,17 +221,28 @@ function setNumber(field: 'width' | 'height' | 'sillHeight', value: number): voi
 <style scoped>
 .opening {
   position: absolute;
-  top: 12px;
-  right: 12px;
-  width: 244px;
+  top: var(--gap-3);
+  right: var(--gap-3);
+  z-index: 2;
+  width: min(258px, 40%);
+  max-height: calc(100% - var(--gap-3) * 2);
+  overflow-y: auto;
   display: grid;
-  gap: 12px;
-  padding: 12px;
+  align-content: start;
+  gap: var(--gap-3);
+  padding: var(--gap-3);
   border: 1px solid var(--c-line);
   border-radius: var(--r-lg);
-  background: rgb(255 255 255 / 0.96);
-  box-shadow: 0 8px 24px rgb(16 24 40 / 0.1);
-  backdrop-filter: blur(6px);
+  background: rgb(255 255 255 / 0.94);
+  box-shadow: var(--sh-lg);
+  backdrop-filter: blur(10px);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .opening {
+    background: var(--c-bg);
+    backdrop-filter: none;
+  }
 }
 .opening__head {
   display: grid;
@@ -342,5 +353,20 @@ function setNumber(field: 'width' | 'height' | 'sillHeight', value: number): voi
 }
 .remove:hover {
   background: var(--c-danger-soft);
+}
+
+/**
+ * Узкая сцена: панель уезжает вниз листом во всю ширину.
+ * Справа она закрывала две трети сцены вместе с проёмом, который правят.
+ */
+@media (max-width: 900px) {
+  .opening {
+    top: auto;
+    right: var(--gap-2);
+    bottom: var(--gap-2);
+    left: var(--gap-2);
+    width: auto;
+    max-height: 46%;
+  }
 }
 </style>
