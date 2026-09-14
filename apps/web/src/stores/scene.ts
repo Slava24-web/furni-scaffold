@@ -172,6 +172,7 @@ export const useSceneStore = defineStore('scene', () => {
             walls: [wall],
             openings: [],
             floorMaterialId: null,
+            wallMaterialId: null,
             ceilingMaterialId: null,
           },
         ],
@@ -226,6 +227,13 @@ export const useSceneStore = defineStore('scene', () => {
     commit({ ...doc.value, rooms: [{ ...room, floorMaterialId: code }] });
   }
 
+  /** Отделка стен: краска или обои. null — служебная светлая штукатурка. */
+  function setWallFinish(code: string | null): void {
+    const [room] = doc.value.rooms;
+    if (!room || room.wallMaterialId === code) return;
+    commit({ ...doc.value, rooms: [{ ...room, wallMaterialId: code }] });
+  }
+
   /** Инженерная точка: розетка, вода, слив, вентканал, газ. */
   function addService(service: ServicePoint): void {
     commit({ ...doc.value, services: [...doc.value.services, service] });
@@ -278,6 +286,7 @@ export const useSceneStore = defineStore('scene', () => {
     updateOpening,
     removeOpening,
     setFloor,
+    setWallFinish,
     addService,
     removeService,
     clearRooms,

@@ -114,20 +114,20 @@ describe('покрытия пола', () => {
   };
 
   it('неизвестное покрытие материала не даёт', () => {
-    expect(new MaterialLibrary().floor('нет такого')).toBeUndefined();
+    expect(new MaterialLibrary().surface('нет такого')).toBeUndefined();
   });
 
   it('материал пола общий: повторный запрос отдаёт тот же', () => {
     const library = new MaterialLibrary(async () => new Texture());
-    library.registerFloors([floorSpec]);
+    library.registerSurfaces([floorSpec]);
 
-    expect(library.floor(floorSpec.code)).toBe(library.floor(floorSpec.code));
+    expect(library.surface(floorSpec.code)).toBe(library.surface(floorSpec.code));
   });
 
   it('масштаб карты считается по физическому размеру квадрата', async () => {
     const library = new MaterialLibrary(async () => new Texture());
-    library.registerFloors([floorSpec]);
-    const material = library.floor(floorSpec.code)!;
+    library.registerSurfaces([floorSpec]);
+    const material = library.surface(floorSpec.code)!;
     await Promise.resolve();
     await Promise.resolve();
 
@@ -138,16 +138,16 @@ describe('покрытия пола', () => {
 
   it('цвет базы белый: тон несёт текстура и перемножать его дважды нельзя', () => {
     const library = new MaterialLibrary(async () => new Texture());
-    library.registerFloors([floorSpec]);
+    library.registerSurfaces([floorSpec]);
 
-    expect(library.floor(floorSpec.code)!.color.getHex()).toBe(0xffffff);
+    expect(library.surface(floorSpec.code)!.color.getHex()).toBe(0xffffff);
   });
 
   it('материал пола помечен общим, чтобы реестр его не освободил', () => {
     const library = new MaterialLibrary(async () => new Texture());
-    library.registerFloors([floorSpec]);
+    library.registerSurfaces([floorSpec]);
 
-    expect(library.floor(floorSpec.code)!.userData['shared']).toBe(true);
+    expect(library.surface(floorSpec.code)!.userData['shared']).toBe(true);
   });
 });
 

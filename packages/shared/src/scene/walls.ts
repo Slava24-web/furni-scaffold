@@ -245,6 +245,7 @@ export function createRectangularRoom(options: RectangularRoomOptions): Room {
     })),
     openings: [],
     floorMaterialId: null,
+    wallMaterialId: null,
     ceilingMaterialId: null,
   };
 }

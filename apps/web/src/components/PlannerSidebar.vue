@@ -8,7 +8,7 @@ import type {
 } from '@furni/shared';
 import CatalogPanel from './CatalogPanel.vue';
 import TemplatePanel from './TemplatePanel.vue';
-import FloorPanel from './FloorPanel.vue';
+import SurfacePanel from './SurfacePanel.vue';
 import EstimatePanel from './EstimatePanel.vue';
 
 /**
@@ -33,6 +33,8 @@ const props = defineProps<{
   templateProblem: string | null;
   floorGroups: readonly { kind: string; floors: FloorFinish[] }[];
   floorSelected: string | null;
+  wallGroups: readonly { kind: string; floors: FloorFinish[] }[];
+  wallSelected: string | null;
   estimate: SceneEstimate;
 }>();
 
@@ -40,6 +42,7 @@ const emit = defineEmits<{
   dragStart: [CatalogProduct, PointerEvent];
   applyTemplate: [KitchenTemplate];
   pickFloor: [string | null];
+  pickWall: [string | null];
   order: [];
 }>();
 
@@ -148,11 +151,20 @@ const finishReady = computed(() => props.floorGroups.length > 0 && props.templat
         aria-labelledby="tab-finish"
         :hidden="tab !== 'finish'"
       >
-        <FloorPanel
-          :groups="props.floorGroups"
-          :selected="props.floorSelected"
-          @pick="emit('pickFloor', $event)"
-        />
+        <div class="finish scroll-thin">
+          <SurfacePanel
+            label="Пол"
+            :groups="props.floorGroups"
+            :selected="props.floorSelected"
+            @pick="emit('pickFloor', $event)"
+          />
+          <SurfacePanel
+            label="Стены"
+            :groups="props.wallGroups"
+            :selected="props.wallSelected"
+            @pick="emit('pickWall', $event)"
+          />
+        </div>
       </div>
     </div>
 
@@ -224,6 +236,18 @@ const finishReady = computed(() => props.floorGroups.length > 0 && props.templat
   .sidebar {
     width: 268px;
   }
+}
+
+/* Пол и стены в одной вкладке: их выбирают вместе, и разносить
+   по разным экранам значит заставлять сравнивать по памяти */
+.finish {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  align-content: start;
+  gap: var(--gap-5);
+  padding: var(--gap-3);
 }
 
 /* --- Область вкладки --- */

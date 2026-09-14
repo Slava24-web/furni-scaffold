@@ -3,13 +3,20 @@ import { computed } from 'vue';
 import type { FloorFinish } from '@furni/shared';
 
 /**
- * Выбор напольного покрытия.
+ * Выбор покрытия поверхности: пол или стены.
  *
- * Образцы показываются самой текстурой, а не цветным кружком: у пола
- * важен рисунок укладки, и «дуб серый» ёлочкой и палубой — это два
- * разных пола, которых по кружку не различить.
+ * Один компонент на оба: и там и там это ряд образцов, сгруппированных
+ * по типу, и различаются они только подписью. Разводить два одинаковых
+ * списка значило бы чинить их по очереди.
+ *
+ * Образцы показываются самой текстурой, а не цветным кружком: важен
+ * рисунок, и «дуб серый» ёлочкой и палубой — это два разных пола,
+ * которых по кружку не различить. У краски кружок сработал бы, но
+ * рядом с обоями он выбивался бы из ряда.
  */
 const props = defineProps<{
+  /** Название поверхности для строки состояния: «Пол», «Стены» */
+  label: string;
   groups: readonly { kind: string; floors: FloorFinish[] }[];
   selected: string | null;
 }>();
@@ -27,9 +34,9 @@ const current = computed(() =>
 </script>
 
 <template>
-  <div class="floors scroll-thin">
-    <p class="floors__current">
-      Пол: <strong>{{ current?.name ?? 'не выбран' }}</strong>
+  <div class="surface scroll-thin">
+    <p class="surface__current">
+      {{ props.label }}: <strong>{{ current?.name ?? 'не выбрано' }}</strong>
     </p>
 
     <section v-for="group in props.groups" :key="group.kind" class="group">
@@ -53,23 +60,19 @@ const current = computed(() =>
 </template>
 
 <style scoped>
-.floors {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: var(--gap-3);
+.surface {
   display: grid;
   align-content: start;
   gap: var(--gap-4);
 }
 
-.floors__current {
+.surface__current {
   margin: 0;
   font-size: var(--t-sm);
   color: var(--c-text-muted);
 }
 
-.floors__current strong {
+.surface__current strong {
   font-weight: 500;
   color: var(--c-text);
 }

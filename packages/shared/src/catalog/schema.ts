@@ -227,6 +227,11 @@ export const CatalogSchema = z.object({
   materials: z.array(CatalogMaterialSchema),
   /** Покрытия пола. Пусто — пол остаётся служебного цвета */
   floors: z.array(FloorFinishSchema).default([]),
+  /**
+   * Отделка стен: краска и обои. Формат тот же, что у пола — и там
+   * и там это повторяющаяся текстура с физическим раппортом
+   */
+  walls: z.array(FloorFinishSchema).default([]),
   products: z.array(CatalogProductSchema).min(1),
 });
 

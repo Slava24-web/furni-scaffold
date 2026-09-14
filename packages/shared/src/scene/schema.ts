@@ -76,6 +76,8 @@ export const RoomSchema = z.object({
   walls: z.array(WallSchema).max(64),
   openings: z.array(OpeningSchema).max(64),
   floorMaterialId: z.string().nullable().default(null),
+  /** Отделка стен комнаты. null — служебная светлая штукатурка */
+  wallMaterialId: z.string().nullable().default(null),
   ceilingMaterialId: z.string().nullable().default(null),
 });
 

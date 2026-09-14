@@ -304,10 +304,13 @@ onBeforeUnmount(() => uninstallTestingApi());
         :template-problem="kitchenProblem"
         :floor-groups="catalog.floorGroups"
         :floor-selected="scene.doc.rooms[0]?.floorMaterialId ?? null"
+        :wall-groups="catalog.wallGroups"
+        :wall-selected="scene.doc.rooms[0]?.wallMaterialId ?? null"
         :estimate="estimate"
         @drag-start="drag.start"
         @apply-template="applyTemplate"
         @pick-floor="scene.setFloor"
+        @pick-wall="scene.setWallFinish"
         @order="leadOpen = true"
       />
 

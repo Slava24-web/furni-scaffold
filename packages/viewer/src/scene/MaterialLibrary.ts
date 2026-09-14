@@ -44,8 +44,9 @@ export interface FloorSpec {
 
 export class MaterialLibrary {
   private readonly specs = new Map<string, MaterialSpec>();
-  private readonly floorSpecs = new Map<string, FloorSpec>();
-  private readonly floors = new Map<string, MeshStandardMaterial>();
+  /** Покрытия поверхностей: пол и стены различаются только кодом */
+  private readonly surfaceSpecs = new Map<string, FloorSpec>();
+  private readonly surfaces = new Map<string, MeshStandardMaterial>();
   private readonly materials = new Map<string, MeshStandardMaterial>();
   private readonly textures = new Map<string, Texture>();
 
@@ -57,21 +58,28 @@ export class MaterialLibrary {
     for (const spec of specs) this.specs.set(spec.code, spec);
   }
 
-  registerFloors(specs: readonly FloorSpec[]): void {
-    for (const spec of specs) this.floorSpecs.set(spec.code, spec);
+  /**
+   * Покрытия пола и стен.
+   *
+   * Одним списком: и там и там это повторяющаяся текстура с физическим
+   * раппортом, и заводить две одинаковые карты незачем. Коды разведены
+   * префиксами `floor-` и `wall-`.
+   */
+  registerSurfaces(specs: readonly FloorSpec[]): void {
+    for (const spec of specs) this.surfaceSpecs.set(spec.code, spec);
   }
 
   /**
-   * Материал пола по коду покрытия.
+   * Материал покрытия по коду.
    *
    * Цвет несёт текстура, поэтому база белая: множитель поверх карты
    * перемножал бы тон дважды и уводил дуб в оранжевый пластик.
    */
-  floor(code: string): MeshStandardMaterial | undefined {
-    const existing = this.floors.get(code);
+  surface(code: string): MeshStandardMaterial | undefined {
+    const existing = this.surfaces.get(code);
     if (existing) return existing;
 
-    const spec = this.floorSpecs.get(code);
+    const spec = this.surfaceSpecs.get(code);
     if (!spec) return undefined;
 
     const material = new MeshStandardMaterial({
@@ -83,7 +91,7 @@ export class MaterialLibrary {
     });
     material.userData.shared = true;
 
-    this.floors.set(code, material);
+    this.surfaces.set(code, material);
     void this.attachTexture(material, spec.textureUrl, 1000 / spec.repeatMm);
     return material;
   }
@@ -149,11 +157,11 @@ export class MaterialLibrary {
   }
 
   dispose(): void {
-    for (const material of this.floors.values()) {
+    for (const material of this.surfaces.values()) {
       material.map?.dispose();
       material.dispose();
     }
-    this.floors.clear();
+    this.surfaces.clear();
     for (const material of this.materials.values()) material.dispose();
     for (const texture of this.textures.values()) texture.dispose();
     this.materials.clear();

@@ -22,6 +22,7 @@ export const useCatalogStore = defineStore('catalog', () => {
   const products = shallowRef<CatalogProduct[]>([]);
   const materials = shallowRef<CatalogMaterial[]>([]);
   const floors = shallowRef<FloorFinish[]>([]);
+  const walls = shallowRef<FloorFinish[]>([]);
   const loading = ref(false);
   const error = ref<string | null>(null);
 
@@ -29,6 +30,7 @@ export const useCatalogStore = defineStore('catalog', () => {
   const bySku = computed(() => new Map(products.value.map((p) => [p.sku, p])));
   const materialByCode = computed(() => new Map(materials.value.map((m) => [m.code, m])));
   const floorGroups = computed(() => groupFloorsByKind(floors.value));
+  const wallGroups = computed(() => groupFloorsByKind(walls.value));
 
   async function load(): Promise<void> {
     if (loading.value || products.value.length > 0) return;
@@ -46,6 +48,7 @@ export const useCatalogStore = defineStore('catalog', () => {
       const catalog = CatalogSchema.parse(await response.json());
       materials.value = catalog.materials;
       floors.value = catalog.floors;
+      walls.value = catalog.walls;
       products.value = catalog.products;
     } catch (cause) {
       error.value = cause instanceof Error ? cause.message : String(cause);
@@ -58,8 +61,10 @@ export const useCatalogStore = defineStore('catalog', () => {
     products,
     materials,
     floors,
+    walls,
     groups,
     floorGroups,
+    wallGroups,
     bySku,
     materialByCode,
     loading,

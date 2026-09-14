@@ -75,6 +75,8 @@ export class RoomBuilder {
   private floorMesh: Mesh | null = null;
   /** Покрытие пола из каталога. null — служебный серый материал. */
   private floorFinish: MeshStandardMaterial | null = null;
+  /** Отделка стен из каталога. null — служебная светлая штукатурка. */
+  private wallFinish: MeshStandardMaterial | null = null;
 
   constructor(private readonly scene: Scene) {
     this.root.name = 'room';
@@ -92,7 +94,7 @@ export class RoomBuilder {
         const panels = computeWallPanels(wall, room.openings).map((panel) =>
           panelGeometry(wall, panel),
         );
-        const mesh = mergeIntoMesh(panels, this.wallMaterial, `wall:${wall.id}`);
+        const mesh = mergeIntoMesh(panels, this.wallFinish ?? this.wallMaterial, `wall:${wall.id}`);
         if (!mesh) continue;
 
         const normal = innerNormal(room, wall);
@@ -132,6 +134,17 @@ export class RoomBuilder {
   setFloorFinish(material: MeshStandardMaterial | null): void {
     this.floorFinish = material;
     if (this.floorMesh) this.floorMesh.material = material ?? this.floorMaterial;
+  }
+
+  /**
+   * Отделка стен: краска или обои.
+   *
+   * Материал приходит снаружи и принадлежит библиотеке тенанта, как
+   * и покрытие пола: билдер его не освобождает.
+   */
+  setWallFinish(material: MeshStandardMaterial | null): void {
+    this.wallFinish = material;
+    for (const wall of this.walls) wall.mesh.material = material ?? this.wallMaterial;
   }
 
   /**
@@ -186,6 +199,7 @@ function panelGeometry(
 ): BufferGeometry {
   const height = panel.topMm - panel.bottomMm;
   const geometry = new BoxGeometry(panel.lengthMm / MM, height / MM, wall.thickness / MM);
+  metreUvs(geometry, panel.lengthMm / MM, height / MM, panel.offsetMm / MM, panel.bottomMm / MM);
 
   const center = panel.offsetMm + panel.lengthMm / 2;
   const angle = (wallAngleDeg(wall) * Math.PI) / 180;
@@ -195,6 +209,38 @@ function panelGeometry(
   geometry.rotateY(wallRotationY(wallAngleDeg(wall)));
   geometry.translate(x, (panel.bottomMm + height / 2) / MM, z);
   return geometry;
+}
+
+/**
+ * Развёртка панели в МЕТРАХ вместо долей грани.
+ *
+ * BoxGeometry раскладывает каждую грань в квадрат 0..1, и обои на узком
+ * простенке получались того же числа полос, что и на четырёхметровой
+ * стене — рисунок терял физический размер. Раппорт обоев считается
+ * от метров, как и раппорт напольной доски.
+ *
+ * Отсчёт идёт от начала стены, а не от панели: простенки слева и справа
+ * от окна — части одной стены, и рисунок обязан проходить через проём
+ * без разрыва.
+ */
+function metreUvs(
+  geometry: BufferGeometry,
+  widthM: number,
+  heightM: number,
+  offsetM: number,
+  bottomM: number,
+): void {
+  const position = geometry.getAttribute('position');
+  const uv = geometry.getAttribute('uv');
+
+  for (let i = 0; i < uv.count; i++) {
+    uv.setXY(
+      i,
+      offsetM + position.getX(i) + widthM / 2,
+      bottomM + position.getY(i) + heightM / 2,
+    );
+  }
+  uv.needsUpdate = true;
 }
 
 /** Пол по осевому контуру стен. */

@@ -29,6 +29,7 @@ import { buildDocument, writeGlb } from './gltf.mjs';
 import { renderThumbnail } from './thumbnail.mjs';
 import { TEXTURE_BUILDERS } from './textures.mjs';
 import { FLOOR_FINISHES, floorTexture } from './floors.mjs';
+import { WALL_FINISHES, wallTexture } from './walls.mjs';
 import { optimizeAsset } from './optimize.mjs';
 import { buildUsdz } from './usdz.mjs';
 
@@ -86,9 +87,33 @@ async function main() {
     });
   }
 
+  // Отделка стен: стена — второй по площади план после пола, и серая
+  // штукатурка вокруг гарнитура искажает впечатление от цвета фасадов
+  const finishWalls = [];
+  for (const finish of WALL_FINISHES) {
+    const png = await wallTexture(ASSET_BUDGETS.maxTextureSize / 4, {
+      ...finish,
+      kind: finish.pattern,
+    });
+    await writeFile(
+      join(textureDir, `${finish.code}.webp`),
+      await sharp(png).webp({ quality: 88 }).toBuffer(),
+    );
+    finishWalls.push({
+      code: finish.code,
+      name: finish.name,
+      kind: finish.kind,
+      /** Раппорт: без него полоса растягивается на всю стену */
+      repeatMm: finish.repeatMm,
+      roughness: finish.roughness,
+      textureUrl: `/assets/test/textures/${finish.code}.webp`,
+    });
+  }
+
   const manifest = {
     tenant: TEST_TENANT,
     floors,
+    walls: finishWalls,
     materials: Object.values(MATERIALS).map((material) => ({
       code: material.code,
       name: material.name,
