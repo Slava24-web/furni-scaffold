@@ -380,3 +380,42 @@ describe('выравнивание поверх соседа', () => {
   });
 });
 
+
+describe('порог стыковки шире общего', () => {
+  const neighbour: SnapTarget = {
+    kind: 'object',
+    position: new Vector2(0, 0),
+    rotation: 0,
+    footprint: { halfWidthMm: 300, halfDepthMm: 280, bottomMm: 0, topMm: 820 },
+  };
+
+  const config = {
+    ...DEFAULT_SNAP,
+    mmPerPixel: 4,
+    enableGrid: false,
+    enableWalls: false,
+    objectHalfWidthMm: 300,
+    objectHalfDepthMm: 280,
+    objectBottomMm: 0,
+    objectTopMm: 820,
+  };
+
+  it('ловит стыковку дальше, чем общий порог', () => {
+    const engine = new SnapEngine();
+    engine.setTargets([neighbour]);
+
+    // Место стыковки справа — x = 600. Промах 100 мм это 25 пикселей:
+    // шире общего порога в 12, но внутри порога стыковки в 34
+    const result = engine.snap(new Vector2(700, 0), config);
+    expect(result.snapped).toBe(true);
+    expect(result.position.x).toBe(600);
+  });
+
+  it('за пределами своего порога стыковка не срабатывает', () => {
+    const engine = new SnapEngine();
+    engine.setTargets([neighbour]);
+
+    // 160 мм это 40 пикселей — дальше порога стыковки
+    expect(engine.snap(new Vector2(760, 0), config).snapped).toBe(false);
+  });
+});

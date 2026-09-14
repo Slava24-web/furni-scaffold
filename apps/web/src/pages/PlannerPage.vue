@@ -40,6 +40,7 @@ const PlanView = defineAsyncComponent(() => import('../components/PlanView.vue')
 import { useCatalogDrag } from '../composables/useCatalogDrag';
 import { usePlannerTools } from '../composables/usePlannerTools';
 import { useOpeningEditing } from '../composables/useOpeningEditing';
+import { useQuickFit } from '../composables/useQuickFit';
 import { installTestingApi, uninstallTestingApi } from '../dev/testingApi';
 import { useCatalogStore } from '../stores/catalog';
 import { useSceneStore } from '../stores/scene';
@@ -209,6 +210,15 @@ function updateSelected(patch: Partial<Placement>): void {
   if (id) scene.updatePlacement(id, patch);
 }
 
+/**
+ * Быстрая подгонка: прижать к соседу кнопкой или стрелками.
+ * Своя обязанность — свой композабл (apps/web/src/composables).
+ */
+const quickFit = useQuickFit({
+  selectedId: () => canvas.value?.selectedId ?? null,
+  onCommit: (id, patch) => scene.updatePlacement(id, patch),
+});
+
 function deleteSelected(): void {
   const id = canvas.value?.selectedId;
   if (!id) return;
@@ -354,6 +364,7 @@ onBeforeUnmount(() => uninstallTestingApi());
           @update="updateSelected"
           @remove="deleteSelected"
           @set-doors="(open: boolean) => canvas?.setDoorsOpen(open)"
+          @push="quickFit.push"
         />
 
         <LeadForm

@@ -58,6 +58,14 @@ export interface SnapConfig {
   /** Порог в ПИКСЕЛЯХ ЭКРАНА, не в мировых единицах.
    *  Иначе на разном зуме привязка ведёт себя по-разному (ТЗ 8.2). */
   thresholdPx: number;
+  /**
+   * Свой порог для стыковки с соседом, шире общего.
+   *
+   * Стыковка — это то, чего пользователь хочет в девяти случаях
+   * из десяти: модули кухни стоят вплотную. Ловить её тем же узким
+   * порогом, что и узел сетки, значит заставлять целиться.
+   */
+  dockThresholdPx: number;
   gridStepMm: number;
   /** мм на пиксель при текущем зуме */
   mmPerPixel: number;
@@ -79,6 +87,7 @@ export interface SnapConfig {
 
 export const DEFAULT_SNAP: Omit<SnapConfig, 'mmPerPixel'> = {
   thresholdPx: 12,
+  dockThresholdPx: 34,
   gridStepMm: 50,
   enableGrid: true,
   enableWalls: true,
@@ -113,9 +122,10 @@ export class SnapEngine {
 
   snap(desired: Vector2, config: SnapConfig): SnapResult {
     const thresholdMm = config.thresholdPx * config.mmPerPixel;
+    const dockMm = (config.dockThresholdPx ?? config.thresholdPx) * config.mmPerPixel;
 
     const best =
-      this.bestOf(this.neighbourCandidates(desired, config), thresholdMm) ??
+      this.bestOf(this.neighbourCandidates(desired, config), dockMm) ??
       this.bestOf(this.wallCandidates(desired, config), thresholdMm) ??
       this.bestOf(this.objectCandidates(desired, config), thresholdMm);
 

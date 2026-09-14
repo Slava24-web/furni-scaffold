@@ -14,6 +14,7 @@ export * from './scene/box';
 export * from './scene/overlap';
 export * from './scene/docking';
 export * from './scene/support';
+export * from './scene/nudge';
 export * from './scene/conflicts';
 export * from './scene/swing';
 export * from './scene/drawerZone';

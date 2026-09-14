@@ -84,17 +84,18 @@ export const MATERIALS = {
     priceModifierCents: 0,
   },
   /**
-   * Мойки и смесители: две независимые линейки отделки.
+   * Камень: общая линейка для столешницы и чаши мойки.
    *
-   * Чаша и кран красятся раздельно — так их и выбирают в салоне:
-   * гранитная мойка песочного цвета с чёрным матовым смесителем это
-   * обычный заказ, а один слот на оба заставил бы их совпадать.
+   * Общая намеренно. Мойка врезана в столешницу, и самый ходовой заказ —
+   * когда они одного цвета: получается монолитная плоскость без стыка
+   * по тону. Отдельные палитры этого не позволяли бы в принципе.
    *
-   * Цвета композитных моек и покрытий смесителей взяты из ходового ряда.
+   * Смеситель красится своей линейкой: он металлический, и гранитных
+   * кранов не бывает.
    */
   sinkSteel: {
     code: 'sinkSteel',
-    name: 'Мойка: сталь матовая',
+    name: 'Нержавеющая сталь',
     // sRGB #c3c8cc
     baseColorFactor: [0.5457, 0.5776, 0.6038, 1],
     roughness: 0.34,
@@ -102,9 +103,9 @@ export const MATERIALS = {
     texture: null,
     priceModifierCents: 0,
   },
-  sinkGraphite: {
-    code: 'sinkGraphite',
-    name: 'Мойка: гранит графит',
+  stoneGraphite: {
+    code: 'stoneGraphite',
+    name: 'Гранит графит',
     // sRGB #3a3d42
     baseColorFactor: [0.0423, 0.0467, 0.0545, 1],
     roughness: 0.62,
@@ -112,9 +113,9 @@ export const MATERIALS = {
     texture: null,
     priceModifierCents: 180000,
   },
-  sinkSand: {
-    code: 'sinkSand',
-    name: 'Мойка: гранит песок',
+  stoneSand: {
+    code: 'stoneSand',
+    name: 'Гранит песок',
     // sRGB #c4b49a
     baseColorFactor: [0.552, 0.4564, 0.3231, 1],
     roughness: 0.66,
@@ -122,9 +123,9 @@ export const MATERIALS = {
     texture: null,
     priceModifierCents: 180000,
   },
-  sinkWhite: {
-    code: 'sinkWhite',
-    name: 'Мойка: гранит белый',
+  stoneWhite: {
+    code: 'stoneWhite',
+    name: 'Гранит белый',
     // sRGB #e8e6e1
     baseColorFactor: [0.807, 0.7913, 0.7529, 1],
     roughness: 0.6,
@@ -132,9 +133,9 @@ export const MATERIALS = {
     texture: null,
     priceModifierCents: 180000,
   },
-  sinkTerracotta: {
-    code: 'sinkTerracotta',
-    name: 'Мойка: гранит терракота',
+  stoneTerracotta: {
+    code: 'stoneTerracotta',
+    name: 'Гранит терракота',
     // sRGB #9c5f46
     baseColorFactor: [0.3325, 0.1144, 0.0612, 1],
     roughness: 0.64,
@@ -226,11 +227,21 @@ const UPHOLSTERY_FINISH = {
   options: ['fabric', 'graphite', 'oak'],
 };
 
+/**
+ * Столешница и чаша делят линейку камня.
+ *
+ * Мойка врезана в столешницу, и самый ходовой заказ — один цвет на обе:
+ * плоскость читается монолитной. Поэтому четыре цвета из пяти у них
+ * общие, а различаются только те, которых в другой роли не бывает:
+ * серый камень столешницы и нержавеющая сталь чаши.
+ */
+const STONE_COLOURS = ['stoneGraphite', 'stoneSand', 'stoneWhite', 'stoneTerracotta'];
+
 const WORKTOP_FINISH = {
   code: 'worktop',
   label: 'Столешница',
   slotMaterial: 'stone',
-  options: ['stone', 'graphite', 'white'],
+  options: ['stone', ...STONE_COLOURS],
 };
 
 /** Чаша и кран красятся раздельно: это два разных заказа. */
@@ -238,7 +249,7 @@ const SINK_FINISH = {
   code: 'sink',
   label: 'Чаша',
   slotMaterial: 'sinkSteel',
-  options: ['sinkSteel', 'sinkGraphite', 'sinkSand', 'sinkWhite', 'sinkTerracotta'],
+  options: ['sinkSteel', ...STONE_COLOURS],
 };
 
 const TAP_FINISH = {

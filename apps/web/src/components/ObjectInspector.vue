@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import type { PushSide } from '@furni/shared';
 import {
   isResizable,
   placementSize,
@@ -13,6 +14,7 @@ import { conflictMessage } from '../lib/conflictMessage';
 import { formatPrice } from '../lib/money';
 import ArButton from './ArButton.vue';
 import FinishPicker from './inspector/FinishPicker.vue';
+import QuickFit from './inspector/QuickFit.vue';
 import SizeFields from './inspector/SizeFields.vue';
 import TransformFields from './inspector/TransformFields.vue';
 
@@ -39,6 +41,8 @@ const emit = defineEmits<{
   remove: [];
   /** Открыть или закрыть дверцы выделенного изделия */
   setDoors: [boolean];
+  /** Прижать объект к ближайшему соседу с этой стороны */
+  push: [PushSide];
 }>();
 
 const conflict = computed(() => conflictMessage(props.conflicts));
@@ -123,6 +127,8 @@ function pickFinish(slot: FinishSlot, code: string): void {
     </p>
 
     <ArButton :product="props.product" />
+
+    <QuickFit @push="emit('push', $event)" />
 
     <TransformFields :placement="props.placement" @update="emit('update', $event)" />
 
