@@ -1,4 +1,4 @@
-import { BoxGeometry, Group, Mesh, MeshStandardMaterial, Object3D } from 'three';
+import { BoxGeometry, Group, Mesh, MeshStandardMaterial, Object3D, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { DoorController, doorAngleOf, doorsOf } from './DoorController';
 
@@ -126,5 +126,59 @@ describe('распашные дверцы', () => {
     orphan.userData['maxAngleDeg'] = 90;
 
     expect(controller.toggle(orphan)).toBe(false);
+  });
+});
+
+/**
+ * Направление распахивания.
+ *
+ * Раньше это нигде не проверялось, и все дверцы проекта открывались
+ * ВНУТРЬ корпуса: знак угла считался на месте и разошёлся с тем, как
+ * поворот вокруг Y переводит точку. Тест смотрит не на знак, а на то,
+ * куда в итоге уехал свободный край полотна.
+ */
+describe('направление распахивания', () => {
+  /** Дверца с петлёй слева или справа: полотно уходит от петли внутрь габарита. */
+  function hinged(hingeXMm: number, angleDeg: number): { root: Group; edge: Object3D } {
+    const root = new Group();
+    const door = new Object3D();
+    door.name = 'door0';
+    door.userData['maxAngleDeg'] = angleDeg;
+    door.userData['hingeXMm'] = hingeXMm;
+    door.userData['hingeZMm'] = 280;
+
+    // Метка на свободном краю: она и показывает, куда поехала дверца
+    const edge = new Object3D();
+    edge.position.set(hingeXMm < 0 ? 0.6 : -0.6, 0, 0.29);
+    door.add(edge);
+
+    root.add(door);
+    return { root, edge };
+  }
+
+  const forwardShift = (hingeXMm: number, angleDeg: number): number => {
+    const { root, edge } = hinged(hingeXMm, angleDeg);
+    const controller = new DoorController();
+    const [door] = doorsOf(root);
+
+    controller.toggle(door!);
+    settle(controller);
+    root.updateMatrixWorld(true);
+
+    return edge.getWorldPosition(new Vector3()).z;
+  };
+
+  it('дверца на левой петле распахивается вперёд', () => {
+    // Перёд модели — её локальная +Z (CLAUDE.md, конвенции)
+    expect(forwardShift(-300, -90)).toBeGreaterThan(0.3);
+  });
+
+  it('дверца на правой петле распахивается вперёд', () => {
+    expect(forwardShift(300, 90)).toBeGreaterThan(0.3);
+  });
+
+  it('обратный знак уводит дверцу внутрь корпуса', () => {
+    // Ровно та ошибка, что была в пайплайне: край уезжает назад
+    expect(forwardShift(-300, 90)).toBeLessThan(0);
   });
 });

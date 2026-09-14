@@ -11,6 +11,30 @@
  */
 import { markPanel, perimeterMm, roundedBox, segmentedBox, translate } from './geometry.mjs';
 
+/** Стандартный угол распахивания: дверца открывается на прямой угол. */
+export const DOOR_OPEN_DEG = 90;
+
+/**
+ * Угол распахивания дверцы НАРУЖУ.
+ *
+ * Знак здесь не вопрос вкуса, и считать его на месте нельзя — так уже
+ * разъехалось соглашение о повороте габарита. Правило одно на проект.
+ *
+ * Перёд модели — её локальная +Z. Поворот обёртки на угол θ переводит
+ * точку (x, z) в (x·cos θ + z·sin θ, −x·sin θ + z·cos θ). Свободный край
+ * дверцы лежит от петли по оси X, его z после поворота равен −x·sin θ.
+ * Чтобы край поехал ВПЕРЁД, нужен z > 0 — а значит знак угла обратен
+ * стороне, в которую полотно уходит от петли.
+ *
+ * @param {number} hingeXMm положение петли по оси X
+ * @param {number} doorCentreXMm центр полотна по оси X
+ * @param {number} [angleDeg] на сколько распахивается
+ */
+export function swingOutDeg(hingeXMm, doorCentreXMm, angleDeg = DOOR_OPEN_DEG) {
+  const extendsRight = doorCentreXMm >= hingeXMm;
+  return extendsRight ? -Math.abs(angleDeg) : Math.abs(angleDeg);
+}
+
 /** Кромка фасада толще корпусной: по ней и бьют дверцей. */
 export const FACADE_EDGE_THICKNESS = 2;
 

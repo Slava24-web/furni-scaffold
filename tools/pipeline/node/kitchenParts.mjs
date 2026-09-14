@@ -21,7 +21,7 @@ import {
   tubeZ,
 } from './geometry.mjs';
 import { carcassPanels, openBoxPanels } from './carcass.mjs';
-import { flatFacade, panelFacade } from './facade.mjs';
+import { flatFacade, panelFacade, swingOutDeg } from './facade.mjs';
 
 export const PLINTH = 100;
 export const BASE_CARCASS = 720;
@@ -128,7 +128,8 @@ export function baseCabinetDoor(widthMm) {
     {
       hingeXMm: -widthMm / 2,
       hingeZMm: BASE_DEPTH / 2,
-      maxAngleDeg: 100,
+      // Полотно уходит от петли вправо: наружу открывает отрицательный угол
+      maxAngleDeg: swingOutDeg(-widthMm / 2, 0),
       parts: {
         oak: facade(widthMm, BASE_CARCASS - FACADE_GAP * 2, facadeY, facadeZ),
         steel: bracketHandle(0, PLINTH + BASE_CARCASS - 90, facadeZ + FACADE_THICKNESS / 2),
@@ -206,7 +207,7 @@ export function wallCabinetDoor(widthMm, heightMm) {
     {
       hingeXMm: -widthMm / 2,
       hingeZMm: WALL_DEPTH / 2,
-      maxAngleDeg: 100,
+      maxAngleDeg: swingOutDeg(-widthMm / 2, 0),
       parts: {
         oak: facade(widthMm, heightMm - FACADE_GAP * 2, heightMm / 2, facadeZ),
         steel: bracketHandle(0, 90, facadeZ + FACADE_THICKNESS / 2),
@@ -232,7 +233,11 @@ export function tallCabinetDoors(widthMm) {
   const facadeZ = BASE_DEPTH / 2 + FACADE_THICKNESS / 2;
   const lower = 1300;
   const upper = height - lower - FACADE_GAP * 3;
-  const hinge = { hingeXMm: -widthMm / 2, hingeZMm: BASE_DEPTH / 2, maxAngleDeg: 100 };
+  const hinge = {
+    hingeXMm: -widthMm / 2,
+    hingeZMm: BASE_DEPTH / 2,
+    maxAngleDeg: swingOutDeg(-widthMm / 2, 0),
+  };
 
   return [
     {

@@ -11,7 +11,7 @@
 import { cylinder, roundedBox, segmentedBox, translate } from './geometry.mjs';
 import { PANEL_THICKNESS, carcassPanels, openBoxPanels } from './carcass.mjs';
 import { taperedLegs } from './legs.mjs';
-import { panelFacade } from './facade.mjs';
+import { panelFacade, swingOutDeg } from './facade.mjs';
 
 /** Вертикальная ручка-рейлинг. */
 function verticalHandle(xMm, yMm, zMm, lengthMm) {
@@ -38,7 +38,7 @@ function wardrobeDoors() {
   return [-1, 1].map((side) => ({
     hingeXMm: (side * width) / 2,
     hingeZMm: depth / 2,
-    maxAngleDeg: side < 0 ? 110 : -110,
+    maxAngleDeg: swingOutDeg((side * width) / 2, side * (doorWidth / 2 + 6)),
     parts: {
       oak: panelFacade(doorWidth, doorHeight, 18, {
         x: side * (doorWidth / 2 + 6),

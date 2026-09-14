@@ -1,12 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { boundsMm, mergeGeometries, triangleCount } from './geometry.mjs';
-import {
-  FRAME_WIDTH,
-  MIN_FRAMED_HEIGHT,
-  PANEL_RECESS,
-  flatFacade,
-  panelFacade,
-} from './facade.mjs';
+import { FRAME_WIDTH, MIN_FRAMED_HEIGHT, PANEL_RECESS, flatFacade, panelFacade, swingOutDeg } from './facade.mjs';
 
 const centre = { x: 0, y: 0, z: 0 };
 const merged = (parts) => mergeGeometries(parts);
@@ -79,3 +73,31 @@ function centreZ(part) {
   }
   return ((min + max) / 2) * 1000;
 }
+
+describe('направление распахивания дверцы', () => {
+  it('полотно вправо от петли открывается отрицательным углом', () => {
+    // Поворот на θ переводит свободный край в z = −x·sin θ; чтобы край
+    // поехал вперёд при x > 0, синус обязан быть отрицательным
+    expect(swingOutDeg(-400, 0)).toBe(-90);
+  });
+
+  it('полотно влево от петли открывается положительным', () => {
+    expect(swingOutDeg(400, 0)).toBe(90);
+  });
+
+  it('угол можно задать свой, знак считается сам', () => {
+    expect(swingOutDeg(-400, 0, 110)).toBe(-110);
+    expect(swingOutDeg(400, 0, 110)).toBe(110);
+  });
+
+  it('знак переданного угла не влияет на результат', () => {
+    // Иначе вызывающий код снова начнёт угадывать знак на месте
+    expect(swingOutDeg(-400, 0, -110)).toBe(-110);
+  });
+
+  it('створки шкафа расходятся в разные стороны', () => {
+    const left = swingOutDeg(-600, -300);
+    const right = swingOutDeg(600, 300);
+    expect(Math.sign(left)).not.toBe(Math.sign(right));
+  });
+});
