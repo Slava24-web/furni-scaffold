@@ -11,6 +11,7 @@ import {
 } from '@furni/shared';
 import { conflictMessage } from '../lib/conflictMessage';
 import { formatPrice } from '../lib/money';
+import ArButton from './ArButton.vue';
 import FinishPicker from './inspector/FinishPicker.vue';
 import SizeFields from './inspector/SizeFields.vue';
 import TransformFields from './inspector/TransformFields.vue';
@@ -120,6 +121,8 @@ function pickFinish(slot: FinishSlot, code: string): void {
       Цена показана за каталожный размер. Заказ по вашим габаритам магазин
       пересчитает при подтверждении.
     </p>
+
+    <ArButton :product="props.product" />
 
     <TransformFields :placement="props.placement" @update="emit('update', $event)" />
 

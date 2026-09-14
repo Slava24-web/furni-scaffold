@@ -156,6 +156,14 @@ export const CatalogProductSchema = z.object({
    */
   recessMm: z.number().int().nonnegative().default(0),
   /**
+   * Файл для AR Quick Look на iOS.
+   *
+   * Safari не даёт WebXR для дополненной реальности на айфоне, и AR
+   * там открывает родной просмотрщик — по ссылке на USDZ. Android
+   * обходится тем же GLB, что и сцена (docs/AR.md).
+   */
+  usdzUrl: z.string().min(1).optional(),
+  /**
    * Пределы, в которых изделие тянется.
    *
    * Ось без пределов не тянется вовсе: холодильник стандартной ширины,

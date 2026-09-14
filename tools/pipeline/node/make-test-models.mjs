@@ -30,6 +30,7 @@ import { renderThumbnail } from './thumbnail.mjs';
 import { TEXTURE_BUILDERS } from './textures.mjs';
 import { FLOOR_FINISHES, floorTexture } from './floors.mjs';
 import { optimizeAsset } from './optimize.mjs';
+import { buildUsdz } from './usdz.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, '..', '..', '..');
@@ -199,6 +200,12 @@ async function main() {
       drawerTravelMm: drawers.reduce((max, drawer) => Math.max(max, drawer.travelMm), 0),
       /** Шаблон под AssetRef.urlTemplate из packages/viewer */
       urlTemplate: `/assets/test/${product.sku}/lod{lod}.glb`,
+      /**
+       * Файл для AR Quick Look на iOS. Safari не даёт WebXR для
+       * дополненной реальности на айфоне, и AR там открывает родной
+       * просмотрщик — по ссылке на USDZ (docs/AR.md)
+       */
+      usdzUrl: `/assets/test/${product.sku}/model.usdz`,
       thumbnailUrl: `/assets/test/${product.sku}/thumb.png`,
       checksum: createHash('sha256').update(glb).digest('hex'),
       sourceTriangles,
@@ -206,8 +213,12 @@ async function main() {
       warnings: report.warnings,
     });
 
+    // USDZ для iOS: собирается из тех же буферов, что и GLB, без Pixar USD
+    const usdz = await buildUsdz(allGroups, MATERIALS);
+    await writeFile(join(PUBLIC_DIR, product.sku, 'model.usdz'), usdz);
+
     const sizes = report.lods.map((l) => `lod${l.lod} ${l.triangles} тр / ${kb(l.bytes)}`).join(', ');
-    console.log(`${product.sku}: исходник ${sourceTriangles} тр -> ${sizes}`);
+    console.log(`${product.sku}: исходник ${sourceTriangles} тр -> ${sizes}, usdz ${kb(usdz.byteLength)}`);
     for (const warning of report.warnings) console.warn(`  ! ${warning}`);
   }
 
