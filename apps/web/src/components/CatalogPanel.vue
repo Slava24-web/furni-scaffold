@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { RouterLink } from 'vue-router';
+import { PhPlus } from '@phosphor-icons/vue';
 import type { CatalogProduct } from '@furni/shared';
 import { useCatalogStore } from '../stores/catalog';
 
@@ -58,10 +60,39 @@ const size = (product: CatalogProduct): string =>
         </li>
       </ul>
     </section>
+
+    <!-- Своя модель в каталог: пока пайплайн собирает изделия кодом,
+         магазину нужен способ отдать готовый файл -->
+    <RouterLink to="/models/new" class="add">
+      <PhPlus :size="15" weight="regular" />
+      Загрузить свою модель
+    </RouterLink>
   </div>
 </template>
 
 <style scoped>
+.add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: var(--gap-3);
+  padding: 10px;
+  border: 1px dashed var(--c-line-strong);
+  border-radius: var(--r-md);
+  color: var(--c-text-muted);
+  font-size: var(--t-sm);
+  text-decoration: none;
+  transition: border-color 0.13s var(--ease), color 0.13s var(--ease),
+    background-color 0.13s var(--ease);
+}
+
+.add:hover {
+  border-color: var(--c-accent);
+  background: var(--c-accent-soft);
+  color: var(--c-accent-hover);
+}
+
 .catalog {
   /* Ширину и фон задаёт колонка: под каталогом ещё живёт смета */
   flex: 1;

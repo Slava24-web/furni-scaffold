@@ -8,6 +8,12 @@ const routes: RouteRecordRaw[] = [
     // Ленивый чанк: движок не должен попадать в основной бандл (ТЗ 7.3)
     component: () => import('./pages/PlannerPage.vue'),
   },
+  {
+    path: '/models/new',
+    name: 'model-import',
+    // Приёмка модели тянет свой просмотрщик: в бандл планировщика ему нельзя
+    component: () => import('./pages/ModelImportPage.vue'),
+  },
 ];
 
 export const router = createRouter({

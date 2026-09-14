@@ -44,3 +44,4 @@ export {
 } from './interaction/SnapEngine';
 export { GestureController, type GestureEvent, type ViewMode } from './interaction/GestureController';
 export { AssetLoader, type AssetRef, type LodLevel } from './loading/AssetLoader';
+export { ModelInspector, measure, type InspectedModel } from './preview/ModelInspector';

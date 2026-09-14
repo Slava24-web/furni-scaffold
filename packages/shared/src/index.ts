@@ -18,6 +18,7 @@ export * from './scene/conflicts';
 export * from './scene/swing';
 export * from './scene/drawerZone';
 export * from './catalog/schema';
+export * from './catalog/modelCheck';
 export * from './catalog/estimate';
 export * from './plan/plan2d';
 export * from './cut/plan';
