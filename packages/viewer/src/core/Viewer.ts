@@ -27,6 +27,7 @@ import { AssetLoader } from '../loading/AssetLoader';
 import { QualityManager } from '../perf/QualityManager';
 import { Telemetry } from '../perf/Telemetry';
 import { SceneRegistry } from './SceneRegistry';
+import { WorktopCutter } from '../scene/WorktopCutter';
 import type { DeviceTier } from '@furni/shared';
 
 export interface ViewerOptions {
@@ -67,6 +68,8 @@ export class Viewer {
   readonly drawers = new DrawerController();
   /** Распашные дверцы загруженных моделей */
   readonly doors = new DoorController();
+  /** Вырез в столешнице: считается по сцене, а не пайплайном */
+  readonly worktops = new WorktopCutter();
   /** Материалы тенанта для смены отделки */
   readonly materials = new MaterialLibrary();
   readonly quality: QualityManager;

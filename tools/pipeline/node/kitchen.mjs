@@ -13,6 +13,7 @@ import {
   drainerSink,
   roundSink,
   squareSink,
+  SINK_CUTOUT,
   SINK_RECESS,
 } from './sinks.mjs';
 import {
@@ -29,6 +30,7 @@ import {
   wallCabinet,
   wallCabinetDoor,
   worktop,
+  worktopSlab,
 } from './kitchenParts.mjs';
 
 // Константы стандарта нужны и здесь, и снаружи (техника, тесты):
@@ -151,6 +153,7 @@ export const KITCHEN_PRODUCTS = [
     mountHeightMm: WORKTOP_HEIGHT,
     snapToWall: true,
     build: () => worktop(1200),
+    parts: () => worktopSlab(1200),
   },
   {
     sku: 'TEST-KIT-TOP-2000',
@@ -163,6 +166,7 @@ export const KITCHEN_PRODUCTS = [
     mountHeightMm: WORKTOP_HEIGHT,
     snapToWall: true,
     build: () => worktop(2000),
+    parts: () => worktopSlab(2000),
   },
   /**
    * Мойки врезные: бортик ложится заподлицо со столешницей, а чаша
@@ -179,6 +183,7 @@ export const KITCHEN_PRODUCTS = [
     snapToWall: false,
     stackable: true,
     recessMm: SINK_RECESS.square,
+    cutout: SINK_CUTOUT.square,
     build: squareSink,
   },
   {
@@ -191,6 +196,7 @@ export const KITCHEN_PRODUCTS = [
     snapToWall: false,
     stackable: true,
     recessMm: SINK_RECESS.round,
+    cutout: SINK_CUTOUT.round,
     build: roundSink,
   },
   {
@@ -203,6 +209,7 @@ export const KITCHEN_PRODUCTS = [
     snapToWall: false,
     stackable: true,
     recessMm: SINK_RECESS.double,
+    cutout: SINK_CUTOUT.double,
     build: doubleSink,
   },
   {
@@ -215,6 +222,7 @@ export const KITCHEN_PRODUCTS = [
     snapToWall: false,
     stackable: true,
     recessMm: SINK_RECESS.drainer,
+    cutout: SINK_CUTOUT.drainer,
     build: drainerSink,
   },
   {

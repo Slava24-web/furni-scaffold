@@ -12,7 +12,15 @@
  */
 import { Document, NodeIO } from '@gltf-transform/core';
 
-export function buildDocument({ name, groups, materials, textures = {}, drawers = [], doors = [] }) {
+export function buildDocument({
+  name,
+  groups,
+  materials,
+  textures = {},
+  drawers = [],
+  doors = [],
+  parts = [],
+}) {
   const doc = new Document();
   doc.getRoot().getAsset().generator = 'furni-pipeline';
   const buffer = doc.createBuffer();
@@ -87,6 +95,17 @@ export function buildDocument({ name, groups, materials, textures = {}, drawers 
       .createNode(drawer.name)
       .setMesh(addMesh(drawer.name, drawer.groups))
       .setExtras({ travelMm: drawer.travelMm });
+    node.addChild(child);
+  }
+
+  // Прочие именованные узлы: по имени их находит вьюер, по extras —
+  // понимает, что с ними делать. Так уезжает плита столешницы: вырез
+  // под мойку пайплайн сделать не может, он не знает, где она встанет
+  for (const part of parts) {
+    const child = doc
+      .createNode(part.name)
+      .setMesh(addMesh(part.name, part.groups))
+      .setExtras(part.extras ?? {});
     node.addChild(child);
   }
 

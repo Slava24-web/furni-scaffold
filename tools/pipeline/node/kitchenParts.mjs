@@ -271,27 +271,70 @@ export function tallCabinetDoors(widthMm) {
  * места кухни и об неё опираются, а прямой угол на срезе ЛДСП выдаёт
  * необработанную деталь.
  */
+/** Глубина столешницы: свес над фасадом входит в неё. */
+export const WORKTOP_DEPTH = 600;
+
+function worktopLayout() {
+  const offsetZ = (WORKTOP_DEPTH - BASE_DEPTH) / 2 - 20;
+  return { offsetZ, skirtHeight: 60, skirtThickness: 18, front: offsetZ + WORKTOP_DEPTH / 2 };
+}
+
 export function worktop(widthMm) {
-  const depth = 600;
-  const offsetZ = (depth - BASE_DEPTH) / 2 - 20;
-  const skirtHeight = 60;
-  const skirtThickness = 18;
-  const front = offsetZ + depth / 2;
+  const { offsetZ, skirtHeight, skirtThickness, front } = worktopLayout();
 
   return {
     stone: [
-      translate(roundedBox(widthMm, WORKTOP_THICKNESS, depth, 6, 4), 0, WORKTOP_THICKNESS / 2, offsetZ),
       // Валик передней кромки: труба по всей длине заподлицо со срезом
-      translate(tubeX(WORKTOP_THICKNESS / 2, widthMm, 10), 0, WORKTOP_THICKNESS / 2, front - WORKTOP_THICKNESS / 2),
+      translate(
+        tubeX(WORKTOP_THICKNESS / 2, widthMm, 10),
+        0,
+        WORKTOP_THICKNESS / 2,
+        front - WORKTOP_THICKNESS / 2,
+      ),
       // Пристенный плинтус со скруглённой верхней кромкой
       translate(
         roundedBox(widthMm, skirtHeight, skirtThickness, 5, 3),
         0,
         WORKTOP_THICKNESS + skirtHeight / 2,
-        offsetZ - (depth - skirtThickness) / 2,
+        offsetZ - (WORKTOP_DEPTH - skirtThickness) / 2,
       ),
     ],
   };
+}
+
+/**
+ * Плита столешницы отдельным узлом.
+ *
+ * Вырез под мойку пайплайн сделать не может: он не знает, где она
+ * встанет. Поэтому плита приезжает целой и отдельно от кромки с
+ * плинтусом — вьюер заменяет ей геометрию, когда в неё что-то врезано,
+ * а профиль края при этом остаётся нетронутым.
+ */
+export function worktopSlab(widthMm) {
+  const { offsetZ } = worktopLayout();
+
+  return [
+    {
+      name: 'slab:0',
+      extras: {
+        /** Плита в системе координат модели: по ней считается вырез */
+        slabWidthMm: Math.round(widthMm),
+        slabDepthMm: WORKTOP_DEPTH,
+        slabThicknessMm: WORKTOP_THICKNESS,
+        slabOffsetZMm: Math.round(offsetZ),
+      },
+      groups: {
+        stone: [
+          translate(
+            roundedBox(widthMm, WORKTOP_THICKNESS, WORKTOP_DEPTH, 6, 4),
+            0,
+            WORKTOP_THICKNESS / 2,
+            offsetZ,
+          ),
+        ],
+      },
+    },
+  ];
 }
 
 /**

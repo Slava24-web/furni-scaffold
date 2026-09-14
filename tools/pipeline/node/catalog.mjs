@@ -304,6 +304,21 @@ export function buildProductGeometry(product) {
 }
 
 /**
+ * Прочие именованные детали изделия.
+ *
+ * Не дверцы и не ящики: узлы, которые вьюер находит по имени и меняет
+ * сам. Так уезжает плита столешницы — вырез под мойку считается в сцене,
+ * а не в пайплайне.
+ */
+export function buildProductParts(product) {
+  return (product.parts?.() ?? []).map((part) => ({
+    name: part.name,
+    extras: part.extras ?? {},
+    groups: mergeByMaterial(part.groups),
+  }));
+}
+
+/**
  * Листовые детали изделия для карты раскроя.
  *
  * Собираются ДО слияния по материалам: после него отдельных деталей уже

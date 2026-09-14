@@ -1,7 +1,8 @@
 import { markRaw, onBeforeUnmount, shallowRef, watch, type Ref, type ShallowRef } from 'vue';
-import { RoomBuilder, applyFinishes, type Viewer } from '@furni/viewer';
+import { RoomBuilder, applyFinishes, type CutoutRect, type Viewer } from '@furni/viewer';
 import {
   drawerZone,
+  placementProductSize,
   planDimensions,
   selectedFinish,
   sizeFactors,
@@ -10,6 +11,14 @@ import {
   type Placement,
   type SceneDoc,
 } from '@furni/shared';
+
+/**
+ * Насколько вырез уже габарита врезанного изделия.
+ *
+ * Бортику мойки надо на что-то лечь: окно всегда меньше её габарита
+ * по периметру, иначе изделие провалится в тумбу.
+ */
+const CUTOUT_LEDGE_MM = 22;
 import type { MeshStandardMaterial, Object3D } from 'three';
 import type { Box } from '@furni/shared';
 import { useCatalogStore } from '../stores/catalog';
@@ -130,7 +139,82 @@ export function useSceneSync(
       v.registry.add(placement.instanceId, placement.sku, group).locked = placement.locked;
     }
 
-    if (token === generation) v.invalidate();
+    if (token === generation) {
+      cutWorktops(v, doc);
+      v.invalidate();
+    }
+  }
+
+  /**
+   * Вырез в столешницах под врезные изделия.
+   *
+   * Считается после расстановки: где стоит мойка, знает только сцена.
+   * Окно берётся по габариту изделия с припуском внутрь — вырез всегда
+   * чуть меньше бортика, иначе мойке не на что опереться.
+   */
+  function cutWorktops(v: Viewer, doc: SceneDoc): void {
+    const tops: { instanceId: string; placement: Placement; product: CatalogProduct }[] = [];
+    const recessed: { placement: Placement; product: CatalogProduct }[] = [];
+
+    for (const placement of doc.placements) {
+      const product = catalog.bySku.get(placement.sku);
+      if (!product) continue;
+      if (product.role === 'worktop') tops.push({ instanceId: placement.instanceId, placement, product });
+      else if ((product.recessMm ?? 0) > 0) recessed.push({ placement, product });
+    }
+
+    for (const top of tops) {
+      const instance = v.registry.get(top.instanceId);
+      if (!instance) continue;
+      if (v.worktops.cut(instance.root, holesIn(top.placement, top.product, recessed))) {
+        v.invalidate();
+      }
+    }
+  }
+
+  /** Окна в системе координат столешницы, миллиметры. */
+  function holesIn(
+    top: Placement,
+    topProduct: CatalogProduct,
+    recessed: readonly { placement: Placement; product: CatalogProduct }[],
+  ): CutoutRect[] {
+    const size = placementProductSize(top, topProduct);
+    const angle = (-top.rotationY * Math.PI) / 180;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+
+    const holes: CutoutRect[] = [];
+    for (const item of recessed) {
+      const dx = item.placement.position.x - top.position.x;
+      const dz = item.placement.position.z - top.position.z;
+      // Поворот в систему координат столешницы
+      const x = dx * cos - dz * sin;
+      const y = dx * sin + dz * cos;
+
+      // Размер окна берётся у самого изделия: у круглой мойки бортик
+      // круглый, и прямоугольник «габарит минус припуск» вылез бы
+      // из-под него углами. Каталог без выреза — запасной расчёт
+      const itemSize = placementProductSize(item.placement, item.product);
+      const declared = item.product.cutout;
+      const hole = declared
+        ? {
+            x: x + declared.offsetXMm,
+            y: y + declared.offsetZMm,
+            widthMm: declared.widthMm,
+            depthMm: declared.depthMm,
+          }
+        : {
+            x,
+            y,
+            widthMm: Math.max(20, itemSize.widthMm - CUTOUT_LEDGE_MM * 2),
+            depthMm: Math.max(20, itemSize.depthMm - CUTOUT_LEDGE_MM * 2),
+          };
+
+      // Мойка на соседней тумбе в эту плиту не врезана
+      if (Math.abs(x) > size.widthMm / 2 || Math.abs(y) > size.depthMm / 2) continue;
+      holes.push(hole);
+    }
+    return holes;
   }
 
   watch(

@@ -8,6 +8,7 @@ export { RotationGizmo } from './interaction/RotationGizmo';
 export { DrawerController, drawersOf, travelOf } from './interaction/DrawerController';
 export { DoorController, doorsOf, doorAngleOf } from './interaction/DoorController';
 export { RoomBuilder } from './scene/RoomBuilder';
+export { WorktopCutter, slabOf, type CutoutRect } from './scene/WorktopCutter';
 export { PlacementPreview } from './scene/PlacementPreview';
 export { DimensionOverlay, type DimensionLabelFactory } from './scene/DimensionOverlay';
 export { SwingOverlay } from './scene/SwingOverlay';

@@ -21,6 +21,7 @@ import {
   buildProductDoors,
   buildProductDrawers,
   buildProductGeometry,
+  buildProductParts,
   buildProductPanels,
   finishesFor,
 } from './catalog.mjs';
@@ -130,6 +131,7 @@ async function main() {
     const groups = buildProductGeometry(product);
     const drawers = buildProductDrawers(product);
     const doors = buildProductDoors(product);
+    const parts = buildProductParts(product);
     // Листовые детали для карты раскроя: только то, что действительно
     // пилят из плиты, — ручки, ножки и стекло сюда не попадают
     const panels = buildProductPanels(product);
@@ -139,6 +141,7 @@ async function main() {
       ...groups,
       ...drawers.flatMap((drawer) => drawer.groups),
       ...doors.flatMap((door) => door.groups),
+      ...parts.flatMap((part) => part.groups),
     ];
     const sourceTriangles = allGroups.reduce((sum, g) => sum + triangleCount(g.geometry), 0);
     const bounds = boundsMm({
@@ -157,6 +160,7 @@ async function main() {
       groups,
       drawers,
       doors,
+      parts,
       materials: MATERIALS,
       textures: usedTextures(allGroups, textures),
     });
@@ -211,6 +215,12 @@ async function main() {
        * ложится заподлицо со столешницей, а чаша уходит вниз, в тумбу
        */
       recessMm: product.recessMm ?? 0,
+      /**
+       * Окно, которое выпиливают в столешнице под это изделие.
+       * Задаётся изделием: у круглой мойки бортик круглый, и окно
+       * «габарит минус припуск» вылезло бы из-под него углами
+       */
+      ...(product.cutout ? { cutout: product.cutout } : {}),
       /** Листовые детали изделия: из них собирается карта раскроя */
       panels,
       /** Сколько ящиков можно выдвинуть */
